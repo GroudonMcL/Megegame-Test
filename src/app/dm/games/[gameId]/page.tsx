@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Button, Card } from "@/components/ui";
 import { fmtRes } from "@/engine/ruleset/effects";
@@ -7,6 +7,8 @@ import { findReferenceProblems } from "@/engine/ruleset/validate";
 import { loadRuleset } from "@/lib/rulesets";
 import { regenerateJoinCode } from "../../actions";
 import { CreateTeamForm } from "../../DmForms";
+import { RoundControls } from "./RoundControls";
+import { viewAsTeamAction } from "./rounds";
 
 export default async function GameOverview({ params }: PageProps<"/dm/games/[gameId]">) {
   const { gameId } = await params;
@@ -16,9 +18,32 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
     : [];
   const { ruleset } = await loadRuleset(gameId);
   const problems = findReferenceProblems(ruleset);
+  const [game] = await db.select().from(schema.games).where(eq(schema.games.id, gameId)).limit(1);
+  const [round] = await db
+    .select()
+    .from(schema.rounds)
+    .where(and(eq(schema.rounds.gameId, gameId), eq(schema.rounds.number, game.currentRound)))
+    .limit(1);
+  const [orderStates, orderCounts] = round
+    ? await Promise.all([
+        db.select().from(schema.teamRoundOrders).where(eq(schema.teamRoundOrders.roundId, round.id)),
+        db.select({ teamId: schema.orders.teamId }).from(schema.orders).where(eq(schema.orders.roundId, round.id)),
+      ])
+    : [[], []];
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <Card className="lg:col-span-2">
+        <h2 className="text-lg font-medium">{round ? `Round ${round.number}: ${round.status}` : "No round yet"}</h2>
+        {round && (
+          <p className="text-sm text-muted">
+            {orderStates.filter((s) => s.submittedAt).length} of {teams.filter((t) => !t.isNpc).length} teams have submitted
+            {round.deadline ? ` · deadline ${round.deadline.toLocaleString("en-GB", { timeZone: "Europe/London" })} (UK time)` : " · no deadline"}
+          </p>
+        )}
+        {!round && <p className="text-sm text-muted">Open the first round when the map and teams are ready. Players can look around before then, but can&apos;t give orders.</p>}
+        <RoundControls gameId={gameId} round={round ? { number: round.number, status: round.status, deadline: round.deadline?.toISOString() ?? null } : null} />
+      </Card>
       <Card>
         <h2 className="text-lg font-medium">Teams</h2>
         <ul className="mt-4 space-y-3">
@@ -41,6 +66,16 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
                   {teamPlayers.length === 0 ? "Nobody has joined yet." : `Joined: ${teamPlayers.map((p) => p.displayName).join(", ")}`}
                 </p>
                 <p className="text-sm text-muted">Resources: {fmtRes(team.resources, ruleset.resources)}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                  {round && <OrderStatus state={orderStates.find((s) => s.teamId === team.id)} count={orderCounts.filter((o) => o.teamId === team.id).length} />}
+                  <form action={viewAsTeamAction} className="ml-auto">
+                    <input type="hidden" name="gameId" value={gameId} />
+                    <input type="hidden" name="teamId" value={team.id} />
+                    <Button variant="secondary" type="submit" title="See the player screens exactly as this team sees them, and edit its orders">
+                      View as team
+                    </Button>
+                  </form>
+                </div>
               </li>
             );
           })}
@@ -68,4 +103,16 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
       </Card>
     </div>
   );
+}
+
+function OrderStatus({ state, count }: { state: typeof schema.teamRoundOrders.$inferSelect | undefined; count: number }) {
+  if (state?.submittedAt) {
+    return (
+      <span className="text-ok">
+        ✓ {count} orders submitted by {state.submittedBy} at {state.submittedAt.toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "short", timeStyle: "short" })}
+      </span>
+    );
+  }
+  if (count) return <span className="text-danger">Draft: {count} orders, not submitted</span>;
+  return <span className="text-muted">No orders yet</span>;
 }

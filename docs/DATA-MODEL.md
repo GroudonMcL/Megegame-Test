@@ -45,7 +45,7 @@ Building effects apply to the owning team's units in that region.
 | Table | Holds |
 |---|---|
 | `games` | name, status, preset, current round |
-| `teams` | name, colour, join code, races, resource stockpiles, known recipes, secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
+| `teams` | name, colour, join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
 | `assets` | uploaded files (the map image), stored in the database and served only through the app |
 | `regions` | map nodes: position (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
@@ -54,7 +54,8 @@ Building effects apply to the owning team's units in that region.
 | `inventory` | items per team |
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `rounds` | round lifecycle, deadline, published snapshot |
-| `orders` | each team's ordered list for a round |
+| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional), slot, the order a conditional backs up, action, inputs, notes |
+| `team_round_orders` | per team per round: who submitted the orders and when, and a version number so two teammates can't overwrite each other |
 | `roll_log` | every roll: expression, seed, breakdown, total, table result, overrides |
 | `audit_log` | every state change with before/after, for history and undo |
 

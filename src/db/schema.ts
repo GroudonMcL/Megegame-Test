@@ -86,6 +86,8 @@ export const teams = pgTable(
     raceIds: jsonb("race_ids").$type<string[]>().notNull().default([]),
     resources: jsonb("resources").$type<Record<string, number>>().notNull().default({}),
     knownRecipeIds: jsonb("known_recipe_ids").$type<string[]>().notNull().default([]),
+    // Monster types this team has seen; their stat blocks show in its rules reference.
+    seenCreatureIds: jsonb("seen_creature_ids").$type<string[]>().notNull().default([]),
     secretObjectives: text("secret_objectives").notNull().default(""),
     notes: text("notes").notNull().default(""),
     discordWebhookUrl: text("discord_webhook_url").notNull().default(""),
@@ -341,6 +343,27 @@ export const orders = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("orders_round_team_idx").on(t.roundId, t.teamId)],
+);
+
+/** A team's order list for one round: who submitted it, and a version that stops teammates overwriting each other. */
+export const teamRoundOrders = pgTable(
+  "team_round_orders",
+  {
+    roundId: uuid("round_id")
+      .notNull()
+      .references(() => rounds.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    // Bumped on every save.
+    version: integer("version").notNull().default(0),
+    // Null = still a draft.
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: text("submitted_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text("updated_by"),
+  },
+  (t) => [primaryKey({ columns: [t.roundId, t.teamId] })],
 );
 
 export const rollLog = pgTable(

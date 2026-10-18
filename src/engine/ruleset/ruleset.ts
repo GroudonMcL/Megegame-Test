@@ -350,6 +350,16 @@ export const Settings = z.object({
   demolishRefund: z.number().min(0).max(1).default(0.5),
   /** Free actions each unit may take per round (null = no limit). */
   freeActionsPerUnit: z.number().int().min(0).nullable().default(null),
+  fog: z
+    .object({
+      /** Regions seen before stay on a team's map, dimmed, with what the team last saw. */
+      showPreviouslySeen: z.boolean().default(true),
+      /** Darken the map image outside what the team can see. Off = players see the whole image. */
+      fogImage: z.boolean().default(true),
+      /** Radius of the clear circle around each seen region, as a fraction of the map's width. */
+      revealRadius: z.number().positive().max(1).default(0.07),
+    })
+    .default({ showPreviouslySeen: true, fogImage: true, revealRadius: 0.07 }),
 });
 
 export const Ruleset = z.object({
