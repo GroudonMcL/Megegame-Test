@@ -41,7 +41,7 @@ Later phases arrive as "pull requests" that you merge into `main` with one click
 2. If asked, create an **organization**. Any name works (e.g. your name), and choose the **Free** plan.
 3. Click **New project**:
    - **Name:** `megagame`
-   - **Database password:** click **Generate a password**, then **copy it into Notepad** (you need it in a minute). Make sure it contains only letters and numbers. If it contains symbols like `@ # / ?`, generate another one, because symbols break the connection link.
+   - **Database password:** click **Generate a password**, then **copy it into Notepad** (you need it in a minute). Symbols in the password are fine.
    - **Region:** choose **West EU (London)** (or the region nearest you and your players; see the note in Step 4).
    - Click **Create new project** and wait a minute or two while it sets up.
 4. When it's ready, click the **Connect** button at the top of the project page.
@@ -142,6 +142,7 @@ Vercel also builds a private **preview** copy for each pull request before you m
 | What you see | What it means / what to do |
 |---|---|
 | The Vercel build fails with `DATABASE_URL is not set` | The environment variable is missing or misspelled. Vercel → project → **Settings → Environment Variables**, fix it, then **Deployments → ⋯ → Redeploy**. |
+| The build log says `Migration failed:` followed by a sentence | That sentence says what's wrong with `DATABASE_URL` and how to fix it. After fixing the variable, **Redeploy**. |
 | `Database: can't connect (password authentication failed…)` | The password in `DATABASE_URL` is wrong, or the `[YOUR-PASSWORD]` brackets are still there. You can reset the database password in Supabase → **Project Settings → Database**. |
 | `Database: can't connect (Tenant or user not found)` | The connection string was copied wrong. Copy the **Transaction pooler** one again. |
 | `Database: connected, but tables are missing` | The setup step didn't run. Vercel → **Deployments → ⋯ → Redeploy**. |
@@ -167,7 +168,7 @@ You don't need this to play. It's handy later for trying changes before they go 
    copy .env.example .env.local
    notepad .env.local
    ```
-5. In Notepad, fill in the same three values you gave Vercel, then save and close it.
+5. In Notepad, fill in the same three values you gave Vercel, then save and close it. Keep the `"quotes"` around `DATABASE_URL`, because without them a `#` in your password would be read as the start of a comment.
 6. Start the app:
    ```bat
    npm run dev
