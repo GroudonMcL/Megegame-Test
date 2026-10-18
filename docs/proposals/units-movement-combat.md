@@ -1,7 +1,21 @@
 # Proposal: stat blocks, map movement and combat
 
-Status: **draft, waiting for decisions.** Nothing in this document has been coded yet.
-Questions are marked **❓** and summarised at the end.
+Status: **decided** (answers below). The stat-block format is built in Phase 2. The combat engine waits for Phase 6, where the area-effect formula gets a final check with worked examples.
+
+## Decisions
+
+| # | Question | Decision |
+|---|---|---|
+| Q1 | SRD edition | **2024 (SRD 5.2)** |
+| Q2 | Utterdark player units | **Replace with SRD creatures.** Recruit cost and upkeep come from the creature's **Challenge Rating** via a DM-editable CR → cost table, and each unit type can override it. |
+| Q3 | "Removed from combat" effects | Initial failed save: fail by 1–4 → −50% damage, 5–9 → −75%, 10+ or natural 1 → −100%. **While the effect lasts, the unit re-saves each turn.** A success ends it. A failure *multiplies* the remaining penalty by the same scale (×0.5 / ×0.75 / ×1), because a unit is many creatures and some shake it off. Example: −50%, then fail by 1 again → −25%. It also ends when its duration runs out. |
+| Q4 | Dice | **Rolled** with stored seeds, plus a **"Show odds"** button (run the fight many times). |
+| Q5 | Area effects | One unit occupies a **30 × 30 ft** footprint. An area that covers half a unit (15 ft) deals **+50%** damage to it, and one covering the whole unit (30 ft) deals **+100%**. Bigger areas also hit **additional units** for a share of the damage. *Exact formula to be confirmed with examples in Phase 6.* Stat blocks store each action's area shape and size from now on. |
+| Q6 | "X per day" uses | Reset **each game round**. |
+| — | Movement | Feet → miles per day (D&D overland travel). Connections have miles + terrain. Difficult terrain is bypassed by flyers and by groups travelling with a Natural Explorer (e.g. Ranger). |
+| — | Missing Utterdark data | The DM will share the DM sheet (roll tables, races, augments, recipes, settlement Growth). Until then the preset uses clearly marked placeholders. |
+
+---
 
 ---
 
