@@ -246,10 +246,14 @@ export function describeEffect(e: Effect, names: { action?: (id: string) => stri
   }
 }
 
-export function fmtRes(r: Record<string, number>): string {
-  const parts = Object.entries(r)
-    .filter(([, v]) => v !== 0)
-    .map(([k, v]) => `${v} ${k}`);
+/** "10 Gold + 5 Food". Pass the ruleset's resources to use their names and order. */
+export function fmtRes(r: Record<string, number>, resources?: { id: string; name: string }[]): string {
+  const keys = resources
+    ? [...resources.map((x) => x.id).filter((id) => id in r), ...Object.keys(r).filter((k) => !resources.some((x) => x.id === k))]
+    : Object.keys(r);
+  const parts = keys
+    .filter((k) => r[k] !== 0)
+    .map((k) => `${r[k]} ${resources?.find((x) => x.id === k)?.name ?? k}`);
   return parts.length ? parts.join(" + ") : "nothing";
 }
 

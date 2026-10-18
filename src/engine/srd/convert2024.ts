@@ -10,6 +10,7 @@ import {
 } from "../ruleset/common";
 import {
   AREA_SHAPES,
+  SKILL_ABILITY,
   SKILLS,
   StatBlock,
   type ActionProfile,
@@ -318,7 +319,7 @@ export function convertMonster(raw: Raw): ConvertedMonster {
     } else if (idx.startsWith("skill-")) {
       const skill = idx.slice("skill-".length) as (typeof SKILLS)[number];
       if (!(SKILLS as readonly string[]).includes(skill)) continue;
-      const ability = ({ athletics: "str", acrobatics: "dex", "sleight-of-hand": "dex", stealth: "dex", arcana: "int", history: "int", investigation: "int", nature: "int", religion: "int", "animal-handling": "wis", insight: "wis", medicine: "wis", perception: "wis", survival: "wis" } as Record<string, Ability>)[skill] ?? "cha";
+      const ability = SKILL_ABILITY[skill];
       skills[skill] = Math.min(2, Math.max(1, Math.round((Number(p.value) - mods[ability]) / pb)));
     }
   }

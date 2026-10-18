@@ -4,7 +4,7 @@ import { useActionState, useRef } from "react";
 import { createGame, createTeam } from "./actions";
 import { Button, FormError, Input, Label } from "@/components/ui";
 
-export function CreateGameForm() {
+export function CreateGameForm({ presets }: { presets: { id: string; name: string; description: string }[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(async (prev: Parameters<typeof createGame>[0], fd: FormData) => {
     const result = await createGame(prev, fd);
@@ -17,7 +17,17 @@ export function CreateGameForm() {
         <Label htmlFor="game-name">New game name</Label>
         <Input id="game-name" name="name" placeholder="e.g. Test Game" required />
       </div>
-      <Button type="submit" disabled={pending}>Create game</Button>
+      <div>
+        <Label htmlFor="game-preset">Start from</Label>
+        <select id="game-preset" name="presetId" defaultValue="utterdark" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base">
+          {presets.map((p) => (
+            <option key={p.id} value={p.id} title={p.description}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Button type="submit" disabled={pending}>{pending ? "Creating…" : "Create game"}</Button>
       <FormError message={state?.error} />
     </form>
   );
