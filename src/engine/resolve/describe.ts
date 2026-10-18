@@ -36,6 +36,12 @@ export function describeInputs(r: Ruleset, world: World, order: OrderDraft): str
       case "region":
         text = region(list[0]);
         break;
+      case "targetUnit": {
+        const t = world.units.find((u) => u.id === list[0]);
+        const owner = t?.ownerTeamId ? (world.teams.find((x) => x.id === t.ownerTeamId)?.name ?? "?") : "wild";
+        text = t ? `${unit(t.id)} (${owner}) in ${region(t.regionId ?? "")}` : "a unit that's gone";
+        break;
+      }
       case "path": {
         const units = action.inputs.findIndex((x) => x.type === "unit");
         const first = units >= 0 ? ([] as string[]).concat((order.inputs[String(units)] as string[] | string) ?? [])[0] : undefined;
@@ -95,7 +101,15 @@ export function describeChange(r: Ruleset, world: World, c: Change): string {
       return `${unit(c.unitId)} → ${region(c.regionId)}`;
     case "updateUnit": {
       const parts = Object.entries(c.patch).map(([k, v]) =>
-        k === "augmentIds" ? `augments: ${(v as string[]).map((id) => r.items.find((x) => x.id === id)?.name ?? id).join(", ") || "none"}` : k === "milesUsed" ? "movement used up" : `${k} → ${typeof v === "object" ? JSON.stringify(v) : v}`,
+        k === "augmentIds"
+          ? `augments: ${(v as string[]).map((id) => r.items.find((x) => x.id === id)?.name ?? id).join(", ") || "none"}`
+          : k === "milesUsed"
+            ? "movement used up"
+            : k === "usesSpent"
+              ? `uses spent: ${Object.entries(v as Record<string, number>).map(([n, x]) => `${n} ×${x}`).join(", ") || "none"}`
+              : k === "ownerTeamId"
+                ? `now belongs to ${v ? team(v as string) : "the wild"}`
+                : `${k} → ${typeof v === "object" ? JSON.stringify(v) : v}`,
       );
       return `${unit(c.unitId)}: ${parts.join(", ")}`;
     }

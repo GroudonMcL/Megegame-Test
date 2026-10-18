@@ -43,6 +43,8 @@ export interface WorldUnit {
   milesUsed: number;
   status: string;
   isLeader: boolean;
+  /** Per-round ability uses spent, e.g. { "Fireball": 1 }. */
+  usesSpent: Record<string, number>;
 }
 
 /** What one team has discovered or been given. */

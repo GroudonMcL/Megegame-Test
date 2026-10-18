@@ -1,3 +1,4 @@
+import type { CombatResult } from "../combat/types";
 import type { ResourceAmounts } from "../ruleset/common";
 import type { WorldConnection, WorldRegion, WorldUnit } from "../world/types";
 
@@ -28,7 +29,7 @@ export interface World {
 export type Change =
   | { type: "resources"; teamId: string; delta: ResourceAmounts }
   | { type: "moveUnit"; unitId: string; regionId: string; milesUsed: number }
-  | { type: "updateUnit"; unitId: string; patch: Partial<Pick<WorldUnit, "hp" | "status" | "augmentIds" | "academyBonus" | "milesUsed">> }
+  | { type: "updateUnit"; unitId: string; patch: Partial<Pick<WorldUnit, "hp" | "status" | "augmentIds" | "academyBonus" | "milesUsed" | "usesSpent" | "ownerTeamId">> }
   | { type: "createUnit"; unit: Omit<WorldUnit, "id"> & { id: string } }
   | { type: "updateRegion"; regionId: string; patch: Partial<Pick<WorldRegion, "ownerTeamId" | "settlementTierId" | "buildings">> }
   | { type: "inventory"; teamId: string; itemId: string; delta: number }
@@ -69,4 +70,8 @@ export interface Proposal {
   targetsTeams: string[];
   /** Where the order's units end up (for spotting likely fights). */
   endsIn: { unitId: string; regionId: string }[];
+  /** Fights the order caused, simulated. */
+  combats?: CombatResult[];
+  /** What other teams are told (e.g. "your units in A3 were attacked"). */
+  reports?: { teamId: string; text: string }[];
 }

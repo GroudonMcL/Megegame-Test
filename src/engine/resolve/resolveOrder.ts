@@ -9,6 +9,9 @@ import { findConnection, milesPerRound, stepCost, type MoveMode } from "../order
 import { validateOrders, type OrderDraft } from "../orders/validate";
 import type { TeamView } from "../world/teamView";
 import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types";
+import { defendersOf, fightChanges, fightSummary, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
+import { summariseOdds } from "../combat/simulate";
+import type { CombatOdds, CombatSideInput } from "../combat/types";
 import { rollOnTable, type Modifier } from "./rollTable";
 import type { Proposal, World } from "./types";
 
@@ -58,6 +61,17 @@ export interface ResolveInput {
   round: number;
   /** Changing the seed re-rolls everything. */
   seed: string;
+  /** The DM's choices for fights this order causes. */
+  combat?: CombatOptions;
+}
+
+export interface CombatOptions {
+  /** sideId (team ID or "wild") → enemy unit that side concentrates on. */
+  priority?: Record<string, string>;
+  /** Don't simulate: the DM resolves the fight by hand. */
+  byHand?: boolean;
+  /** unitId → the DM's own result for that unit, replacing the simulated one. */
+  overrides?: Record<string, { hp?: number; outcome?: "standing" | "dead" | "retreated" }>;
 }
 
 function newUnitId() {
@@ -133,6 +147,39 @@ export function resolveOrder(input: ResolveInput): Proposal {
   };
   const lines: string[] = [];
 
+  /** Simulates a fight (or leaves it to the DM) and adds its changes and text. */
+  const fight = (where: string, sides: CombatSideInput[], extra: { focus?: string; capture?: string; reveal?: string[] } = {}) => {
+    const enemyTeams = sides.filter((x) => x.id !== teamId).map((x) => x.teamId);
+    if (input.combat?.byHand) {
+      byHand(`Fight in ${regionName(where)} against ${sides.filter((x) => x.id !== teamId).map((x) => x.name).join(" and ")}: you chose to resolve it by hand. Change HP and statuses on the World map.`);
+      return;
+    }
+    const priority = { ...(extra.focus ? { [teamId]: extra.focus } : {}), ...(input.combat?.priority ?? {}) };
+    const res = runFight(r, world, where, sides, `${input.seed}:fight:${(p.combats ?? []).length}`, {
+      priority,
+      capture: extra.capture ? { sideId: teamId, targetId: extra.capture } : undefined,
+    });
+    for (const u of res.units) {
+      const o = input.combat?.overrides?.[u.unitId];
+      if (!o) continue;
+      if (o.outcome) u.outcome = o.outcome;
+      if (typeof o.hp === "number") u.hp = Math.max(0, Math.min(u.maxHp, Math.round(o.hp)));
+      if (u.outcome === "dead") u.hp = 0;
+      else if (u.hp === 0) u.hp = 1;
+      const unit = world.units.find((x) => x.id === u.unitId);
+      u.retreatTo = u.outcome === "retreated" && unit ? (u.retreatTo ?? retreatRegion(world, unit, where)) : null;
+      res.log.push({ round: res.rounds, kind: "info", text: `The DM set ${u.label} to ${u.outcome === "standing" ? "standing" : u.outcome}${u.outcome === "dead" ? "" : ` with ${u.hp}/${u.maxHp} HP`}.` });
+    }
+    (p.combats ??= []).push(res);
+    p.changes.push(...fightChanges(r, world, res, { reveal: extra.reveal }));
+    lines.push(fightSummary(world, res, teamId));
+    for (const other of enemyTeams) {
+      if (!other) continue;
+      (p.reports ??= []).push({ teamId: other, text: `Your units were attacked by ${team.name}. ${fightSummary(world, res, other)}` });
+    }
+    review(`A fight was simulated${res.warnings.length ? `; some abilities aren't automated (see the fight log)` : ""}. Check the log, re-roll it, or resolve it by hand.`);
+  };
+
   switch (action.handler) {
     case "move": {
       const mode = (["normal", "forceMarch", "stealth"].includes(action.config.mode as string) ? action.config.mode : "normal") as MoveMode;
@@ -142,30 +189,74 @@ export function resolveOrder(input: ResolveInput): Proposal {
       const group = units.map((u) => ({ unit: u, used: milesPerRound(r, u) > 0 ? u.milesUsed / milesPerRound(r, u) : 1 }));
       const used = group.map((g) => g.used);
       let at = from;
+      let prev: string | null = null;
+      // Monsters attack units that walk in (unless they creep past by stealth): the move stops there.
+      let fightAt: string | null = null;
       for (const next of path) {
         const c = findConnection(world.connections, at, next)!;
         const step = stepCost(r, c, group, mode);
         if ("blocked" in step) break;
         step.fractions.forEach((f, i) => (used[i] += f));
+        prev = at;
         at = next;
+        if (mode !== "stealth" && wildIn(world, next).length) {
+          fightAt = next;
+          break;
+        }
       }
-      p.regions.push(...path);
+      const walked = path.slice(0, path.indexOf(at) + 1);
+      p.regions.push(...walked);
       units.forEach((u, i) => {
-        p.changes.push({ type: "moveUnit", unitId: u.id, regionId: at, milesUsed: Math.min(1, used[i]) * milesPerRound(r, u) });
+        p.changes.push({ type: "moveUnit", unitId: u.id, regionId: at, milesUsed: fightAt ? milesPerRound(r, u) : Math.min(1, used[i]) * milesPerRound(r, u) });
         p.endsIn.push({ unitId: u.id, regionId: at });
       });
-      const route = [from, ...path].map((id) => regionById.get(id)?.code ?? "?").join(" → ");
-      lines.push(`${unitList} ${mode === "forceMarch" ? "force-marched" : mode === "stealth" ? "crept" : "moved"} ${route}.`);
-      for (const id of path) {
-        const others = world.units.filter((u) => u.regionId === id && u.ownerTeamId !== teamId && ACTIVE_STATUSES.has(u.status));
+      const route = [from, ...walked].map((id) => regionById.get(id)?.code ?? "?").join(" → ");
+      lines.push(`${unitList} ${mode === "forceMarch" ? "force-marched" : mode === "stealth" ? "crept" : "moved"} ${route}${fightAt && walked.length < path.length ? " and stopped there" : ""}.`);
+      for (const id of walked) {
+        const others = world.units.filter((u) => u.regionId === id && u.ownerTeamId !== teamId && ACTIVE_STATUSES.has(u.status) && !(id === fightAt && u.ownerTeamId === null && u.status === "active"));
         if (others.length) {
           const who = [...new Set(others.map((u) => (u.ownerTeamId ? world.teams.find((t) => t.id === u.ownerTeamId)?.name : "wild monsters")))].join(", ");
-          review(`${regionName(id)} has units of ${who}${others.some((u) => u.status === "hidden") ? " (some hidden)" : ""}: decide whether there's a fight. Combat is simulated from Phase 6; resolve it by hand for now.`);
+          const hidden = others.some((u) => u.status === "hidden");
+          review(`${regionName(id)} has units of ${who}${hidden ? " (some hidden)" : ""}. Teams only fight through an Attack order${hidden ? "; hidden units may ambush (stealth comes in Phase 7)" : ""}.`);
           for (const u of others) if (u.ownerTeamId) p.targetsTeams.push(u.ownerTeamId);
         }
       }
+      if (fightAt) {
+        const movers = units.map((u) => ({ ...u, regionId: fightAt }));
+        fight(fightAt, [
+          sideFor(world, teamId, movers, {
+            forceMarching: mode === "forceMarch" ? units.map((u) => u.id) : [],
+            retreatTo: Object.fromEntries(units.map((u) => [u.id, retreatRegion(world, u, fightAt!, prev)])),
+          }),
+          sideFor(world, null, wildIn(world, fightAt)),
+        ]);
+      }
       if (mode === "stealth") review("Stealth checks come in Phase 7. For now, decide whether the units stay hidden.");
       if (mode === "forceMarch") p.notes.push("Force-marched units fight at disadvantage this round.");
+      break;
+    }
+
+    case "attack":
+    case "capture": {
+      const target = world.units.find((u) => u.id === str(value("targetUnit")));
+      if (!target?.regionId || !units.length) break;
+      const where = target.regionId;
+      if (target.ownerTeamId) p.targetsTeams.push(target.ownerTeamId);
+      p.regions.push(where);
+      const defenders = target.ownerTeamId === null ? wildIn(world, where).concat(target.status === "active" ? [] : [target]) : defendersOf(world, target, where);
+      const surprising = units.every((u) => u.status === "hidden");
+      const targetName = r.creatures.find((c) => c.id === target.creatureId)?.statBlock.name ?? "a unit";
+      lines.push(`${unitList} ${action.handler === "capture" ? "tried to capture" : "attacked"} the ${targetName} ${target.ownerTeamId ? `of ${world.teams.find((t) => t.id === target.ownerTeamId)?.name ?? "another faction"}` : "(wild)"} in ${regionName(where)}${surprising ? " by surprise" : ""}.`);
+      fight(
+        where,
+        [
+          sideFor(world, teamId, units, { surprising, retreatTo: Object.fromEntries(units.map((u) => [u.id, retreatRegion(world, u, where)])) }),
+          sideFor(world, target.ownerTeamId, defenders, {
+            retreatTo: Object.fromEntries(defenders.map((u) => [u.id, target.ownerTeamId ? retreatRegion(world, u, where) : null])),
+          }),
+        ],
+        { focus: target.id, capture: action.handler === "capture" ? target.id : undefined, reveal: units.map((u) => u.id) },
+      );
       break;
     }
 
@@ -191,6 +282,7 @@ export function resolveOrder(input: ResolveInput): Proposal {
         milesUsed: 0,
         status: "active",
         isLeader: false,
+          usesSpent: {},
       };
       draftUnit.hp = maxHpOf(r, draftUnit);
       // A unit recruited this round can't move until the next one.
@@ -420,6 +512,16 @@ export function resolveOrder(input: ResolveInput): Proposal {
   return p;
 }
 
+/** Re-runs an order's fights many times with different dice: one summary per fight. */
+export function orderCombatOdds(input: ResolveInput, runs = input.ruleset.settings.combat.oddsRuns): CombatOdds[] {
+  const byFight: NonNullable<Proposal["combats"]>[] = [];
+  for (let i = 0; i < runs; i++) {
+    const p = resolveOrder({ ...input, seed: `${input.seed}:odds:${i}` });
+    (p.combats ?? []).forEach((c, k) => (byFight[k] ??= []).push(c));
+  }
+  return byFight.map(summariseOdds);
+}
+
 /** Turns the structured results of a table roll into changes and notes. */
 export function applyTableResults(
   r: Ruleset,
@@ -491,10 +593,11 @@ export function applyTableResults(
           milesUsed: 0,
           status: "active",
           isLeader: false,
+          usesSpent: {},
         };
         p.changes.push({ type: "createUnit", unit });
         p.endsIn.push({ unitId: unit.id, regionId: where });
-        p.notes.push(`A ${creature.statBlock.name} appears. Decide whether it attacks; combat comes in Phase 6.`);
+        p.notes.push(`A ${creature.statBlock.name} appears. It fights units that move into its region; teams can also attack it with an Attack order.`);
         break;
       }
       case "learnRecipes": {

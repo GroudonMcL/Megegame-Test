@@ -295,6 +295,17 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     if (asString(value("region")) && !region) problem("You don't know that region.");
     if (region && region.state !== "visible" && action.handler !== "move") problem(`You can't see ${regionLabel(region)} right now.`);
 
+    const targetInput = action.inputs.find((x) => x.type === "targetUnit");
+    const targetId = asString(value("targetUnit"));
+    if (targetInput?.type === "targetUnit" && targetId) {
+      const target = view.otherUnits.find((u) => u.id === targetId);
+      if (!target || target.dead) problem("You can't see that target.");
+      else {
+        if (targetInput.monstersOnly && target.ownerTeamId !== null) problem("That target isn't a monster.");
+        for (const u of units) if (s.unitRegion[u.id] !== target.regionId) problem(`${unitName(u.id)} isn't in the same region as the target.`);
+      }
+    }
+
     const hostilesIn = (id: string) => view.otherUnits.some((u) => u.regionId === id && !u.dead);
     const ownUnitsIn = (id: string) => view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && s.unitRegion[u.id] === id && !s.disbanded.includes(u.id));
 
@@ -511,6 +522,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           milesUsed: 0,
           status: "active",
           isLeader: false,
+          usesSpent: {},
         });
         if (creature.category === "hero") {
           const heroes = view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && creatureOf(u)?.category === "hero").length + s.heroesRecruited + 1;

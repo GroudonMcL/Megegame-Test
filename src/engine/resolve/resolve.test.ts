@@ -21,7 +21,7 @@ const conn = (a: string, b: string): WorldConnection => ({ id: `${a}-${b}`, regi
 let n = 0;
 const uid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 function unit(extra: Partial<WorldUnit>): WorldUnit {
-  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 11, regionId: "a", milesUsed: 0, status: "active", isLeader: false, ...extra };
+  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 11, regionId: "a", milesUsed: 0, status: "active", isLeader: false, usesSpent: {}, ...extra } as WorldUnit;
 }
 function world(units: WorldUnit[], resources = { gold: 20, food: 5, growth: 50 }): World {
   return {
@@ -70,8 +70,70 @@ describe("resolving orders", () => {
     const enemy = unit({ ownerTeamId: THEM, regionId: "c" });
     const p = resolve(world([g, enemy]), order("move", { "0": [g.id], "1": ["c"] }));
     expect(p.status).toBe("needsReview");
-    expect(p.notes.join(" ")).toMatch(/decide whether there's a fight/);
+    expect(p.notes.join(" ")).toMatch(/only fight through an Attack order/);
     expect(p.targetsTeams).toContain(THEM);
+    expect(p.combats).toBeUndefined();
+  });
+
+  it("stops a move at the first region with monsters and fights them", () => {
+    const g = unit({ creatureId: "knight", hp: 52 });
+    const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
+    const w = world([g, lizard]);
+    const p = resolve(w, order("move", { "0": [g.id], "1": ["b", "c"] }));
+    expect(p.combats).toHaveLength(1);
+    expect(p.status).toBe("needsReview");
+    expect(p.text).toMatch(/stopped there/);
+    expect(p.text).toMatch(/Fight in B against Wild monsters/);
+    const after = applyChanges(w, p.changes);
+    const knight = after.units.find((u) => u.id === g.id)!;
+    const res = p.combats![0];
+    const mine = res.units.find((u) => u.unitId === g.id)!;
+    expect(knight.regionId).toBe(mine.outcome === "retreated" ? "a" : "b");
+    expect(knight.hp).toBe(mine.hp);
+    expect(after.units.find((u) => u.id === lizard.id)!.status).toBe(res.units.find((u) => u.unitId === lizard.id)!.outcome === "dead" ? "dead" : "active");
+    // Same seed, same fight.
+    expect(resolve(w, order("move", { "0": [g.id], "1": ["b", "c"] })).combats![0].log).toEqual(res.log);
+  });
+
+  it("leaves the fight to the DM when asked", () => {
+    const g = unit({ creatureId: "knight", hp: 52 });
+    const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
+    const p = resolveOrder({ ruleset: r, world: world([g, lizard]), teamId: ME, order: order("move", { "0": [g.id], "1": ["b"] }), round: 1, seed: "s", combat: { byHand: true } });
+    expect(p.combats).toBeUndefined();
+    expect(p.status).toBe("needsDm");
+  });
+
+  it("attacks another team's units, focusing the target, and tells them", () => {
+    const mine = [unit({ creatureId: "knight", hp: 52, regionId: "c" }), unit({ creatureId: "knight", hp: 52, regionId: "c" })];
+    const target = unit({ ownerTeamId: THEM, regionId: "c" });
+    const friend = unit({ ownerTeamId: THEM, regionId: "c" });
+    const p = resolve(world([...mine, target, friend]), order("attack", { "0": mine.map((u) => u.id), "1": target.id }));
+    expect(p.problems).toEqual([]);
+    const res = p.combats![0];
+    expect(res.units.filter((u) => u.sideId === THEM).map((u) => u.unitId).sort()).toEqual([target.id, friend.id].sort());
+    const firstHit = res.log.find((l) => l.kind === "attack" && l.text.startsWith("Knight"));
+    expect(firstHit?.text).toContain(`→ Guard ${res.units.find((u) => u.unitId === target.id)!.label.match(/Guard (\d)/)![1]}`);
+    expect(p.reports?.[0].teamId).toBe(THEM);
+    expect(p.reports?.[0].text).toMatch(/attacked by Me/);
+  });
+
+  it("the DM can set a unit's result by hand", () => {
+    const g = unit({ creatureId: "knight", hp: 52 });
+    const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
+    const w = world([g, lizard]);
+    const p = resolveOrder({ ruleset: r, world: w, teamId: ME, order: order("move", { "0": [g.id], "1": ["b"] }), round: 1, seed: "s", combat: { overrides: { [g.id]: { outcome: "retreated", hp: 5 } } } });
+    const after = applyChanges(w, p.changes);
+    const knight = after.units.find((u) => u.id === g.id)!;
+    expect(knight.hp).toBe(5);
+    expect(knight.regionId).toBe("a");
+    expect(p.combats![0].log.at(-1)!.text).toMatch(/The DM set/);
+  });
+
+  it("can only attack a target in the same region", () => {
+    const g = unit({ creatureId: "knight", hp: 52, regionId: "a" });
+    const target = unit({ ownerTeamId: THEM, regionId: "c" });
+    const p = resolve(world([g, target]), order("attack", { "0": [g.id], "1": target.id }));
+    expect(p.status).toBe("invalid");
   });
 
   it("recruits a unit at full HP that can't move this round", () => {

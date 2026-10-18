@@ -49,6 +49,7 @@ function unit(extra: Partial<WorldUnit>): WorldUnit {
     milesUsed: 0,
     status: "active",
     isLeader: false,
+    usesSpent: {},
     ...extra,
   };
 }

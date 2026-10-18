@@ -345,7 +345,7 @@ export function utterdarkPreset() {
       maxAugmentsPerUnit: 3,
       freeActionsPerUnit: 1,
       movement: { milesPerDayAt30ft: 24, travelDaysPerRound: 1, defaultConnectionMiles: 12, forceMarchMultiplier: 2, stealthMultiplier: 0.5 },
-      combat: { maxRounds: 10, unitFootprintFt: 30, usesReset: "round" },
+      combat: { maxRounds: 10, usesReset: "round", retreatBelow: 0.25 },
       demolishRefund: 0.5,
       // PLACEHOLDER costs by Challenge Rating, calibrated against the DM sheet's old unit prices.
       crCosts: [
@@ -848,6 +848,25 @@ export function utterdarkPreset() {
         config: { mode: "forceMarch" },
         requirements: [{ type: "unitHasMovement" }],
         inputs: [{ type: "unit", multiple: true }, { type: "path" }],
+      },
+      {
+        id: "attack",
+        name: "Attack",
+        description:
+          "Attack a unit in the same region: from stealth, to start a fight with a faction's units, or to fight a monster that hasn't attacked you. Stealthed units that attack surprise the enemy: advantage on initiative and on their first attack. You only need this when a fight wouldn't start anyway: moving into a region with monsters starts one.",
+        kind: "numbered",
+        handler: "attack",
+        inputs: [{ type: "unit", multiple: true }, { type: "targetUnit", label: "Target" }],
+      },
+      {
+        id: "capture-monster",
+        name: "Capture Monster",
+        description:
+          "Fight a known monster to capture it. Once it's below a quarter of its hit points and it's the only enemy left, your units try to capture it instead of attacking. A captured monster must be escorted to another region, released, or placed in a Breeding Pit or Menagerie before the end of the next round.",
+        kind: "numbered",
+        limit: { times: 1, per: "unit" },
+        handler: "capture",
+        inputs: [{ type: "unit", multiple: true }, { type: "targetUnit", label: "Monster", monstersOnly: true }],
       },
       {
         id: "raid",
