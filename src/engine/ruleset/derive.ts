@@ -166,3 +166,32 @@ export function creatureCosts(c: Creature, r: Ruleset): { cost: ResourceAmounts;
     fromTable: !c.costOverride || !c.upkeepOverride,
   };
 }
+
+/** What a unit instance carries on top of its creature's stat block. */
+export interface UnitLoadout {
+  raceId?: string | null;
+  archetypeId?: string | null;
+  academyBonus?: Partial<Record<Ability, number>>;
+  augmentIds?: string[];
+}
+
+/** The race, archetype, academy and augment bonuses for a unit, ready for deriveStats. */
+export function unitBonuses(r: Ruleset, u: UnitLoadout): Bonus[] {
+  const out: Bonus[] = [];
+  const race = r.races.find((x) => x.id === u.raceId);
+  if (race) out.push({ source: race.name, abilities: race.abilityBonuses, effects: race.effects });
+  const archetype = r.archetypes.find((x) => x.id === u.archetypeId);
+  if (archetype) out.push({ source: archetype.name, effects: archetype.effects });
+  if (u.academyBonus && Object.keys(u.academyBonus).length) out.push({ source: "Academy", abilities: u.academyBonus });
+  for (const id of u.augmentIds ?? []) {
+    const item = r.items.find((x) => x.id === id);
+    if (item) out.push({ source: item.name, effects: item.effects });
+  }
+  return out;
+}
+
+/** Tags from the creature plus its archetype. */
+export function unitTags(r: Ruleset, creature: Creature, archetypeId?: string | null): string[] {
+  const archetype = r.archetypes.find((x) => x.id === archetypeId);
+  return [...new Set([...creature.tags, ...(archetype?.tags ?? [])])];
+}

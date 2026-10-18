@@ -3,7 +3,7 @@ import { utterdarkPreset } from "@/presets/utterdark";
 import { blankPreset } from "@/presets/blank";
 import { Ruleset, emptyRuleset } from "./ruleset";
 import { findReferenceProblems, parseRuleset } from "./validate";
-import { describeEffect, Effect } from "./effects";
+import { describeEffect, Effect, namesFrom } from "./effects";
 import { creatureCosts } from "./derive";
 
 describe("rulesets", () => {
@@ -42,11 +42,28 @@ describe("rulesets", () => {
     expect(problems).toContainEqual({ path: "resources › gold", message: 'The ID "gold" is used more than once.' });
   });
 
+  it("archetypes add tags, abilities and spells on top of a stat block", () => {
+    const r = utterdarkPreset();
+    const scout = r.archetypes.find((a) => a.id === "scout")!;
+    expect(scout.tags).toContain("Stealthy");
+    expect(r.archetypes.find((a) => a.id === "archmage")!.categories).toEqual(["hero"]);
+    const names = namesFrom(r);
+    const mage = r.archetypes.find((a) => a.id === "mage")!;
+    expect(mage.effects.map((e) => describeEffect(e, names))).toEqual(["Can cast Charm, Blast (each 1× per combat)"]);
+    expect(describeEffect(scout.effects.find((e) => e.type === "waiveUpkeep")!, names)).toBe("Pays no Food upkeep");
+  });
+
+  it("settlement tiers follow the DM sheet", () => {
+    const city = utterdarkPreset().settlementTiers.find((t) => t.id === "city")!;
+    expect(city.cost).toEqual({ gold: 25, growth: 200 });
+    expect(city.ratio).toEqual([{ tierId: "settlement", count: 1 }, { tierId: "outpost", count: 4 }]);
+  });
+
   it("costs come from the CR table unless overridden", () => {
     const r = utterdarkPreset();
     const byId = (id: string) => r.creatures.find((c) => c.id === id)!;
     expect(creatureCosts(byId("guard"), r).cost).toEqual({ gold: 2, growth: 5 }); // CR 1/8
-    expect(creatureCosts(byId("regiment"), r).upkeep).toEqual({ gold: 4, food: 1 }); // CR 3
+    expect(creatureCosts(byId("warrior-veteran"), r).upkeep).toEqual({ gold: 4, food: 1 }); // CR 3
     expect(creatureCosts(byId("assassin"), r).cost).toEqual({ gold: 20 }); // hero, CR 8
     expect(creatureCosts(byId("zombie"), r).upkeep).toEqual({}); // override
   });

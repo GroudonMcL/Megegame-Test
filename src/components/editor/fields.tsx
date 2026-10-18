@@ -18,6 +18,8 @@ export type RefSection =
   | "buildings"
   | "races"
   | "creatures"
+  | "archetypes"
+  | "spells"
   | "itemCategories"
   | "augmentSlots"
   | "items"
@@ -503,6 +505,7 @@ const conditionVariants: Record<string, Variant> = {
   firstRound: { label: "First round of combat", fields: [], template: () => ({ when: "firstRound" }) },
   surprising: { label: "When surprising the enemy", fields: [], template: () => ({ when: "surprising" }) },
   alliesOutnumber: { label: "When allies outnumber enemies", fields: [], template: () => ({ when: "alliesOutnumber" }) },
+  outnumbered: { label: "When outnumbered", fields: [], template: () => ({ when: "outnumbered" }) },
   forceMarching: { label: "While force-marching", fields: [], template: () => ({ when: "forceMarching" }) },
   vsCreatureType: {
     label: "Against a creature type",
@@ -665,6 +668,38 @@ export const effectVariants: Record<Effect["type"], Variant> = {
     label: "Ignores difficult terrain",
     fields: [{ kind: "checkbox", key: "group", label: "Units travelling with it also ignore it" }],
     template: () => ({ type: "ignoreDifficultTerrain", group: true }),
+  },
+  spells: {
+    label: "Can cast spells",
+    fields: [
+      { kind: "multiselect", key: "spellIds", label: "Spells", options: { ref: "spells" } },
+      {
+        kind: "custom",
+        key: "uses",
+        label: "Uses of each",
+        render: (v, onChange) => (
+          <div className="flex gap-2">
+            <select className={input} value={v?.type ?? "perCombat"} aria-label="Uses" onChange={(e) => onChange(e.target.value === "atWill" ? { type: "atWill" } : { type: e.target.value, times: v?.times ?? 1 })}>
+              <option value="perCombat">Per combat</option>
+              <option value="perDay">Per round</option>
+              <option value="atWill">At will</option>
+            </select>
+            {v?.type !== "atWill" && <input className={`${input} w-20`} type="number" min={1} value={v?.times ?? 1} aria-label="Times" onChange={(e) => onChange({ ...v, times: Number(e.target.value) })} />}
+          </div>
+        ),
+      },
+    ],
+    template: () => ({ type: "spells", spellIds: [], uses: { type: "perCombat", times: 1 } }),
+  },
+  waiveUpkeep: {
+    label: "Pays no upkeep in…",
+    fields: [{ kind: "multiselect", key: "resourceIds", label: "Resources", options: { ref: "resources" } }],
+    template: () => ({ type: "waiveUpkeep", resourceIds: [] }),
+  },
+  augmentLimit: {
+    label: "Augment limit",
+    fields: [{ kind: "number", key: "max", label: "Max augments", min: 0 }],
+    template: () => ({ type: "augmentLimit", max: 4 }),
   },
   text: { label: "Text only (DM handles it)", fields: [{ kind: "textarea", key: "text", label: "Text" }], template: () => ({ type: "text", text: "" }) },
 };

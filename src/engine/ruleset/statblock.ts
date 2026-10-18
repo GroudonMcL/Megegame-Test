@@ -23,6 +23,8 @@ export type DamageRoll = z.infer<typeof DamageRoll>;
 
 export const SaveDc = z.object({
   save: Ability,
+  /** "Con/Dex save": the target uses whichever of the two is better. */
+  orSave: Ability.optional(),
   /** Which ability sets the DC (8 + proficiency + modifier + flat); null = fixed DC in `flat`. */
   ability: Ability.nullable(),
   flat: z.number().int(),
@@ -63,6 +65,7 @@ export const BUFF_KINDS = [
   "acBonus",
   "toHitBonus",
   "damageBonus",
+  "attackedWithAdvantage",
 ] as const;
 
 export const ActionProfile = z.discriminatedUnion("kind", [

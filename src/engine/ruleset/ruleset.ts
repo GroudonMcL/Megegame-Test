@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Ability, DiceExpr, Id, ResourceAmounts } from "./common";
 import { Effect } from "./effects";
-import { StatBlock } from "./statblock";
+import { ActionProfile, REVIEW_STATES, StatBlock } from "./statblock";
 
 // The complete, DM-configurable ruleset for one game. It is plain JSON, so it
 // can be exported, imported, copied from a preset, and edited by hand.
@@ -44,6 +44,11 @@ export const SettlementTier = z.object({
   maxPerTeam: z.number().int().positive().nullable().default(null),
   /** Creature categories that can be recruited here. */
   recruitCategories: z.array(z.string()).default([]),
+  /**
+   * "For every settlement of this tier you need N others of tier X": counted
+   * when building one (the new one included).
+   */
+  ratio: z.array(z.object({ tierId: Id, count: z.number().int().positive() })).default([]),
   /** Max living heroes recruited per settlement of this tier; null = no limit. */
   heroLimit: z.number().int().min(0).nullable().default(null),
   requiresUnclaimed: z.boolean().default(false),
@@ -104,6 +109,46 @@ export const Creature = z.object({
   harvest: z.array(z.object({ itemId: Id, qty: z.number().int().positive() })).default([]),
 });
 export type Creature = z.infer<typeof Creature>;
+
+export const Spell = z.object({
+  id: Id,
+  name: z.string().min(1),
+  /** e.g. Arcane, Divine, Primal. */
+  tradition: z.string().default(""),
+  /** Who can learn it, in words (e.g. "Any Arcane", "War Priest"). */
+  restriction: z.string().default(""),
+  /** Combat spells replace an attack; out-of-combat spells are cast with an action. */
+  when: z.enum(["combat", "outOfCombat"]),
+  description: z.string().default(""),
+  cost: ResourceAmounts.default({}),
+  profile: ActionProfile.default({ kind: "text" }),
+  review: z.enum(REVIEW_STATES).default("text"),
+});
+export type Spell = z.infer<typeof Spell>;
+
+/**
+ * A role a player chooses for a recruited unit (Scout, Regiment, Defender…),
+ * layered on top of the creature's stat block.
+ */
+export const Archetype = z.object({
+  id: Id,
+  name: z.string().min(1),
+  description: z.string().default(""),
+  /** Creature categories that may take this archetype. */
+  categories: z.array(z.enum(CREATURE_CATEGORIES)).default(["standard"]),
+  /** Tags the unit gains (used by action requirements and effects). */
+  tags: z.array(z.string()).default([]),
+  effects: z.array(Effect).default([]),
+  unlocksActions: z.array(Id).default([]),
+  /** Null = keep the creature's own vision. */
+  visionRange: z.number().int().min(0).nullable().default(null),
+  /** Can only be recruited in a region with this building. */
+  recruitRequiresBuildingId: Id.nullable().default(null),
+  /** Added to the creature's recruit cost and upkeep. */
+  extraCost: ResourceAmounts.default({}),
+  extraUpkeep: ResourceAmounts.default({}),
+});
+export type Archetype = z.infer<typeof Archetype>;
 
 export const ItemCategory = z.object({
   id: Id,
@@ -169,6 +214,9 @@ export const ACTION_HANDLERS = [
   "retrieveBeast",
   "reanimate",
   "useItem",
+  "castSpell",
+  "train",
+  "convert",
   "rollCheck",
   "manual",
 ] as const;
@@ -179,6 +227,7 @@ export const Requirement = z.discriminatedUnion("type", [
   z.object({ type: z.literal("buildingInRegion"), buildingId: Id, minTier: z.number().int().positive().default(1) }),
   z.object({ type: z.literal("regionOwner"), owner: z.enum(["self", "unowned", "other"]) }),
   z.object({ type: z.literal("noHostileUnits") }),
+  z.object({ type: z.literal("ownUnitInRegion") }),
   z.object({ type: z.literal("unitHasMovement") }),
   z.object({ type: z.literal("unitStealthed") }),
   z.object({ type: z.literal("settlementPresent"), minTierId: Id.optional() }),
@@ -193,6 +242,8 @@ export const ActionInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("path"), label: z.string().default("Path") }),
   z.object({ type: z.literal("creature"), label: z.string().default("Unit type") }),
   z.object({ type: z.literal("race"), label: z.string().default("Race") }),
+  z.object({ type: z.literal("archetype"), label: z.string().default("Archetype") }),
+  z.object({ type: z.literal("spell"), label: z.string().default("Spell") }),
   z.object({ type: z.literal("building"), label: z.string().default("Building") }),
   z.object({ type: z.literal("settlementTier"), label: z.string().default("Settlement") }),
   z.object({ type: z.literal("item"), label: z.string().default("Item") }),
@@ -297,6 +348,8 @@ export const Settings = z.object({
   crCosts: z.array(CrCostRow).default([]),
   /** Demolish refund fraction. */
   demolishRefund: z.number().min(0).max(1).default(0.5),
+  /** Free actions each unit may take per round (null = no limit). */
+  freeActionsPerUnit: z.number().int().min(0).nullable().default(null),
 });
 
 export const Ruleset = z.object({
@@ -319,6 +372,8 @@ export const Ruleset = z.object({
   buildings: z.array(Building).default([]),
   races: z.array(Race).default([]),
   creatures: z.array(Creature).default([]),
+  archetypes: z.array(Archetype).default([]),
+  spells: z.array(Spell).default([]),
   itemCategories: z.array(ItemCategory).default([]),
   augmentSlots: z.array(AugmentSlot).default([]),
   items: z.array(Item).default([]),
@@ -338,6 +393,8 @@ export const RULESET_SECTIONS = [
   "buildings",
   "races",
   "creatures",
+  "archetypes",
+  "spells",
   "itemCategories",
   "augmentSlots",
   "items",
@@ -355,6 +412,8 @@ export const SECTION_SCHEMAS = {
   buildings: Building,
   races: Race,
   creatures: Creature,
+  archetypes: Archetype,
+  spells: Spell,
   itemCategories: ItemCategory,
   augmentSlots: AugmentSlot,
   items: Item,

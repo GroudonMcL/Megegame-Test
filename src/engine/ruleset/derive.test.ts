@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { srdByName } from "../srd/library";
-import { attackBonus, damageText, deriveStats, saveDcValue } from "./derive";
+import { utterdarkPreset } from "@/presets/utterdark";
+import { attackBonus, damageText, deriveStats, saveDcValue, unitBonuses, unitTags } from "./derive";
 
 describe("deriveStats", () => {
   const veteran = srdByName("Warrior Veteran").statBlock; // STR 16, CR 3, Greatsword +5, 2d6+3
@@ -47,5 +48,20 @@ describe("deriveStats", () => {
     const breath = dragon.actions.find((a) => a.name === "Fire Breath")!;
     if (breath.profile.kind !== "save") throw new Error("expected a save");
     expect(saveDcValue(breath.profile.dc, s)).toBe(21);
+  });
+});
+
+describe("unit loadouts", () => {
+  it("layer race, archetype, academy and augments onto the stat block", () => {
+    const r = utterdarkPreset();
+    const creature = r.creatures.find((c) => c.id === "warrior-veteran")!;
+    const bonuses = unitBonuses(r, { raceId: "orc", archetypeId: "regiment", academyBonus: { str: 2 }, augmentIds: ["chain-shirt"] });
+    expect(bonuses.map((b) => b.source)).toEqual(["Orc", "Regiment", "Academy", "Chain Shirt"]);
+    const s = deriveStats(creature.statBlock, bonuses);
+    expect(s.abilities.str.total).toBe(20); // 16 + 2 (Orc) + 2 (Academy)
+    expect(s.ac.total).toBe(18);
+    // Martial Advantage is conditional, so it waits for the combat engine.
+    expect(s.otherEffects.some((o) => o.source === "Regiment")).toBe(true);
+    expect(unitTags(r, creature, "regiment")).toEqual(["Humanoid", "Regiment", "Martial"]);
   });
 });

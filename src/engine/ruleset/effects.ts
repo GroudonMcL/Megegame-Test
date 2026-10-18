@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Ability, DamageType, DiceExpr, Id, ResourceAmounts } from "./common";
-import { StatAction } from "./statblock";
+import { StatAction, Uses } from "./statblock";
 
 // The effects system: a fixed set of primitives that races, buildings, items,
 // creature traits and region features use to change the game. Anything the
@@ -14,6 +14,7 @@ export const EffectCondition = z.discriminatedUnion("when", [
   z.object({ when: z.literal("firstRound") }),
   z.object({ when: z.literal("surprising") }),
   z.object({ when: z.literal("alliesOutnumber") }),
+  z.object({ when: z.literal("outnumbered") }),
   z.object({ when: z.literal("forceMarching") }),
   z.object({ when: z.literal("vsCreatureType"), creatureType: z.string().min(1) }),
   z.object({ when: z.literal("alliedWithTag"), tag: z.string().min(1) }),
@@ -98,6 +99,12 @@ export const Effect = z.discriminatedUnion("type", [
   z.object({ type: z.literal("freeHeal"), units: z.number().int().positive() }),
   z.object({ type: z.literal("portal"), unitsPerAction: z.number().int().positive() }),
   z.object({ type: z.literal("ignoreDifficultTerrain"), group: z.boolean() }),
+  /** Lets the unit cast these spells (from the ruleset's spell list). */
+  z.object({ type: z.literal("spells"), spellIds: z.array(Id).min(1), uses: Uses.default({ type: "perCombat", times: 1 }) }),
+  /** The unit doesn't pay this upkeep (e.g. a self-sufficient scout needs no Food). */
+  z.object({ type: z.literal("waiveUpkeep"), resourceIds: z.array(Id).min(1) }),
+  /** Changes how many augments this unit can carry. */
+  z.object({ type: z.literal("augmentLimit"), max: z.number().int().min(0) }),
   z.object({ type: z.literal("text"), text: z.string().min(1) }),
 ]);
 export type Effect = z.infer<typeof Effect>;
@@ -160,6 +167,8 @@ function describeCondition(w: EffectCondition): string {
       return "when it surprises the enemy";
     case "alliesOutnumber":
       return "when allies outnumber enemies";
+    case "outnumbered":
+      return "when outnumbered";
     case "forceMarching":
       return "while force-marching";
     case "vsCreatureType":
@@ -185,7 +194,33 @@ function per(p: "round" | "combat") {
 }
 
 /** Plain-English description used in the rules reference and unit screens. */
-export function describeEffect(e: Effect, names: { action?: (id: string) => string; table?: (id: string) => string; creature?: (id: string) => string } = {}): string {
+export interface EffectNames {
+  action?: (id: string) => string;
+  table?: (id: string) => string;
+  creature?: (id: string) => string;
+  spell?: (id: string) => string;
+  resource?: (id: string) => string;
+}
+
+/** Name lookups for describeEffect, built from a ruleset. */
+export function namesFrom(r: {
+  actionTypes: { id: string; name: string }[];
+  rollTables: { id: string; name: string }[];
+  creatures: { id: string; statBlock: { name: string } }[];
+  spells: { id: string; name: string }[];
+  resources: { id: string; name: string }[];
+}): EffectNames {
+  const by = (list: { id: string; name: string }[]) => (id: string) => list.find((x) => x.id === id)?.name ?? id;
+  return {
+    action: by(r.actionTypes),
+    table: by(r.rollTables),
+    creature: (id) => r.creatures.find((c) => c.id === id)?.statBlock.name ?? id,
+    spell: by(r.spells),
+    resource: by(r.resources),
+  };
+}
+
+export function describeEffect(e: Effect, names: EffectNames = {}): string {
   const action = names.action ?? ((id) => id);
   const table = names.table ?? ((id) => id);
   const creature = names.creature ?? ((id) => id);
@@ -241,6 +276,14 @@ export function describeEffect(e: Effect, names: { action?: (id: string) => stri
       return `Transports ${e.unitsPerAction} unit${e.unitsPerAction === 1 ? "" : "s"} per Use Portal action`;
     case "ignoreDifficultTerrain":
       return e.group ? "It and units travelling with it ignore difficult terrain" : "Ignores difficult terrain";
+    case "spells": {
+      const uses = e.uses.type === "perCombat" ? ` (each ${e.uses.times}× per combat)` : e.uses.type === "perDay" ? ` (each ${e.uses.times}× per round)` : "";
+      return `Can cast ${e.spellIds.map((id) => names.spell?.(id) ?? id).join(", ")}${uses}`;
+    }
+    case "waiveUpkeep":
+      return `Pays no ${e.resourceIds.map((id) => names.resource?.(id) ?? id).join(" or ")} upkeep`;
+    case "augmentLimit":
+      return `Can equip up to ${e.max} augments`;
     case "text":
       return e.text;
   }

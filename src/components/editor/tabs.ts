@@ -8,6 +8,8 @@ export const RULESET_TABS: { slug: string; label: string; section?: RulesetSecti
   { slug: "buildings", label: "Buildings", section: "buildings" },
   { slug: "races", label: "Races", section: "races" },
   { slug: "creatures", label: "Units & monsters", section: "creatures" },
+  { slug: "archetypes", label: "Archetypes", section: "archetypes" },
+  { slug: "spells", label: "Spells", section: "spells" },
   { slug: "item-categories", label: "Item categories", section: "itemCategories" },
   { slug: "augment-slots", label: "Augment slots", section: "augmentSlots" },
   { slug: "items", label: "Items", section: "items" },

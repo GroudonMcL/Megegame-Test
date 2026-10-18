@@ -66,6 +66,8 @@ export function findReferenceProblems(r: Ruleset): Problem[] {
       if (e.type === "rollEachRound") need(p, "rollTables", e.tableId, "roll table");
       if (e.type === "raiseSlain") need(p, "creatures", e.asCreatureId, "creature");
       if (e.type === "exchange") e.rates.forEach((rate) => (resources(p, rate.give), resources(p, rate.get)));
+      if (e.type === "spells") e.spellIds.forEach((id) => need(p, "spells", id, "spell"));
+      if (e.type === "waiveUpkeep") e.resourceIds.forEach((id) => need(p, "resources", id, "resource"));
     });
   };
 
@@ -76,6 +78,7 @@ export function findReferenceProblems(r: Ruleset): Problem[] {
     resources(p, t.production);
     resources(p, t.upkeep);
     t.discounts.forEach((d) => resources(p, d.amount));
+    t.ratio.forEach((x) => need(p, "settlementTiers", x.tierId, "settlement tier"));
     effects(p, t.effects);
   }
   for (const b of r.buildings) {
@@ -96,6 +99,15 @@ export function findReferenceProblems(r: Ruleset): Problem[] {
     c.harvest.forEach((h) => need(p, "items", h.itemId, "item"));
     effects(p, c.effects);
   }
+  for (const a of r.archetypes) {
+    const p = `archetypes › ${a.id}`;
+    a.unlocksActions.forEach((x) => need(p, "actionTypes", x, "action type"));
+    need(p, "buildings", a.recruitRequiresBuildingId, "building");
+    resources(p, a.extraCost);
+    resources(p, a.extraUpkeep);
+    effects(p, a.effects);
+  }
+  for (const sp of r.spells) resources(`spells › ${sp.id}`, sp.cost);
   for (const item of r.items) {
     const p = `items › ${item.id}`;
     need(p, "itemCategories", item.categoryId, "item category");
