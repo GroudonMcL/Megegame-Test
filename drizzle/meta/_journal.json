@@ -29,6 +29,20 @@
       "when": 1792317183744,
       "tag": "0003_enable_rls_game_state",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792319760046,
+      "tag": "0004_map",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792319761164,
+      "tag": "0005_enable_rls_assets",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,7 @@ export default async function GameLayout({ children, params }: LayoutProps<"/dm/
   if (!game) notFound();
   const base = `/dm/games/${gameId}`;
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+    <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
       <p className="text-sm">
         <Link href="/dm" className="text-accent underline">
           ← All games
@@ -25,6 +25,8 @@ export default async function GameLayout({ children, params }: LayoutProps<"/dm/
         className="mt-3 border-b border-border pb-2"
         links={[
           { href: base, label: "Teams", exact: true },
+          { href: `${base}/world`, label: "World" },
+          { href: `${base}/map`, label: "Map editor" },
           { href: `${base}/ruleset`, label: "Ruleset" },
         ]}
       />

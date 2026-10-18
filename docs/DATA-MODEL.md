@@ -17,6 +17,8 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | `buildings` | with tiers; each tier has cost, upkeep, production and effects |
 | `races` | ability score bonuses and effects |
 | `creatures` | units, heroes and monsters, each with a **full D&D 5e stat block** |
+| `archetypes` | roles chosen when recruiting (Scout, Regiment, Defender…): tags, abilities, spells, actions |
+| `spells` | spells that archetypes and items grant, with combat profiles where possible |
 | `itemCategories`, `augmentSlots`, `items`, `recipes` | items and crafting |
 | `actionTypes` | everything teams can order, with requirements, inputs and a handler |
 | `rollTables` | dice tables with outcome bands and automatic results |
@@ -45,9 +47,10 @@ Building effects apply to the owning team's units in that region.
 | `games` | name, status, preset, current round |
 | `teams` | name, colour, join code, races, resource stockpiles, known recipes, secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
+| `assets` | uploaded files (the map image), stored in the database and served only through the app |
 | `regions` | map nodes: position (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
-| `connections` | links between regions: miles, terrain, hidden |
-| `units` | instances of a creature: owner (none = wild), race, academy bonus, augments, HP, location, miles used this round, status, per-round ability uses |
+| `connections` | links between regions: miles, terrain, hidden (each pair at most once) |
+| `units` | instances of a creature: owner (none = wild), race, archetype, academy bonus, augments, HP, location, miles used this round, status, per-round ability uses |
 | `inventory` | items per team |
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `rounds` | round lifecycle, deadline, published snapshot |

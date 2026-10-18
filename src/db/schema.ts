@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -17,6 +18,12 @@ import {
 //    src/engine/ruleset. Instances refer to its definitions by string ID.
 //  - game state: teams, regions, units, rounds, orders and logs, in tables.
 
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
 const created = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
 export const games = pgTable("games", {
@@ -25,8 +32,29 @@ export const games = pgTable("games", {
   status: text("status").notNull().default("setup"),
   presetId: text("preset_id").notNull().default("blank"),
   currentRound: integer("current_round").notNull().default(0),
+  // The map background image (an asset), if one has been uploaded.
+  mapAssetId: uuid("map_asset_id"),
   createdAt: created(),
 });
+
+/** Uploaded files (map images, emblems), served only through the app's own routes. */
+export const assets = pgTable(
+  "assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    mime: text("mime").notNull(),
+    data: bytea("data").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: created(),
+  },
+  (t) => [index("assets_game_idx").on(t.gameId)],
+);
 
 export const gameRulesets = pgTable("game_rulesets", {
   gameId: uuid("game_id")
@@ -151,7 +179,8 @@ export const connections = pgTable(
     terrainId: text("terrain_id").notNull().default("normal"),
     hidden: boolean("hidden").notNull().default(false),
   },
-  (t) => [index("connections_game_idx").on(t.gameId)],
+  // region_a is always the smaller ID, so each pair can only be connected once.
+  (t) => [index("connections_game_idx").on(t.gameId), uniqueIndex("connections_pair_idx").on(t.regionA, t.regionB)],
 );
 
 export const units = pgTable(
@@ -166,6 +195,7 @@ export const units = pgTable(
     creatureId: text("creature_id").notNull(),
     name: text("name").notNull().default(""),
     raceId: text("race_id"),
+    archetypeId: text("archetype_id"),
     // e.g. { "str": 2 } from an Academy.
     academyBonus: jsonb("academy_bonus").$type<Record<string, number>>().notNull().default({}),
     augmentIds: jsonb("augment_ids").$type<string[]>().notNull().default([]),

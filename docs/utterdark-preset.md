@@ -1,66 +1,49 @@
 # The Utterdark preset
 
-Built from `reference/utterdark-rules.md` in `src/presets/utterdark.ts`. Create a game with **Start from: Descent into the Utterdark** to get a copy you can edit freely.
+Built in `src/presets/utterdark.ts` from `reference/utterdark-rules.md` and the DM sheet (`reference/utterdark-dm-sheet.csv`, the "Player Reference" tab). Create a game with **Start from: Descent into the Utterdark** to get a copy you can edit freely.
 
-## Units are SRD 5.2 creatures
+## Units, archetypes and spells
 
-Player units use official SRD 5.2 stat blocks. Recruit cost and upkeep come from the **CR cost table** (Game settings), and each unit can override it.
+**Units are plain SRD 5.2 stat blocks under their own names**: 11 standard units (Guard, Warrior Infantry, Priest Acolyte, Scout, Tough, Spy, Druid, Priest, Berserker, Warrior Veteran, Knight) and 5 heroes (Guard Captain, Gladiator, Mage, Assassin, Archmage). Add more from **Units & monsters → + From SRD…**. Recruit cost and upkeep come from the **CR cost table** (Game settings) unless a unit overrides them.
 
-| Utterdark unit | SRD 5.2 stat block | CR |
-|---|---|---|
-| Guard | Guard | 1/8 |
-| Healer | Priest Acolyte | 1/4 |
-| Miner | Tough | 1/2 |
-| Scout | Scout | 1/2 |
-| Regiment | Warrior Veteran | 3 |
-| Mage | Mage | 6 |
-| War Priest (hero) | Priest | 2 |
-| Beastmaster (hero) | Druid (no SRD beastmaster exists) | 2 |
-| Champion (hero) | Gladiator | 5 |
-| Necromancer (hero) | Mage (no SRD necromancer exists) | 6 |
-| Assassin (hero) | Assassin | 8 |
-| Archmage (hero) | Archmage | 12 |
+**Archetypes** give a unit its role. The player picks one when recruiting. Archetypes add tags, abilities, spells and actions on top of the stat block:
 
-The old Utterdark *combat* abilities (Martial Advantage, Sneak Attack, Spellcasting I/IV, Grim Harvest…) are replaced by the SRD stat blocks' own abilities. Abilities that matter outside combat are kept as tags and effects:
+| Standard | Heroes |
+|---|---|
+| Defender, Druid (needs a Farm), Healer, Mage, Miner (needs a Mine), Monk, Regiment, Scout | Archdruid, Archmage, Artificer, Assassin, Bard, Beastmaster, Champion, Necromancer, War Priest |
 
-- Guard: **Defender** tag (double fortification), advantage on Search.
-- Miner: unlocks Excavate and Extract Deposit.
-- Scout and Assassin: Stealthy (Stealth move and Spy), and see adjacent regions.
-- Regiment: needed to Annex.
-- Healer: free full heal with Heal Unit.
-- Archmage: Teleport.
-- Beastmaster: tame and store beasts, with advantage on taming and capturing.
-- Necromancer: Reanimate, and raises a slain humanoid as a Zombie once per combat.
-- War Priest: advantage on Divine Intervention.
+Their abilities come from the DM sheet. Where the effects system can express an ability, the app automates it: for example Martial Advantage, Sneak Attack, Survivalist (no Food upkeep), Magic Resistance, Indomitable, Uncanny Dodge, Raise Dead, the Artificer's 4-item limit, and the spell lists. The rest are "text only" (see below).
 
-**Movement:** every SRD humanoid walks 30 ft, which is 2 regions per round with the default settings. The old Scout had 4 regions; to keep that, give the Scout a 60 ft walking speed.
+The **spell list** has all 29 spells from the sheet. Combat spells that can be automated have combat profiles: Blast, Greater Blast, Smite, Harm, Shatter, Ray of Sickness, Charm, Sleep, Faerie Fire, Ray of Enfeeblement, Bless, Haste, Heal, Greater Heal and Revivify. Their numbers are marked "check" until the combat engine is built in Phase 6. "Con/Dex save" means the target uses its better save. Spell DCs use the caster's Intelligence (Arcane) or Wisdom (Divine and Primal).
 
-## Placeholders (waiting for the DM sheet)
+## From the DM sheet
 
-Marked **PLACEHOLDER** in the app:
+- **Settlements:** Gold and Growth costs, Food upkeep, Gold and Growth production, building slots, and the "for every settlement you need N outposts" requirements. Only one Capital is allowed.
+- **Buildings:** every cost, upkeep and production figure. Hunter's Post, Tavern, Temple (Respite, Divine Intervention), Smithy (Craft) and Portal grant their free actions.
+- **Actions:** the full list from the sheet, including Cast Spell, Claim (replaces Annex), Explore (replaces Search), Extract (deposit with STR/CON or corpse with INT/WIS), Train in Academy and Train Population.
+- **Free actions:** the full list from the sheet. A setting allows one free action per unit per turn.
+- **Population** is a new resource. Train Population turns 100 Growth into +1 Population, and disbanding a healthy unit refunds 1.
+- **Diplomatic agreements** are in the rules text.
 
-- Growth produced by each settlement tier (Outpost 2, Settlement 4, City 6, Capital 8).
-- Starting resources (10 Gold, 5 Food, 10 Growth).
-- Races and their bonuses.
-- Example items, augments and recipes (Pickaxes, Chain Shirt, Tower Shield, Silk Cloak, Healing Draught).
-- Every roll table's bands and results: Excavate, Extract, New Region, Hunter's Post, Divine Intervention (d100), Race, Loot, Encounter, Dungeon, Search, Spy, Tavern, Turn Event, Economy Deficit.
-- The CR cost table, calibrated so the old prices roughly carry over.
+## Still placeholders
 
-## Where the rules disagreed
+Marked **PLACEHOLDER** in the app. The DM sheet tab didn't include them:
 
-| Topic | Versions | Used |
-|---|---|---|
-| Teleport | 80/15/5 (Actions list) vs 50/25/15/10 (Archmage) | **50/25/15/10**, the later and more detailed one |
-| Heal Unit cost | Gold only (Healer) vs Gold *or* Food, mix and match (Actions list) | **1 Gold per 5 HP or 1 Food per 10 HP, mixed**, minimum 1 |
-| Hunter Post tiers 2–3, Smithy, Watchtower tiers | Every tier costs the same | Kept exactly as written; edit if they were typos |
+- every roll table: Excavate, Extract, New Region, Hunter's Post, Divine Intervention, Race, Loot, Encounter, Dungeon, Explore, Spy, Tavern, Turn Event, Economy Deficit;
+- races and their bonuses;
+- items, augments and recipes;
+- starting resources;
+- the CR cost table.
 
-## Rules the app can only show as text (the DM handles them)
+## Choices made
 
-- Guard **Vigilant**: negates extra damage from hidden units.
-- **Breeding Pits**: a new tamed monster after a number of rounds based on CR.
-- **Menagerie**: beasts are released and attack when the region is raided or attacked.
-- Monster upkeep of "Food equal to half its CR" is approximated by the CR cost table.
-- **Divine Intervention** outcomes, **Improvise**, and the consequences of an economy deficit beyond the table roll.
-- The **Market** requirement ("you own a Market") is checked by the DM until Phase 5 adds the handler check.
+| Topic | Choice |
+|---|---|
+| Upgrade Settlement | Not on the sheet's action list, but kept, because settlements need a way to grow past Outpost |
+| Teleport | 50/25/15/10 (the later, more detailed version) |
+| Heal Unit | 5 HP per Gold or 10 HP per Food |
+| Population per race | The sheet says Train Population gives "+1 population of base race". For now Population is one shared resource; per-race tracking can come with the recruit rules in Phase 5. |
 
-Deposits can carry their own per-round production for "raw resources claimed through mining produce 2 income".
+## Rules the app shows as text (the DM handles them)
+
+Defender's movement restriction, Vigilant, Tend Nature, Healer/Lifebringer free heals, Survivalist's Hunter's Post assist, Assassinate, Inspiration, Improviser, Song of Rest, Beast Bond damage redirection, Hunter's Mark, Tracker, Second Wind, Inspiring Leader, Grim Harvest, Profane Ritual, Tinker, Wildshape, Bound, Undead/Construct healing costs, Breeding Pits, the Menagerie release, and the out-of-combat spells (Plant Growth, Scry, Teleport, Reincarnate, Resurrection, True Resurrection, Wish). The combat-only ones will be looked at again when combat is built in Phase 6.
