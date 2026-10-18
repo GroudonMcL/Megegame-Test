@@ -55,8 +55,15 @@ const settingsFields: FieldSpec[] = [
     label: "Combat",
     fields: [
       { kind: "number", key: "maxRounds", label: "Maximum combat rounds", min: 1 },
-      { kind: "number", key: "unitFootprintFt", label: "Unit footprint (ft square)", help: "for area effects" },
       { kind: "select", key: "usesReset", label: "“Per day” uses reset each", options: [{ value: "round", label: "game round" }, { value: "combat", label: "combat" }] },
+      { kind: "number", key: "retreatBelow", label: "Team units retreat below this share of max HP", help: "0.25 = 25%; 0 = never; monsters fight on", step: 0.05, min: 0 },
+      { kind: "number", key: "oddsRuns", label: "Fights simulated for “Show odds”", min: 10 },
+      {
+        kind: "object",
+        key: "footprintFt",
+        label: "Width one unit takes up, by creature size (ft, for area effects)",
+        fields: (["tiny", "small", "medium", "large", "huge", "gargantuan"] as const).map((k) => ({ kind: "number" as const, key: k, label: k[0].toUpperCase() + k.slice(1), step: 0.5, min: 0.5 })),
+      },
     ],
   },
   {

@@ -7,7 +7,8 @@ import type { OrderDraft } from "@/engine/orders/validate";
 import { addTo } from "@/engine/orders/economy";
 import { endOfRound, type RoundEnd } from "@/engine/resolve/endOfRound";
 import { buildQueue, interactionFlags, scenes, type Flag } from "@/engine/resolve/queue";
-import { resolveOrder } from "@/engine/resolve/resolveOrder";
+import { orderCombatOdds, resolveOrder, type CombatOptions } from "@/engine/resolve/resolveOrder";
+import type { CombatOdds } from "@/engine/combat/types";
 import type { Change, Proposal, RollRecord, World } from "@/engine/resolve/types";
 import { loadRuleset } from "./rulesets";
 import { loadGameRows, rowsToWorld } from "./world";
@@ -32,6 +33,15 @@ export interface OrderOutcome {
   hideRolls: boolean;
   /** What the team gained or lost, once resolved. */
   delta?: ResourceAmounts;
+  /** The DM's choices for this order's fights. */
+  combat?: FightSettings;
+  /** "Show odds" results, one per fight (cleared when the fight changes). */
+  odds?: CombatOdds[];
+}
+
+export interface FightSettings extends CombatOptions {
+  /** Show the round-by-round log to the teams in the fight (default yes). */
+  shareLog?: boolean;
 }
 
 /** What's stored in rounds.end_of_round. */
@@ -158,8 +168,8 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
 async function restore(tx: Tx, gameId: string, before: Before) {
   for (const id of before.createdUnitIds) await tx.delete(schema.units).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   for (const u of before.units) {
-    const { id, regionId, milesUsed, status, hp, augmentIds, academyBonus, name } = u;
-    await tx.update(schema.units).set({ regionId, milesUsed, status, hp, augmentIds, academyBonus, name }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
+    const { id, regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
+    await tx.update(schema.units).set({ regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   }
   for (const u of before.resetUnits ?? []) {
     await tx.update(schema.units).set({ milesUsed: u.milesUsed, usesSpent: u.usesSpent }).where(and(eq(schema.units.id, u.id), eq(schema.units.gameId, gameId)));
@@ -292,7 +302,9 @@ export async function prepareStep(gameId: string, step: number) {
 async function prepareOne(o: OrderRow, ruleset: Ruleset, world: World, roundNumber: number, previous: OrderOutcome | null, reroll = false) {
   const rerolls = (previous?.rerolls ?? 0) + (reroll ? 1 : 0);
   const seed = `${o.id}:${rerolls}`;
-  const proposal = resolveOrder({ ruleset, world, teamId: o.teamId, order: toDraft(o), round: roundNumber, seed });
+  // A re-roll is a fresh fight: the DM's hand-set results no longer apply.
+  const combat = reroll && previous?.combat ? { ...previous.combat, overrides: undefined } : previous?.combat;
+  const proposal = resolveOrder({ ruleset, world, teamId: o.teamId, order: toDraft(o), round: roundNumber, seed, combat });
   const outcome: OrderOutcome = {
     seed,
     rerolls,
@@ -300,6 +312,7 @@ async function prepareOne(o: OrderRow, ruleset: Ruleset, world: World, roundNumb
     text: proposal.text,
     adjust: previous?.adjust ?? {},
     hideRolls: previous?.hideRolls ?? false,
+    combat,
   };
   await db.update(schema.orders).set({ status: "prepared", outcome }).where(eq(schema.orders.id, o.id));
 }
@@ -317,6 +330,35 @@ export async function rerollOrder(gameId: string, orderId: string) {
   if (DONE.has(order.status)) throw new Error("That order has already been decided. Undo it first.");
   const [{ ruleset }, rows] = await Promise.all([loadRuleset(gameId), loadGameRows(gameId)]);
   await prepareOne(order, ruleset, rowsToWorld(rows), round.number, (order.outcome as OrderOutcome | null) ?? null, true);
+}
+
+/** Changes how this order's fights are run (focus targets, by hand, sharing the log) and works it out again with the same dice. */
+export async function setFightSettings(gameId: string, orderId: string, settings: FightSettings) {
+  const { round, order } = await orderInRound(gameId, orderId);
+  if (DONE.has(order.status)) throw new Error("That order has already been decided. Undo it first.");
+  const previous = (order.outcome as OrderOutcome | null) ?? null;
+  if (!previous) throw new Error("Prepare the step first.");
+  const [{ ruleset }, rows] = await Promise.all([loadRuleset(gameId), loadGameRows(gameId)]);
+  const world = rowsToWorld(rows);
+  const live = new Set(world.units.map((u) => u.id));
+  const priority = Object.fromEntries(Object.entries(settings.priority ?? {}).filter(([, id]) => live.has(id)));
+  const overrides = Object.fromEntries(Object.entries(settings.overrides ?? {}).filter(([id]) => live.has(id)));
+  const combat: FightSettings = { priority, byHand: Boolean(settings.byHand), shareLog: settings.shareLog !== false, overrides };
+  const proposal = resolveOrder({ ruleset, world, teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed, combat });
+  // Keep the DM's own wording unless it was the drafted text.
+  const text = previous.text === previous.proposal.text ? proposal.text : previous.text;
+  const outcome: OrderOutcome = { ...previous, proposal, text, combat, odds: undefined };
+  await db.update(schema.orders).set({ outcome }).where(eq(schema.orders.id, order.id));
+}
+
+/** Runs this order's fights many times to show how they tend to go. */
+export async function computeOdds(gameId: string, orderId: string) {
+  const { round, order } = await orderInRound(gameId, orderId);
+  const previous = (order.outcome as OrderOutcome | null) ?? null;
+  if (!previous?.proposal.combats?.length) throw new Error("This order has no fight.");
+  const [{ ruleset }, rows] = await Promise.all([loadRuleset(gameId), loadGameRows(gameId)]);
+  const odds = orderCombatOdds({ ruleset, world: rowsToWorld(rows), teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed, combat: previous.combat });
+  await db.update(schema.orders).set({ outcome: { ...previous, odds } }).where(eq(schema.orders.id, order.id));
 }
 
 export interface Decision {
@@ -338,7 +380,7 @@ export async function acceptOrder(gameId: string, orderId: string, d: Decision):
   return db.transaction(async (tx) => {
     await lockRound(tx, round.id);
     const world = rowsToWorld(await loadGameRows(gameId, tx));
-    const proposal = resolveOrder({ ruleset, world, teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed });
+    const proposal = resolveOrder({ ruleset, world, teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed, combat: previous.combat });
     if (proposal.status === "invalid") {
       await tx.update(schema.orders).set({ outcome: { ...previous, proposal } }).where(eq(schema.orders.id, order.id));
       return { ok: false as const, error: `It can no longer happen: ${proposal.problems[0]} Mark it as failed, or adjust it by hand.` };

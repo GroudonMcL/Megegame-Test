@@ -9,6 +9,10 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
   const { round, steps, ruleset, world } = await loadQueue(gameId);
   const last = round ? await lastAuditEntry(gameId, round.id) : null;
   const actionName = (id: string) => ruleset.actionTypes.find((a) => a.id === id)?.name ?? id;
+  const regionName = (id: string | null) => {
+    const reg = world.regions.find((x) => x.id === id);
+    return reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "?";
+  };
 
   const data = steps.map((s) => ({
     step: s.step,
@@ -42,8 +46,25 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                     notes: i.outcome.proposal.notes,
                     rolls: i.outcome.proposal.rolls.map((r) => ({ label: r.label, breakdown: r.breakdown })),
                     changes: i.outcome.proposal.changes.map((c) => describeChange(ruleset, world, c)),
+                    fights: (i.outcome.proposal.combats ?? []).map((f) => ({
+                      regionName: regionName(f.regionId),
+                      sides: f.sides.map(({ id, name }) => ({ id, name })),
+                      winner: f.winner,
+                      endReason: f.endReason,
+                      rounds: f.rounds,
+                      units: f.units.map((u) => ({ unitId: u.unitId, sideId: u.sideId, label: u.label, startHp: u.startHp, hp: u.hp, maxHp: u.maxHp, outcome: u.outcome, raised: Boolean(u.raised) })),
+                      warnings: f.warnings,
+                      log: f.log,
+                    })),
                   }
                 : null,
+              fightSettings: {
+                priority: i.outcome.combat?.priority ?? {},
+                byHand: Boolean(i.outcome.combat?.byHand),
+                shareLog: i.outcome.combat?.shareLog !== false,
+                overrides: i.outcome.combat?.overrides ?? {},
+              },
+              odds: i.outcome.odds ?? null,
             }
           : null,
       }),

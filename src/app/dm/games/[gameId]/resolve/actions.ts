@@ -8,11 +8,13 @@ import {
   applyEndOfRound,
   backToQueue,
   computeEndOfRound,
+  computeOdds,
   failOrder,
   loadQueue,
   prepareStep,
   publishRound,
   rerollOrder,
+  setFightSettings,
   startResolving,
   undoLast,
 } from "@/lib/resolution";
@@ -48,6 +50,16 @@ export const acceptAction = async (gameId: string, orderId: string, decision: z.
   run(gameId, (id) => acceptOrder(id, OrderId.parse(orderId), Decision.parse(decision)));
 export const failAction = async (gameId: string, orderId: string, text: string, status: "failed" | "skipped") =>
   run(gameId, (id) => failOrder(id, OrderId.parse(orderId), z.string().max(10000).parse(text), z.enum(["failed", "skipped"]).parse(status)));
+
+const FightSettings = z.object({
+  priority: z.record(z.string().max(64), z.uuid()).optional(),
+  byHand: z.boolean().optional(),
+  shareLog: z.boolean().optional(),
+  overrides: z.record(z.uuid(), z.object({ hp: z.number().int().min(0).max(100000).optional(), outcome: z.enum(["standing", "dead", "retreated"]).optional() })).optional(),
+});
+export const fightSettingsAction = async (gameId: string, orderId: string, settings: z.input<typeof FightSettings>) =>
+  run(gameId, (id) => setFightSettings(id, OrderId.parse(orderId), FightSettings.parse(settings)));
+export const oddsAction = async (gameId: string, orderId: string) => run(gameId, (id) => computeOdds(id, OrderId.parse(orderId)));
 
 /** Accepts every order in a step whose proposal is "ready", in queue order. */
 export const acceptAllReadyAction = async (gameId: string, step: number) =>

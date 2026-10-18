@@ -14,7 +14,7 @@ Built in `src/presets/utterdark.ts` from `reference/utterdark-rules.md` and the 
 
 Their abilities come from the DM sheet. Where the effects system can express an ability, the app automates it: for example Martial Advantage, Sneak Attack, Survivalist (no Food upkeep), Magic Resistance, Indomitable, Uncanny Dodge, Raise Dead, the Artificer's 4-item limit, and the spell lists. The rest are "text only" (see below).
 
-The **spell list** has all 29 spells from the sheet. Combat spells that can be automated have combat profiles: Blast, Greater Blast, Smite, Harm, Shatter, Ray of Sickness, Charm, Sleep, Faerie Fire, Ray of Enfeeblement, Bless, Haste, Heal, Greater Heal and Revivify. Their numbers are marked "check" until the combat engine is built in Phase 6. "Con/Dex save" means the target uses its better save. Spell DCs use the caster's Intelligence (Arcane) or Wisdom (Divine and Primal).
+The **spell list** has all 29 spells from the sheet. Combat spells that can be automated have combat profiles: Blast, Greater Blast, Smite, Harm, Shatter, Ray of Sickness, Charm, Sleep, Faerie Fire, Ray of Enfeeblement, Bless, Haste, Heal, Greater Heal and Revivify. The combat simulation uses them; the ones marked "check" are worth a look in the ruleset editor. "Con/Dex save" means the target uses its better save. Spell DCs use the caster's Intelligence (Arcane) or Wisdom (Divine and Primal).
 
 ## From the DM sheet
 
@@ -46,4 +46,4 @@ Marked **PLACEHOLDER** in the app. The DM sheet tab didn't include them:
 
 ## Rules the app shows as text (the DM handles them)
 
-Defender's movement restriction, Vigilant, Tend Nature, Healer/Lifebringer free heals, Survivalist's Hunter's Post assist, Assassinate, Inspiration, Improviser, Song of Rest, Beast Bond damage redirection, Hunter's Mark, Tracker, Second Wind, Inspiring Leader, Grim Harvest, Profane Ritual, Tinker, Wildshape, Bound, Undead/Construct healing costs, Breeding Pits, the Menagerie release, and the out-of-combat spells (Plant Growth, Scry, Teleport, Reincarnate, Resurrection, True Resurrection, Wish). The combat-only ones will be looked at again when combat is built in Phase 6.
+Defender's movement restriction, Vigilant, Tend Nature, Healer/Lifebringer free heals, Survivalist's Hunter's Post assist, Assassinate, Inspiration, Improviser, Song of Rest, Beast Bond damage redirection, Hunter's Mark, Tracker, Second Wind, Inspiring Leader, Grim Harvest, Profane Ritual, Tinker, Wildshape, Bound, Undead/Construct healing costs, Breeding Pits, the Menagerie release, and the out-of-combat spells (Plant Growth, Scry, Teleport, Reincarnate, Resurrection, True Resurrection, Wish). Fights list the combat-only ones under "Not automated" so the DM can account for them.

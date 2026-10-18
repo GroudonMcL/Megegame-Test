@@ -1,4 +1,5 @@
 import type { Ruleset } from "@/engine/ruleset/ruleset";
+import { FightLog } from "@/components/combat/FightLog";
 import type { TeamResults } from "@/lib/results";
 
 const STATUS: Record<string, string> = { resolved: "", failed: "Failed", skipped: "Not carried out" };
@@ -33,6 +34,18 @@ export function RoundResults({ result, rules }: { result: TeamResults; rules: Ru
                 ))}
               </ul>
             )}
+            {o.fights.map((log, i) => (
+              <FightLog key={i} log={log} title={o.fights.length > 1 ? `Fight ${i + 1}: round by round` : "The fight, round by round"} />
+            ))}
+          </li>
+        ))}
+        {result.reports.map((x, i) => (
+          <li key={`report-${i}`} className="rounded-lg border border-danger/50 p-3 text-sm">
+            <strong>⚔ Attacked</strong>
+            <p className="mt-1 whitespace-pre-wrap">{x.text}</p>
+            {x.fights.map((log, j) => (
+              <FightLog key={j} log={log} title="The fight, round by round" />
+            ))}
           </li>
         ))}
         {result.orders.length === 0 && <li className="text-sm text-muted">You gave no orders this round.</li>}

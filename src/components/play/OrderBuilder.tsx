@@ -462,6 +462,18 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
     }
     case "path":
       return <PathField index={index} p={p} />;
+    case "targetUnit": {
+      const raw = inputOf("unit");
+      const actingIds = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+      const acting = units.find((u) => actingIds.includes(u.id));
+      const where = acting?.regionId ?? null;
+      const list = view.otherUnits.filter((u) => !u.dead && (!where || u.regionId === where) && (!input.monstersOnly || u.ownerTeamId === null));
+      const owner = (id: string | null) => (id ? (view.teams.find((t) => t.id === id)?.name ?? "another faction") : "wild");
+      return select(
+        list.map((u) => ({ value: u.id, label: `${u.creatureName} (${owner(u.ownerTeamId)}) · ${regionName(u.regionId)}` })),
+        list.length ? "Choose a target…" : acting ? "Nothing to target in that region" : "Choose your units first…",
+      );
+    }
     case "creature": {
       const list = rules.creatures.filter((c) => c.recruitable);
       return select(list.map((c) => ({ value: c.id, label: `${c.statBlock.name} (${c.category}) · ${fmtRes(creatureCosts(c, rules).cost, rules.resources)}` })));

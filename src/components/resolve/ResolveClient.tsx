@@ -9,6 +9,8 @@ import {
   backToQueueAction,
   computeEndAction,
   failAction,
+  fightSettingsAction,
+  oddsAction,
   prepareStepAction,
   publishAction,
   rerollAction,
@@ -17,6 +19,8 @@ import {
   type Result,
 } from "@/app/dm/games/[gameId]/resolve/actions";
 import { EconomyTable } from "@/components/play/EconomyTable";
+import { FightLog } from "@/components/combat/FightLog";
+import type { CombatOdds, LogEntry } from "@/engine/combat/types";
 import type { Economy } from "@/engine/orders/economy";
 
 // The DM's resolution queue: every team's action 1, then action 2… Each order
@@ -47,8 +51,24 @@ export interface ResolveItem {
       notes: string[];
       rolls: { label: string; breakdown: string }[];
       changes: string[];
+      fights: FightView[];
     } | null;
+    fightSettings: { priority: Record<string, string>; byHand: boolean; shareLog: boolean; overrides: Overrides };
+    odds: CombatOdds[] | null;
   } | null;
+}
+
+type Overrides = Record<string, { hp?: number; outcome?: "standing" | "dead" | "retreated" }>;
+
+export interface FightView {
+  regionName: string;
+  sides: { id: string; name: string }[];
+  winner: string | null;
+  endReason: string;
+  rounds: number;
+  units: { unitId: string; sideId: string; label: string; startHp: number; hp: number; maxHp: number; outcome: string; raised: boolean }[];
+  warnings: string[];
+  log: LogEntry[];
 }
 
 type Resource = { id: string; name: string; icon: string; kind: string };
@@ -247,7 +267,10 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
       {i.notes && <p className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-2 text-sm italic">{i.notes}</p>}
 
       {done ? (
-        <p className="mt-2 whitespace-pre-wrap text-sm">{o?.text}</p>
+        <>
+          <p className="mt-2 whitespace-pre-wrap text-sm">{o?.text}</p>
+          {i.status === "resolved" && p?.fights.map((f, k) => <FightLog key={k} log={f.log} title={`Fight log: ${f.regionName}`} />)}
+        </>
       ) : !p ? (
         <p className="mt-2 text-sm text-muted">{waiting ? "" : "Not prepared yet."}</p>
       ) : (
@@ -278,6 +301,7 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
               ))}
             </ul>
           )}
+          {(p.fights.length > 0 || o!.fightSettings.byHand) && <FightPanel item={i} props={props} act={act} busy={busy} />}
           <label className="block">
             <span className="text-xs text-muted">Outcome text for the team</span>
             <textarea className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" rows={3} value={text} onChange={(e) => setText(e.target.value)} />
@@ -311,8 +335,8 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
             <button type="button" className={primary} disabled={busy || waiting || p.status === "invalid"} onClick={() => act(() => acceptAction(props.gameId, i.id, { text, adjust, hideRolls }))}>
               Accept
             </button>
-            {p.rolls.length > 0 && (
-              <button type="button" className={btn} disabled={busy} onClick={() => act(() => rerollAction(props.gameId, i.id))}>
+            {(p.rolls.length > 0 || p.fights.length > 0) && (
+              <button type="button" className={btn} disabled={busy} onClick={() => act(() => rerollAction(props.gameId, i.id))} title="New dice for every roll and fight in this order">
                 Re-roll
               </button>
             )}
@@ -332,6 +356,160 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
         </div>
       )}
     </li>
+  );
+}
+
+const OUTCOME_LABEL: Record<string, string> = { standing: "", dead: "dead", retreated: "retreated", captured: "captured" };
+
+/** A simulated fight: who was in it, how it went, the log, and the DM's controls. */
+function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: Props; act: (fn: () => Promise<Result>) => void; busy: boolean }) {
+  const o = i.outcome!;
+  const fights = o.proposal?.fights ?? [];
+  const [priority, setPriority] = useState(o.fightSettings.priority);
+  const [byHand, setByHand] = useState(o.fightSettings.byHand);
+  const [shareLog, setShareLog] = useState(o.fightSettings.shareLog);
+  const [overrides, setOverrides] = useState<Overrides>(o.fightSettings.overrides);
+  const [editing, setEditing] = useState(Object.keys(o.fightSettings.overrides).length > 0);
+  const sentOverrides = editing ? overrides : {};
+  const changed =
+    JSON.stringify(priority) !== JSON.stringify(o.fightSettings.priority) ||
+    byHand !== o.fightSettings.byHand ||
+    shareLog !== o.fightSettings.shareLog ||
+    JSON.stringify(sentOverrides) !== JSON.stringify(o.fightSettings.overrides);
+  const override = (unitId: string, patch: Overrides[string]) => {
+    const next = { ...overrides, [unitId]: { ...overrides[unitId], ...patch } };
+    for (const k of Object.keys(next[unitId])) if (next[unitId][k as keyof Overrides[string]] === undefined) delete next[unitId][k as keyof Overrides[string]];
+    if (!Object.keys(next[unitId]).length) delete next[unitId];
+    setOverrides(next);
+  };
+  const sides = [...new Map(fights.flatMap((f) => f.sides.map((x) => [x.id, x.name] as const))).entries()];
+  const enemiesOf = (sideId: string) => fights.flatMap((f) => f.units.filter((u) => u.sideId !== sideId && !u.raised));
+  const name = (f: FightView, id: string | null) => f.sides.find((x) => x.id === id)?.name ?? "nobody";
+
+  return (
+    <div className="space-y-2 rounded-lg border border-amber-500/40 p-2">
+      {fights.map((f, k) => {
+        const odds = o.odds?.[k];
+        return (
+          <div key={k} className="space-y-1">
+            <p className="font-medium">
+              ⚔ Fight in {f.regionName}:{" "}
+              {f.endReason === "noFight"
+                ? "nobody to fight"
+                : f.endReason === "captured"
+                  ? `${name(f, f.winner)} captured the monster after ${f.rounds} round${f.rounds === 1 ? "" : "s"}`
+                  : f.winner
+                    ? `${name(f, f.winner)} won after ${f.rounds} round${f.rounds === 1 ? "" : "s"}`
+                    : `undecided after ${f.rounds} rounds`}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <tbody>
+                  {f.units.map((u) => (
+                    <tr key={u.unitId} className="border-t border-border">
+                      <td className="py-0.5 pr-2">{u.label}</td>
+                      <td className="py-0.5 pr-2 tabular-nums">
+                        {u.startHp} → {u.hp}/{u.maxHp} HP
+                      </td>
+                      <td className={`py-0.5 ${u.outcome === "dead" ? "text-danger" : u.outcome === "standing" ? "" : "text-amber-600"}`}>{OUTCOME_LABEL[u.outcome] ?? u.outcome}</td>
+                      {editing && !u.raised && u.outcome !== "captured" && (
+                        <td className="py-0.5 pl-2">
+                          <span className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              max={u.maxHp}
+                              aria-label={`Final HP of ${u.label}`}
+                              placeholder={String(u.hp)}
+                              className="w-16 rounded border border-border bg-background px-1"
+                              value={overrides[u.unitId]?.hp ?? ""}
+                              onChange={(e) => override(u.unitId, { hp: e.target.value === "" ? undefined : Number(e.target.value) })}
+                            />
+                            <select
+                              aria-label={`Outcome of ${u.label}`}
+                              className="rounded border border-border bg-background px-1"
+                              value={overrides[u.unitId]?.outcome ?? ""}
+                              onChange={(e) => override(u.unitId, { outcome: (e.target.value || undefined) as Overrides[string]["outcome"] })}
+                            >
+                              <option value="">as simulated</option>
+                              <option value="standing">standing</option>
+                              <option value="retreated">retreated</option>
+                              <option value="dead">dead</option>
+                            </select>
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {f.warnings.length > 0 && (
+              <details className="text-xs text-amber-600">
+                <summary className="cursor-pointer">Not automated ({f.warnings.length}): check whether these would change the result</summary>
+                <ul className="list-inside list-disc">
+                  {f.warnings.map((w, j) => (
+                    <li key={j}>{w}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            <FightLog log={f.log} />
+            {odds && (
+              <p className="text-xs">
+                🎲 Odds over {odds.runs} fights:{" "}
+                {f.sides.map((x) => `${x.name} win ${Math.round((odds.wins[x.id] ?? 0) * 100)}% (lose ${(odds.losses[x.id] ?? 0).toFixed(1)} units, keep ${Math.round((odds.hpLeft[x.id] ?? 0) * 100)}% HP)`).join(" · ")}
+                {odds.draws > 0 ? ` · undecided ${Math.round(odds.draws * 100)}%` : ""} · about {odds.rounds.toFixed(1)} rounds
+              </p>
+            )}
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap items-end gap-3 border-t border-border pt-2 text-xs">
+        {!byHand &&
+          sides.map(([id, sideName]) => (
+            <label key={id} className="flex flex-col">
+              <span className="text-muted">{sideName} focus on</span>
+              <select
+                className="rounded border border-border bg-background px-1 py-0.5"
+                value={priority[id] ?? ""}
+                onChange={(e) => {
+                  const next = { ...priority };
+                  if (e.target.value) next[id] = e.target.value;
+                  else delete next[id];
+                  setPriority(next);
+                }}
+              >
+                <option value="">Automatic</option>
+                {enemiesOf(id).map((u) => (
+                  <option key={u.unitId} value={u.unitId}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={byHand} onChange={(e) => setByHand(e.target.checked)} /> resolve by hand
+        </label>
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={shareLog} onChange={(e) => setShareLog(e.target.checked)} /> show the log to the teams
+        </label>
+        {fights.length > 0 && !byHand && (
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} /> edit results by hand
+          </label>
+        )}
+        <button type="button" className={btn} disabled={busy || !changed} onClick={() => act(() => fightSettingsAction(props.gameId, i.id, { priority, byHand, shareLog, overrides: sentOverrides }))}>
+          Apply these settings
+        </button>
+        {fights.length > 0 && (
+          <button type="button" className={btn} disabled={busy} onClick={() => act(() => oddsAction(props.gameId, i.id))}>
+            Show odds
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

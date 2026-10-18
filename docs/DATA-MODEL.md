@@ -10,7 +10,7 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | Part | What it is |
 |---|---|
 | `meta` | name, description, terminology map (rename "region" → "Province"…), theme colour, credits |
-| `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat, CR → cost table |
+| `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat (round limit, unit width by size, retreat threshold, odds runs), CR → cost table |
 | `resources` | e.g. Gold, Food, Growth |
 | `terrainTypes` | what a connection between regions can be (Normal, Difficult…) |
 | `settlementTiers` | Outpost → Settlement → City → Capital |

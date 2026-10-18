@@ -55,6 +55,7 @@ export function toWorldUnit(u: typeof schema.units.$inferSelect): WorldUnit {
     milesUsed: u.milesUsed,
     status: u.status,
     isLeader: u.isLeader,
+    usesSpent: u.usesSpent,
   };
 }
 
