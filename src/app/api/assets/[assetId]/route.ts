@@ -3,8 +3,8 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { isDm } from "@/lib/session";
 
-// Map images are only served to the DM for now. Phase 4 adds a per-team,
-// fog-of-war version for players.
+// Uploaded images in full, for the DM only. Players get the map through
+// /api/play/map, which paints their team's fog of war onto it.
 export async function GET(req: Request, ctx: RouteContext<"/api/assets/[assetId]">) {
   if (!(await isDm())) return new Response("Not allowed", { status: 403 });
   const { assetId } = await ctx.params;

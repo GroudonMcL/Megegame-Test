@@ -60,6 +60,16 @@ const settingsFields: FieldSpec[] = [
     ],
   },
   {
+    kind: "object",
+    key: "fog",
+    label: "Fog of war",
+    fields: [
+      { kind: "checkbox", key: "showPreviouslySeen", label: "Show regions a team has seen before (dimmed, with what it last saw)" },
+      { kind: "checkbox", key: "fogImage", label: "Fog the map image outside what a team can see" },
+      { kind: "number", key: "revealRadius", label: "Clear area around each seen region", help: "as a fraction of the map's width, e.g. 0.07", step: 0.01, min: 0.01 },
+    ],
+  },
+  {
     kind: "list",
     key: "crCosts",
     label: "Recruit cost and upkeep by Challenge Rating",
@@ -98,7 +108,7 @@ export function SettingsEditor({ ruleset, version: initialVersion, save }: { rul
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">Game settings</h2>
-          <p className="text-sm text-muted">Name, terminology, action slots, movement, combat and unit costs.</p>
+          <p className="text-sm text-muted">Name, terminology, action slots, movement, combat, fog of war and unit costs.</p>
         </div>
         <button type="button" onClick={onSave} disabled={!dirty || pending} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
           {pending ? "Saving…" : "Save"}
