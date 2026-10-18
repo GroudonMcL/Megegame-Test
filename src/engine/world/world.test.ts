@@ -228,6 +228,13 @@ describe("orders", () => {
     expect(check.orders[0].problems[0]).toMatch(/no uses of Hunt/);
   });
 
+  it("projects the income and upkeep of what the orders build", () => {
+    const v = baseView({ gold: 10, food: 0, growth: 0 }, []);
+    const check = validateOrders(r, v, [order(1, "construct-building", { "0": "a", "1": "farm" })]);
+    // Outpost +1 gold +5 growth; Farm costs 4 gold, upkeep 3 gold, makes 2 food and 5 growth.
+    expect(check.economy.end).toMatchObject({ gold: 10 - 4 + 1 - 3, food: 2, growth: 10 });
+  });
+
   it("projects income and upkeep", () => {
     const e = projectEconomy(r, { teamId: ME, resources: { gold: 10 }, regions, units: [unit({ regionId: "a" })] });
     // Outpost: +1 gold. Guard (CR 1/8): 2 gold upkeep.

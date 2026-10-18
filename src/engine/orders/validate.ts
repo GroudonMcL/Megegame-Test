@@ -108,6 +108,8 @@ interface Sim {
   inventory: Record<string, number>;
   augments: Record<string, string[]>;
   heroesRecruited: number;
+  /** Units recruited by these orders, for the upkeep projection. */
+  recruits: WorldUnit[];
   settlementsBuilt: Record<string, number>;
   /** "actionId", "actionId:free:unitId", "actionId:numbered:unitId"… → uses so far. */
   counts: Record<string, number>;
@@ -208,6 +210,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     inventory: { ...view.inventory },
     augments: Object.fromEntries(view.ownUnits.map((u) => [u.id, [...u.augmentIds]])),
     heroesRecruited: 0,
+    recruits: [],
     settlementsBuilt: {},
     counts: {},
     freePerUnit: {},
@@ -494,6 +497,21 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           problem("Choose: Archetype.");
         }
         addTo(cost, creatureCosts(creature, r).cost);
+        s.recruits.push({
+          id: `recruit-${d.id}`,
+          ownerTeamId: teamId,
+          creatureId: creature.id,
+          name: `New ${creature.statBlock.name}`,
+          raceId,
+          archetypeId: archetype?.id ?? null,
+          academyBonus: {},
+          augmentIds: [],
+          hp: 1,
+          regionId: regionId ?? null,
+          milesUsed: 0,
+          status: "active",
+          isLeader: false,
+        });
         if (creature.category === "hero") {
           const heroes = view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && creatureOf(u)?.category === "hero").length + s.heroesRecruited + 1;
           let limit = 0;
@@ -775,11 +793,14 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     }
   }
 
+  // The end of round counts what the orders build, recruit and disband, so the projection does too.
   const economy = projectEconomy(r, {
     teamId,
     resources: view.team.resources,
-    regions: view.regions.filter((x) => x.state === "visible"),
-    units: view.ownUnits,
+    regions: view.regions
+      .filter((x) => x.state === "visible")
+      .map((x) => ({ ...x, ownerTeamId: sim.regions[x.id].ownerTeamId, settlementTierId: sim.regions[x.id].settlementTierId, buildings: sim.regions[x.id].buildings })),
+    units: [...view.ownUnits.filter((u) => !sim.disbanded.includes(u.id)), ...sim.recruits],
     adhoc,
   });
 

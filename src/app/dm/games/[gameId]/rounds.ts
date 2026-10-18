@@ -10,7 +10,7 @@ import { requireDm } from "@/lib/session";
 import { setViewAs } from "@/lib/viewer";
 
 // Round controls for Phase 4: open the round, set its deadline, lock and
-// reopen orders. Resolving and publishing come in Phase 5.
+// reopen orders. Resolving and publishing are in src/lib/resolution.ts.
 
 const Ids = z.object({ gameId: z.uuid() });
 const Deadline = z.union([z.literal(""), z.iso.datetime({ offset: true })]);
@@ -36,7 +36,7 @@ export async function openRoundAction(formData: FormData) {
   const { gameId } = Ids.parse({ gameId: formData.get("gameId") });
   const deadline = Deadline.parse(formData.get("deadline") ?? "");
   const { game, round } = await currentRound(gameId);
-  // Opening the next round needs this one published (Phase 5).
+  // Opening the next round needs this one published.
   if (round && round.status !== "published") return;
   const number = game.currentRound + 1;
   await db.transaction(async (tx) => {

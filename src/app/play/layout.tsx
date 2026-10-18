@@ -40,6 +40,7 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           { href: "/play", label: "Dashboard", exact: true },
           { href: "/play/map", label: "Map" },
           { href: "/play/orders", label: "Orders" },
+          { href: "/play/results", label: "Results" },
           { href: "/play/units", label: "Units" },
           { href: "/play/regions", label: "Regions" },
           { href: "/play/inventory", label: "Inventory" },

@@ -4,9 +4,13 @@ import { db, schema } from "@/db";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { OrderDraft } from "@/engine/orders/validate";
 import { buildTeamView, memoriesToRecord, playerRuleset, type TeamView } from "@/engine/world/teamView";
-import type { RegionMemory, TeamKnowledge, WorldConnection, WorldRegion, WorldUnit } from "@/engine/world/types";
+import type { RegionMemory, TeamKnowledge, WorldConnection } from "@/engine/world/types";
 import { fogHoles, fogKey } from "./fogImage";
-import { loadMapState } from "./map";
+import { loadMapImage } from "./map";
+import { loadGameRows, rowsFromSnapshot, toWorldRegion, toWorldUnit } from "./world";
+
+/** Round statuses during which players see the start-of-resolution snapshot. */
+export const FROZEN_STATUSES = new Set(["resolving", "review"]);
 import { loadRuleset } from "./rulesets";
 
 // Loads the whole game state, then cuts it down to what one team may see.
@@ -26,69 +30,48 @@ export interface LoadedTeamView {
   orders: OrderDraft[];
 }
 
-export function toWorldRegion(r: typeof schema.regions.$inferSelect): WorldRegion {
-  return {
-    id: r.id,
-    code: r.code,
-    name: r.name,
-    description: r.description,
-    x: r.x,
-    y: r.y,
-    settleable: r.settleable,
-    hidden: r.hidden,
-    ownerTeamId: r.ownerTeamId,
-    settlementTierId: r.settlementTierId,
-    buildings: r.buildings,
-    structures: r.structures,
-    deposits: r.deposits,
-    features: r.features as WorldRegion["features"],
-  };
-}
-
-export function toWorldUnit(u: typeof schema.units.$inferSelect): WorldUnit {
-  return {
-    id: u.id,
-    ownerTeamId: u.ownerTeamId,
-    creatureId: u.creatureId,
-    name: u.name,
-    raceId: u.raceId,
-    archetypeId: u.archetypeId,
-    academyBonus: u.academyBonus,
-    augmentIds: u.augmentIds,
-    hp: u.hp,
-    regionId: u.regionId,
-    milesUsed: u.milesUsed,
-    status: u.status,
-    isLeader: u.isLeader,
-  };
-}
-
 /**
  * record = remember what the team sees now (last-seen info and monsters met).
  * The DM's "view as team" passes false, so looking never changes a team's memory.
  */
 export async function loadTeamView(gameId: string, teamId: string, opts: { record: boolean }): Promise<LoadedTeamView> {
-  const [state, { ruleset }, [game], [team], regionKnowledge, connectionKnowledge, detections, inventoryRows] = await Promise.all([
-    loadMapState(gameId),
+  const [{ ruleset }, [game], image] = await Promise.all([
     loadRuleset(gameId),
     db.select().from(schema.games).where(eq(schema.games.id, gameId)).limit(1),
-    db.select().from(schema.teams).where(and(eq(schema.teams.id, teamId), eq(schema.teams.gameId, gameId))).limit(1),
-    db.select().from(schema.teamRegionKnowledge).where(eq(schema.teamRegionKnowledge.teamId, teamId)),
-    db.select().from(schema.teamConnectionKnowledge).where(eq(schema.teamConnectionKnowledge.teamId, teamId)),
-    db.select().from(schema.teamUnitDetections).where(eq(schema.teamUnitDetections.teamId, teamId)),
-    db.select().from(schema.inventory).where(eq(schema.inventory.teamId, teamId)),
+    loadMapImage(gameId),
   ]);
-  if (!game || !team) throw new Error("Team not found in this game");
+  if (!game) throw new Error("Game not found");
+  const [round] = await db
+    .select()
+    .from(schema.rounds)
+    .where(and(eq(schema.rounds.gameId, gameId), eq(schema.rounds.number, game.currentRound)))
+    .limit(1);
+  // While the DM resolves a round, players keep seeing the world as it was when resolution started.
+  const frozen = round && FROZEN_STATUSES.has(round.status) ? rowsFromSnapshot(round.startSnapshot) : null;
+  const rows = frozen ?? (await loadGameRows(gameId));
+  const team = rows.teams.find((t) => t.id === teamId);
+  if (!team) throw new Error("Team not found in this game");
+  const record = opts.record && !frozen;
 
   const knowledge: TeamKnowledge = {
     regions: new Map(
-      regionKnowledge.map((k) => [
-        k.regionId,
-        { discovered: k.discovered, searched: k.searched, permanentVision: k.permanentVision, lastSeen: (k.lastSeen as RegionMemory | null) ?? null, lastSeenRound: k.lastSeenRound },
-      ]),
+      rows.regionKnowledge
+        .filter((k) => k.teamId === teamId)
+        .map((k) => [
+          k.regionId,
+          { discovered: k.discovered, searched: k.searched, permanentVision: k.permanentVision, lastSeen: (k.lastSeen as RegionMemory | null) ?? null, lastSeenRound: k.lastSeenRound },
+        ]),
     ),
-    connections: new Set(connectionKnowledge.map((k) => k.connectionId)),
-    detectedUnits: new Set(detections.map((d) => d.unitId)),
+    connections: new Set(rows.connectionKnowledge.filter((k) => k.teamId === teamId).map((k) => k.connectionId)),
+    detectedUnits: new Set(rows.detections.filter((d) => d.teamId === teamId).map((d) => d.unitId)),
+  };
+  const inventoryRows = rows.inventory.filter((i) => i.teamId === teamId);
+  const state = {
+    regions: rows.regions,
+    connections: rows.connections,
+    units: rows.units,
+    teams: rows.teams.map(({ id, name, colour, isNpc }) => ({ id, name, colour, isNpc })),
+    mapImage: image,
   };
 
   const regions = state.regions.map(toWorldRegion);
@@ -117,7 +100,7 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
 
   const seen = new Set(team.seenCreatureIds);
   const newlySeen = [...new Set(view.otherUnits.map((u) => u.creatureId))].filter((id) => !seen.has(id));
-  if (opts.record) {
+  if (record) {
     const memories = memoriesToRecord(view, regions);
     if (memories.length) {
       await db
@@ -142,11 +125,6 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
     knownRecipeIds: team.knownRecipeIds,
   });
 
-  const [round] = await db
-    .select()
-    .from(schema.rounds)
-    .where(and(eq(schema.rounds.gameId, gameId), eq(schema.rounds.number, game.currentRound)))
-    .limit(1);
   let orderState: LoadedTeamView["orderState"] = null;
   let orders: OrderDraft[] = [];
   if (round) {

@@ -310,6 +310,10 @@ export const rounds = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     // Full game state at publish time, for history and rollback.
     snapshot: jsonb("snapshot"),
+    // Game state when resolution started; players see this until the round is published.
+    startSnapshot: jsonb("start_snapshot"),
+    // The end-of-round phase: computed per-team economy, rolls and the DM's adjustments.
+    endOfRound: jsonb("end_of_round"),
   },
   (t) => [uniqueIndex("rounds_game_number_idx").on(t.gameId, t.number)],
 );
