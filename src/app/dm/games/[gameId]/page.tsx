@@ -1,0 +1,71 @@
+import Link from "next/link";
+import { asc, eq, inArray } from "drizzle-orm";
+import { db, schema } from "@/db";
+import { Button, Card } from "@/components/ui";
+import { fmtRes } from "@/engine/ruleset/effects";
+import { findReferenceProblems } from "@/engine/ruleset/validate";
+import { loadRuleset } from "@/lib/rulesets";
+import { regenerateJoinCode } from "../../actions";
+import { CreateTeamForm } from "../../DmForms";
+
+export default async function GameOverview({ params }: PageProps<"/dm/games/[gameId]">) {
+  const { gameId } = await params;
+  const teams = await db.select().from(schema.teams).where(eq(schema.teams.gameId, gameId)).orderBy(asc(schema.teams.createdAt));
+  const players = teams.length
+    ? await db.select().from(schema.players).where(inArray(schema.players.teamId, teams.map((t) => t.id))).orderBy(asc(schema.players.joinedAt))
+    : [];
+  const { ruleset } = await loadRuleset(gameId);
+  const problems = findReferenceProblems(ruleset);
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <Card>
+        <h2 className="text-lg font-medium">Teams</h2>
+        <ul className="mt-4 space-y-3">
+          {teams.map((team) => {
+            const teamPlayers = players.filter((p) => p.teamId === team.id);
+            return (
+              <li key={team.id} className="rounded-lg border border-border p-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="h-4 w-4 rounded-full" style={{ background: team.colour }} aria-hidden />
+                  <span className="font-medium">{team.name}</span>
+                  <code className="rounded bg-background px-2 py-1 font-mono text-sm select-all">{team.joinCode}</code>
+                  <form action={regenerateJoinCode} className="ml-auto">
+                    <input type="hidden" name="teamId" value={team.id} />
+                    <Button variant="secondary" type="submit" title="Makes a new code and signs out everyone on this team">
+                      New code
+                    </Button>
+                  </form>
+                </div>
+                <p className="mt-2 text-sm text-muted">
+                  {teamPlayers.length === 0 ? "Nobody has joined yet." : `Joined: ${teamPlayers.map((p) => p.displayName).join(", ")}`}
+                </p>
+                <p className="text-sm text-muted">Resources: {fmtRes(team.resources, ruleset.resources)}</p>
+              </li>
+            );
+          })}
+          {teams.length === 0 && <li className="text-sm text-muted">No teams yet.</li>}
+        </ul>
+        <div className="mt-4">
+          <CreateTeamForm gameId={gameId} />
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-medium">Ruleset</h2>
+        <p className="mt-1 text-sm">{ruleset.meta.name}</p>
+        <ul className="mt-2 text-sm text-muted">
+          <li>{ruleset.resources.length} resources, {ruleset.buildings.length} buildings</li>
+          <li>{ruleset.creatures.filter((c) => c.recruitable).length} unit types, {ruleset.creatures.filter((c) => !c.recruitable).length} monsters</li>
+          <li>{ruleset.actionTypes.length} actions, {ruleset.rollTables.length} roll tables</li>
+        </ul>
+        <p className={`mt-2 text-sm ${problems.length ? "text-danger" : "text-ok"}`}>
+          {problems.length ? `${problems.length} problem${problems.length === 1 ? "" : "s"} to fix` : "No problems ✓"}
+        </p>
+        <Link href={`/dm/games/${gameId}/ruleset`} className="mt-3 inline-block text-accent underline">
+          Edit the ruleset →
+        </Link>
+      </Card>
+    </div>
+  );
+}
