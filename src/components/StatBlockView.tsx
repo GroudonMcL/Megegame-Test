@@ -25,7 +25,7 @@ function usesLabel(a: StatAction) {
 }
 
 const REVIEW_BADGE: Record<string, { text: string; className: string; title: string }> = {
-  needsReview: { text: "check", className: "border-amber-500 text-amber-600 dark:text-amber-400", title: "Imported automatically — worth checking the combat numbers" },
+  needsReview: { text: "check", className: "border-warn text-warn", title: "Imported automatically — worth checking the combat numbers" },
   text: { text: "text only", className: "border-border text-muted", title: "The combat engine won't automate this; the DM handles it" },
 };
 

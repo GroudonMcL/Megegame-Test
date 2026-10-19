@@ -43,7 +43,7 @@ export default async function Dashboard() {
             })}
           </div>
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-accent">Full breakdown</summary>
+            <summary className="cursor-pointer text-sm text-link">Full breakdown</summary>
             <div className="mt-2">
               <EconomyTable economy={check.economy} resources={rules.resources} />
             </div>
@@ -56,7 +56,7 @@ export default async function Dashboard() {
           {last ? (
             <div className="mt-3">
               <RoundResults result={last} rules={rules} />
-              <Link href="/play/results" className="mt-2 inline-block text-sm text-accent underline">
+              <Link href="/play/results" className="mt-2 inline-block text-sm text-link underline">
                 All results →
               </Link>
             </div>
@@ -97,7 +97,7 @@ export default async function Dashboard() {
           ) : (
             <p className="mt-2 text-sm text-muted">The DM hasn&apos;t opened the first round yet. You can look around in the meantime.</p>
           )}
-          <Link href="/play/orders" className="mt-3 inline-block text-accent underline">
+          <Link href="/play/orders" className="mt-3 inline-block text-link underline">
             {open.open ? "Plan your orders →" : "See your orders →"}
           </Link>
         </Card>

@@ -11,7 +11,7 @@ export default function DmGuide() {
       intro={
         <p>
           Setting up a game, running each round and keeping a routine round of six teams well under an hour. Everything here happens under <B>DM login</B> on the home page. Your
-          players have their own <a href="/help/player" className="text-accent underline">player guide</a>.
+          players have their own <a href="/help/player" className="text-link underline">player guide</a>.
         </p>
       }
       sections={[
@@ -34,7 +34,7 @@ export default function DmGuide() {
                 import regions from a spreadsheet.
               </li>
               <li>
-                <B>Teams</B>: add each team. Open <B>Edit team</B> to set its base race, other races, starting resources and secret objectives. Tick <B>DM-run (NPC)</B> for factions you play
+                <B>Teams</B>: add each team. Open <B>Edit team</B> to set its colour, emblem, base race, other races, starting resources and secret objectives. Each new team gets an unused emblem; teams are shown by emblem as well as colour so colour-blind players can tell them apart. Tick <B>DM-run (NPC)</B> for factions you play
                 yourself. Give each team its <B>join code</B>; <B>New code</B> replaces it and signs everyone on that team out.
               </li>
               <li>

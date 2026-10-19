@@ -4,6 +4,7 @@ import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView, ViewRegion } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES, type WorldUnit } from "@/engine/world/types";
 import { regionTitle } from "./format";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
 
 export function unitLabel(rules: Ruleset, u: WorldUnit) {
   const c = rules.creatures.find((x) => x.id === u.creatureId);
@@ -114,14 +115,14 @@ export function RegionDetails({ region, view, rules }: { region: ViewRegion; vie
           <ul className="space-y-0.5">
             {own.map((u) => (
               <li key={u.id}>
-                <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: view.team.colour }} />
+                <TeamEmblem team={view.team} size={14} className="mr-1 align-[-2px]" />
                 {unitLabel(rules, u)} · {u.status === "dead" ? "dead" : `${u.hp}/${unitMaxHp(rules, u)} HP`}
                 {u.status === "hidden" ? " · stealthed" : ""}
               </li>
             ))}
             {others.map((u) => (
               <li key={u.id}>
-                <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full" style={{ background: u.ownerTeamId ? view.teams.find((t) => t.id === u.ownerTeamId)?.colour : "#dc2626" }} />
+                <TeamEmblem team={(u.ownerTeamId && view.teams.find((t) => t.id === u.ownerTeamId)) || null} size={14} className="mr-1 align-[-2px]" />
                 {u.creatureName} · {u.ownerTeamId ? ownerName(view, u.ownerTeamId) : "wild"}
                 {u.dead ? " · dead" : ""}
               </li>

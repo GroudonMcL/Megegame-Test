@@ -31,7 +31,7 @@ export async function loadMapState(gameId: string) {
     db.select().from(schema.connections).where(eq(schema.connections.gameId, gameId)),
     db.select().from(schema.units).where(eq(schema.units.gameId, gameId)).orderBy(asc(schema.units.createdAt)),
     db
-      .select({ id: schema.teams.id, name: schema.teams.name, colour: schema.teams.colour, isNpc: schema.teams.isNpc })
+      .select({ id: schema.teams.id, name: schema.teams.name, colour: schema.teams.colour, isNpc: schema.teams.isNpc, emblem: schema.teams.emblem })
       .from(schema.teams)
       .where(eq(schema.teams.gameId, gameId))
       .orderBy(asc(schema.teams.createdAt)),

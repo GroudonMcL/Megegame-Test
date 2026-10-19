@@ -13,7 +13,7 @@ export function NavLinks({ links, className = "" }: { links: { href: string; lab
           <Link
             key={l.href}
             href={l.href}
-            className={`shrink-0 rounded-md px-2.5 py-1.5 text-sm sm:px-3 ${active ? "bg-accent text-accent-foreground" : "hover:bg-card"}`}
+            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium sm:px-3 ${active ? "bg-accent text-accent-foreground shadow-sm" : "text-muted hover:bg-raised hover:text-foreground"}`}
             aria-current={active ? "page" : undefined}
           >
             {l.label}

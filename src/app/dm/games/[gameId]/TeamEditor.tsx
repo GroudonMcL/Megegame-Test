@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { EMBLEMS } from "@/components/icons/emblems";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
 import { updateTeamAction } from "./teams";
 
 // "Edit team" on the Teams page: everything about a team the DM may change by hand.
@@ -11,6 +13,7 @@ interface Props {
     id: string;
     name: string;
     colour: string;
+    emblem: string;
     isNpc: boolean;
     baseRaceId: string | null;
     raceIds: string[];
@@ -42,7 +45,7 @@ export function TeamEditor({ gameId, team, races, resources }: Props) {
 
   return (
     <details className="mt-2 text-sm">
-      <summary className="cursor-pointer text-accent">Edit team</summary>
+      <summary className="cursor-pointer text-link">Edit team</summary>
       <div className="mt-2 grid gap-3">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-40 flex-1">
@@ -57,6 +60,24 @@ export function TeamEditor({ gameId, team, races, resources }: Props) {
             <input type="checkbox" checked={t.isNpc} onChange={(e) => setT({ ...t, isNpc: e.target.checked })} /> DM-run (NPC)
           </label>
         </div>
+        <fieldset>
+          <legend className="text-xs text-muted">Emblem (shown with the colour everywhere, so colour-blind players can tell teams apart)</legend>
+          <div className="mt-1 flex flex-wrap gap-1" role="radiogroup">
+            {EMBLEMS.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                role="radio"
+                aria-checked={t.emblem === e.id}
+                title={e.label}
+                onClick={() => setT({ ...t, emblem: e.id })}
+                className={`rounded-lg border-2 p-0.5 ${t.emblem === e.id ? "border-accent" : "border-transparent hover:border-border-strong"}`}
+              >
+                <TeamEmblem team={{ id: team.id, name: e.label, colour: t.colour, emblem: e.id }} size={28} title={e.label} />
+              </button>
+            ))}
+          </div>
+        </fieldset>
         {races.length > 0 && (
           <>
             <label>

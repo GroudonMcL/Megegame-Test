@@ -45,7 +45,7 @@ Building effects apply to the owning team's units in that region.
 | Table | Holds |
 |---|---|
 | `games` | name, status, preset, current round, map image, the public Discord webhook |
-| `teams` | name, colour, join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
+| `teams` | name, colour, emblem (an ID from `src/components/icons/emblems.ts`), join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
 | `assets` | uploaded files (the map image), stored in the database and served only through the app |
 | `regions` | map nodes: position (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |

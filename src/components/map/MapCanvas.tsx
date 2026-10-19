@@ -277,7 +277,7 @@ export function MapCanvas(props: MapCanvasProps) {
                 y1={pa.y}
                 x2={pb.x}
                 y2={pb.y}
-                stroke={selected ? "var(--accent)" : (e.colour ?? "#f8fafc")}
+                stroke={selected ? "var(--accent)" : (e.colour ?? "var(--map-route)")}
                 strokeOpacity={e.dim ? 0.35 : 0.9}
                 strokeWidth={(selected ? 5 : e.heavy ? 4 : 2.5) * scale}
                 strokeDasharray={e.dashed ? `${8 * scale} ${6 * scale}` : undefined}
@@ -294,13 +294,13 @@ export function MapCanvas(props: MapCanvasProps) {
           const selected = props.selectedNodeId === n.id;
           return (
             <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.5 : 1}>
-              {n.ring && <circle cx={p.x} cy={p.y} r={r * 1.6} fill="none" stroke={n.stroke ?? "#fff"} strokeWidth={2.5 * scale} />}
+              {n.ring && <circle cx={p.x} cy={p.y} r={r * 1.6} fill="none" stroke={n.stroke ?? "var(--map-label)"} strokeWidth={2.5 * scale} />}
               <circle
                 cx={p.x}
                 cy={p.y}
                 r={selected ? r * 1.3 : r}
-                fill={n.fill ?? "#e2e8f0"}
-                stroke={selected ? "var(--accent)" : (n.stroke ?? "#0f172a")}
+                fill={n.fill ?? "var(--map-region)"}
+                stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-outline)")}
                 strokeWidth={(selected ? 4 : 2) * scale}
                 strokeDasharray={n.dashed ? `${4 * scale} ${3 * scale}` : undefined}
               />
@@ -310,8 +310,8 @@ export function MapCanvas(props: MapCanvasProps) {
                 textAnchor="middle"
                 fontSize={12 * scale}
                 fontWeight={600}
-                fill="#fff"
-                stroke="#000"
+                fill="var(--map-label)"
+                stroke="var(--map-label-outline)"
                 strokeWidth={3 * scale}
                 paintOrder="stroke"
                 pointerEvents="none"
@@ -324,17 +324,17 @@ export function MapCanvas(props: MapCanvasProps) {
         })}
       </svg>
       <div className="absolute bottom-2 right-2 flex gap-1">
-        <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-sm shadow" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 0.7)} aria-label="Zoom in">
+        <button type="button" className="glass rounded-lg border border-border px-2.5 py-1 text-sm shadow hover:border-border-strong" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 0.7)} aria-label="Zoom in">
           +
         </button>
-        <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-sm shadow" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 1.4)} aria-label="Zoom out">
+        <button type="button" className="glass rounded-lg border border-border px-2.5 py-1 text-sm shadow hover:border-border-strong" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 1.4)} aria-label="Zoom out">
           −
         </button>
-        <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow" onClick={() => fit()}>
+        <button type="button" className="glass rounded-lg border border-border px-2.5 py-1 text-xs shadow hover:border-border-strong" onClick={() => fit()}>
           Fit
         </button>
         {fitToNodes && (
-          <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow" onClick={() => fit(true)}>
+          <button type="button" className="glass rounded-lg border border-border px-2.5 py-1 text-xs shadow hover:border-border-strong" onClick={() => fit(true)}>
             Whole map
           </button>
         )}

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { NavLinks } from "@/components/NavLinks";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { requireDm } from "@/lib/session";
 
 export default async function GameLayout({ children, params }: LayoutProps<"/dm/games/[gameId]">) {
@@ -15,11 +16,12 @@ export default async function GameLayout({ children, params }: LayoutProps<"/dm/
   const base = `/dm/games/${gameId}`;
   return (
     <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
-      <p className="text-sm">
-        <Link href="/dm" className="text-accent underline">
+      <div className="flex items-center gap-2 text-sm">
+        <Link href="/dm" className="text-link underline">
           ← All games
         </Link>
-      </p>
+        <ThemeToggle className="ml-auto" />
+      </div>
       <h1 className="mt-2 text-2xl font-semibold">{game.name}</h1>
       <NavLinks
         className="mt-3 border-b border-border pb-2"

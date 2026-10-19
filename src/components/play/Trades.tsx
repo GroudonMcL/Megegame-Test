@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { cancelTradeAction, proposeTradeAction, respondTradeAction } from "@/app/play/trades/actions";
 import type { TradeView } from "@/lib/trades";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
 
 // The player's trades: a list with Accept / Decline / Call off, and a form to
 // propose one to a faction the team has met.
@@ -39,7 +40,7 @@ export function TradeList({ trades }: { trades: TradeView[] }) {
         {trades.map((t) => (
           <li key={t.id} className="rounded-lg border border-border p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="h-3 w-3 rounded-full" style={{ background: t.otherTeam.colour }} aria-hidden />
+              <TeamEmblem team={t.otherTeam} size={18} />
               <strong>{t.direction === "out" ? `To ${t.otherTeam.name}` : `From ${t.otherTeam.name}`}</strong>
               <span className="text-xs text-muted">round {t.round}</span>
               <span className="ml-auto text-xs">{STATUS[t.status] ?? t.status}</span>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Card, Page } from "@/components/ui";
 import { checkHealth } from "@/lib/health";
 import { getTeamSession } from "@/lib/session";
@@ -12,7 +13,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
   return (
     <Page>
-      <h1 className="text-3xl font-semibold tracking-tight">Megagame</h1>
+      <div className="flex items-center">
+        <h1 className="text-3xl font-semibold tracking-tight">Megagame</h1>
+        <ThemeToggle className="ml-auto" />
+      </div>
       <p className="mt-2 text-muted">Join your team with the code your DM gave you.</p>
 
       <div className="mt-8 grid gap-6">
@@ -22,7 +26,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               You&apos;re signed in as <strong>{current.player.displayName}</strong> on{" "}
               <strong>{current.team.name}</strong>.
             </p>
-            <Link href="/play" className="mt-3 inline-block text-accent underline">
+            <Link href="/play" className="mt-3 inline-block text-link underline">
               Continue to your team →
             </Link>
           </Card>
@@ -37,11 +41,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </Card>
 
         <p className="text-sm text-muted">
-          Running the game? <Link href="/dm/login" className="text-accent underline">DM login</Link>
+          Running the game? <Link href="/dm/login" className="text-link underline">DM login</Link>
         </p>
         <p className="text-sm text-muted">
-          New here? Read the <Link href="/help/player" className="text-accent underline">player guide</Link> or the{" "}
-          <Link href="/help/dm" className="text-accent underline">DM guide</Link>.
+          New here? Read the <Link href="/help/player" className="text-link underline">player guide</Link> or the{" "}
+          <Link href="/help/dm" className="text-link underline">DM guide</Link>.
         </p>
       </div>
 

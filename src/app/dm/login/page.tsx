@@ -13,7 +13,7 @@ export default async function DmLoginPage() {
         <DmLoginForm />
       </Card>
       <p className="mt-6 text-sm">
-        <Link href="/" className="text-accent underline">← Back</Link>
+        <Link href="/" className="text-link underline">← Back</Link>
       </p>
     </Page>
   );

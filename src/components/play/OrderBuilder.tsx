@@ -190,7 +190,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
         </ol>
 
         {editable && (
-          <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-3">
+          <div className="flex flex-wrap gap-2 glass rounded-xl border border-border shadow-panel p-3">
             <select className={`${field} flex-1`} value={adding} onChange={(e) => setAdding(e.target.value)} aria-label="Action to add">
               <option value="">Add an action…</option>
               <optgroup label="Numbered actions">
@@ -224,7 +224,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
         )}
 
         {editable && (
-          <div className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-lg">
+          <div className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 glass rounded-xl border border-border p-3 shadow-lg">
             <button type="button" className="rounded-lg border border-border px-4 py-2 text-sm font-medium disabled:opacity-50" disabled={pending} onClick={() => save(false)}>
               Save draft
             </button>
@@ -254,13 +254,13 @@ export function OrderBuilder(props: OrderBuilderProps) {
       </div>
 
       <aside className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-        <div className="rounded-xl border border-border bg-card p-3">
+        <div className="glass rounded-xl border border-border shadow-panel p-3">
           <h2 className="font-medium">Projection</h2>
           <div className="mt-2">
             <EconomyTable economy={check.economy} resources={rules.resources} />
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-3 text-sm">
+        <div className="glass rounded-xl border border-border shadow-panel p-3 text-sm">
           <h2 className="font-medium">Movement left</h2>
           {check.movement.length === 0 && <p className="mt-1 text-muted">No units on the map.</p>}
           <ul className="mt-1 space-y-1">
@@ -276,7 +276,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
           </ul>
         </div>
         {check.freeUses.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-3 text-sm">
+          <div className="glass rounded-xl border border-border shadow-panel p-3 text-sm">
             <h2 className="font-medium">Free actions</h2>
             <ul className="mt-1 space-y-0.5">
               {check.freeUses.map((f) => (

@@ -26,7 +26,7 @@ export function fullView(world: World, teamId: string, round: number): TeamView 
   if (!team) throw new Error("Unknown team");
   return {
     team: { ...team, secretObjectives: "" },
-    teams: world.teams.filter((t) => t.id !== teamId).map(({ id, name, colour, isNpc }) => ({ id, name, colour, isNpc })),
+    teams: world.teams.filter((t) => t.id !== teamId).map(({ id, name, colour, isNpc, emblem }) => ({ id, name, colour, isNpc, emblem })),
     regions: world.regions.map((r) => ({
       id: r.id,
       code: r.code,

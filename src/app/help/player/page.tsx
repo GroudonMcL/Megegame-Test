@@ -62,7 +62,8 @@ export default function PlayerGuide() {
               </li>
               <li>
                 <B>Map</B>: tap a region to see what you know about it. Regions you can see now are clear; regions you&apos;ve only seen before are greyed and show what was there last time;
-                the rest is hidden.
+                the rest is hidden. Each team has a colour and an emblem (a shield, crown, tower…), so you can tell teams apart without relying on colour. Unit badges show the owner&apos;s
+                emblem and how many units are there; your own have square corners.
               </li>
               <li>
                 <B>Units</B>: every unit you own, where it is, its hit points, movement left and full stat block. Tap a unit&apos;s name to rename it.
@@ -177,6 +178,7 @@ export default function PlayerGuide() {
           body: (
             <ul>
               <li>Everything works on a phone. On the map, pinch to zoom and drag to look around.</li>
+              <li>The app is dark by default. The sun button at the top switches to the light theme (and the moon switches back); this browser remembers your choice.</li>
               <li>If your DM set up Discord, your team&apos;s channel gets a message when results are ready, with a link straight to them.</li>
               <li>Stuck? Ask your DM. They can look at exactly what your team sees.</li>
             </ul>

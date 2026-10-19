@@ -50,6 +50,7 @@ export interface TeamData {
   name: string;
   colour: string;
   isNpc: boolean;
+  emblem: string;
 }
 
 export interface MapImageData {

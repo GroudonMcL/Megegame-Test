@@ -7,9 +7,11 @@ import type { Ruleset } from "@/engine/ruleset/ruleset";
 import { deleteUnitAction, moveUnitAction, spawnUnitsAction, updateUnitAction } from "@/app/dm/games/[gameId]/map/actions";
 import { MapCanvas, type MapEdge, type MapNode } from "./MapCanvas";
 import { DEFAULT_MAP_SIZE, type ConnectionData, type MapImageData, type RegionData, type TeamData, type UnitData } from "./mapData";
+import { emblemFor, WILD_EMBLEM } from "@/components/icons/emblems";
+import { EmblemGlyph, emblemInk, TeamEmblem } from "@/components/icons/TeamEmblem";
 
 const WILD = "wild";
-const WILD_COLOUR = "#dc2626";
+const WILD_COLOUR = "var(--wild)";
 const STATUSES = ["active", "hidden", "dead", "captured", "tamed", "stored", "disbanded"] as const;
 const ON_MAP = new Set(["active", "hidden", "dead"]);
 const input = "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm";
@@ -55,7 +57,7 @@ export function WorldMap(props: {
     x: r.x,
     y: r.y,
     label: r.code,
-    fill: r.ownerTeamId ? team.get(r.ownerTeamId)?.colour : "#e2e8f0",
+    fill: r.ownerTeamId ? team.get(r.ownerTeamId)?.colour : "var(--map-region)",
     ring: Boolean(r.settlementTierId),
     dashed: r.hidden,
     dim: r.hidden,
@@ -127,11 +129,11 @@ export function WorldMap(props: {
         <span className="flex flex-wrap items-center gap-2 text-muted">
           {teams.map((t) => (
             <span key={t.id} className="flex items-center gap-1">
-              <span className="h-3 w-3 rounded-full" style={{ background: t.colour }} /> {t.name}
+              <TeamEmblem team={t} size={16} /> {t.name}
             </span>
           ))}
           <span className="flex items-center gap-1">
-            <span className="h-3 w-3 rounded-full" style={{ background: WILD_COLOUR }} /> Wild monsters
+            <TeamEmblem team={null} size={16} /> Wild monsters
           </span>
           <span>· dashed badge = hidden units · ✝ = dead</span>
         </span>
@@ -157,11 +159,16 @@ export function WorldMap(props: {
               const angle = Math.PI / 2 + (i - (all.length - 1) / 2) * 0.7;
               const bx = p.x + Math.cos(angle) * 22 * scale;
               const by = p.y + Math.sin(angle) * 22 * scale;
-              const colour = g.owner === WILD ? WILD_COLOUR : (team.get(g.owner)?.colour ?? "#888");
+              const t = g.owner === WILD ? undefined : team.get(g.owner);
+              const colour = g.owner === WILD ? WILD_COLOUR : (t?.colour ?? "var(--map-unknown-owner)");
+              // A pill with the owner's emblem and the number of units.
+              const h = 16 * scale;
+              const w = h * 2;
               return (
                 <g key={g.owner} pointerEvents="none">
-                  <circle cx={bx} cy={by} r={8 * scale} fill={colour} stroke="#000" strokeWidth={1.5 * scale} strokeDasharray={g.hidden ? `${3 * scale} ${2 * scale}` : undefined} />
-                  <text x={bx} y={by + 3.5 * scale} textAnchor="middle" fontSize={10 * scale} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2 * scale} paintOrder="stroke">
+                  <rect x={bx - w / 2} y={by - h / 2} width={w} height={h} rx={h / 2} fill={colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} strokeDasharray={g.hidden ? `${3 * scale} ${2 * scale}` : undefined} />
+                  <EmblemGlyph glyph={t ? emblemFor(t) : WILD_EMBLEM} x={bx - w / 2 + h * 0.55} y={by} size={h * 0.7} fill={t ? emblemInk(t.colour) : "#ffffff"} />
+                  <text x={bx + w / 2 - h * 0.6} y={by + 3.5 * scale} textAnchor="middle" fontSize={10 * scale} fontWeight={700} fill="var(--map-label)" stroke="var(--map-label-outline)" strokeWidth={2 * scale} paintOrder="stroke">
                     {g.count}
                     {g.dead ? "✝" : ""}
                   </text>
@@ -171,7 +178,7 @@ export function WorldMap(props: {
           }
         />
 
-        <aside className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 lg:max-h-[75vh] lg:overflow-y-auto">
+        <aside className="min-w-0 space-y-3 glass rounded-xl border border-border shadow-panel p-4 lg:max-h-[75vh] lg:overflow-y-auto">
           {!selected && <p className="text-sm text-muted">Click a region to see and edit what&apos;s there, or to place units. Drag a unit&apos;s ⠿ handle onto another region to move it.</p>}
           {(region || selected === "unplaced") && (
             <>
@@ -276,7 +283,7 @@ function UnitRow(p: {
         >
           ⠿
         </button>
-        <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: owner?.colour ?? WILD_COLOUR }} />
+        <TeamEmblem team={owner ?? null} size={16} />
         <button type="button" className="min-w-0 flex-1 text-left text-sm" onClick={() => setOpen(!open)}>
           <span className="font-medium">{p.unit.name}</span>{" "}
           <span className="text-muted">

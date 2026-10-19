@@ -70,7 +70,7 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
     regions: rows.regions,
     connections: rows.connections,
     units: rows.units,
-    teams: rows.teams.map(({ id, name, colour, isNpc }) => ({ id, name, colour, isNpc })),
+    teams: rows.teams.map(({ id, name, colour, isNpc, emblem }) => ({ id, name, colour, isNpc, emblem })),
     mapImage: image,
   };
 
@@ -87,6 +87,7 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
       name: team.name,
       colour: team.colour,
       isNpc: team.isNpc,
+      emblem: team.emblem,
       resources: team.resources,
       baseRaceId: team.baseRaceId,
       raceIds: team.raceIds,

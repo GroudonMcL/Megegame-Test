@@ -100,7 +100,7 @@ export default async function UnitsPage() {
             )}
             {c && (
               <details className="mt-3">
-                <summary className="cursor-pointer text-sm text-accent">Stat block</summary>
+                <summary className="cursor-pointer text-sm text-link">Stat block</summary>
                 <div className="mt-2">
                   <StatBlockView sb={c.statBlock} bonuses={unitBonuses(rules, u)} />
                 </div>

@@ -166,7 +166,7 @@ export function SectionEditor(props: Props) {
           </ul>
         </aside>
 
-        <section className="min-w-0 rounded-xl border border-border bg-card p-4">
+        <section className="min-w-0 glass rounded-xl border border-border shadow-panel p-4">
           {!current ? (
             <p className="text-sm text-muted">Pick something on the left, or add a new one.</p>
           ) : (

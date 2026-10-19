@@ -46,7 +46,7 @@ export function JsonTab({ gameId, version: initialVersion, problems, save, prese
         <p className="text-sm text-muted">The whole ruleset is one JSON file: back it up, share it, or move it to another game.</p>
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <h3 className="font-medium">Problems</h3>
         {problems.length === 0 ? (
           <p className="text-sm text-ok">No broken references. ✓</p>
@@ -61,14 +61,14 @@ export function JsonTab({ gameId, version: initialVersion, problems, save, prese
         )}
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <h3 className="font-medium">Export</h3>
         <a href={`/dm/games/${gameId}/ruleset/export`} className="mt-2 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
           Download ruleset JSON
         </a>
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <h3 className="font-medium">Import</h3>
         <p className="text-sm text-muted">Choose a ruleset .json file, or paste its contents below. It&apos;s checked before anything is replaced.</p>
         <input
@@ -87,7 +87,7 @@ export function JsonTab({ gameId, version: initialVersion, problems, save, prese
         </button>
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <h3 className="font-medium">Reset to a preset</h3>
         <p className="text-sm text-muted">Replaces the whole ruleset with a fresh copy of a preset.</p>
         <div className="mt-2 flex flex-wrap gap-2">

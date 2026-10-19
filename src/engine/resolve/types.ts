@@ -11,6 +11,7 @@ export interface WorldTeam {
   name: string;
   colour: string;
   isNpc: boolean;
+  emblem?: string;
   resources: ResourceAmounts;
   baseRaceId: string | null;
   raceIds: string[];
