@@ -15,6 +15,8 @@ import { touches } from "@/engine/geo/regions";
 import { voronoiCells } from "@/engine/geo/voronoi";
 import { gridPositions, nextRegionCode } from "@/engine/map/codes";
 import { parseRegionCsv } from "@/engine/map/csv";
+import { MapLook } from "@/engine/world/mapLook";
+import sharp from "sharp";
 import { audit } from "@/lib/audit";
 import { syncBorders } from "@/lib/borders";
 import { loadRuleset } from "@/lib/rulesets";
@@ -407,6 +409,74 @@ export async function uploadMapImageAction(gameId: string, form: FormData): Prom
   });
   done(id);
   return { ok: true, value: { id: asset.id, width, height } };
+}
+
+// ——— Height map and look (3D view) ———
+
+const MAX_HEIGHT_BYTES = 8 * 1024 * 1024;
+/** Height maps are kept at most this wide or tall: plenty for the 3D mesh, and quick to fog. */
+const HEIGHT_SIZE = 1024;
+
+/** Stores a height map (any image; white = highest), as a greyscale PNG. */
+export async function uploadHeightMapAction(gameId: string, form: FormData): Promise<ActionResult<{ id: string }>> {
+  const id = await guard(gameId);
+  const file = form.get("image");
+  if (!(file instanceof Blob)) return fail("No image received.");
+  if (!IMAGE_TYPES.includes(file.type)) return fail("Use a JPEG, PNG or WebP image.");
+  if (file.size > MAX_HEIGHT_BYTES) return fail("The height map is over 8 MB. Try a smaller image.");
+  let data: Buffer;
+  let width: number;
+  let height: number;
+  try {
+    const out = await sharp(Buffer.from(await file.arrayBuffer()))
+      .greyscale()
+      .resize({ width: HEIGHT_SIZE, height: HEIGHT_SIZE, fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    data = out.data;
+    width = out.info.width;
+    height = out.info.height;
+  } catch {
+    return fail("Couldn't read that image.");
+  }
+  const asset = await db.transaction(async (tx) => {
+    const [game] = await tx.select({ heightAssetId: schema.games.heightAssetId }).from(schema.games).where(eq(schema.games.id, id));
+    const [row] = await tx
+      .insert(schema.assets)
+      .values({ gameId: id, kind: "height", mime: "image/png", data, width, height, byteSize: data.length })
+      .returning({ id: schema.assets.id });
+    await tx.update(schema.games).set({ heightAssetId: row.id }).where(eq(schema.games.id, id));
+    if (game?.heightAssetId) await tx.delete(schema.assets).where(eq(schema.assets.id, game.heightAssetId));
+    await audit(tx, { gameId: id, actor: "dm", kind: "map.height", description: `Uploaded a height map (${width}×${height})` });
+    return row;
+  });
+  done(id);
+  return { ok: true, value: { id: asset.id } };
+}
+
+export async function removeHeightMapAction(gameId: string): Promise<ActionResult<null>> {
+  const id = await guard(gameId);
+  await db.transaction(async (tx) => {
+    const [game] = await tx.select({ heightAssetId: schema.games.heightAssetId }).from(schema.games).where(eq(schema.games.id, id));
+    if (!game?.heightAssetId) return;
+    await tx.update(schema.games).set({ heightAssetId: null }).where(eq(schema.games.id, id));
+    await tx.delete(schema.assets).where(eq(schema.assets.id, game.heightAssetId));
+    await audit(tx, { gameId: id, actor: "dm", kind: "map.height", description: "Removed the height map" });
+  });
+  done(id);
+  return { ok: true, value: null };
+}
+
+export async function saveMapLookAction(gameId: string, look: unknown): Promise<ActionResult<null>> {
+  const id = await guard(gameId);
+  const parsed = MapLook.safeParse(look);
+  if (!parsed.success) return fail("Those lighting settings aren't valid.");
+  await db.transaction(async (tx) => {
+    await tx.update(schema.games).set({ mapLook: parsed.data }).where(eq(schema.games.id, id));
+    await audit(tx, { gameId: id, actor: "dm", kind: "map.look", description: "Changed the map's relief and lighting" });
+  });
+  done(id);
+  return { ok: true, value: null };
 }
 
 // ——— Units ———

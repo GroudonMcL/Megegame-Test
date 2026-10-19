@@ -23,6 +23,9 @@ import { addSnapCorner, insertCorner, moveCorner, removeCorner, snapPoint, trace
 import { length, type Polygon, type Pt } from "@/engine/geo/polygon";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import { compressImage } from "./compressImage";
+import type { Map3dInfo } from "@/engine/world/mapLook";
+import { LookPanel } from "./LookPanel";
+import { Map3D, nightTint, useWebGL } from "./MapSurface";
 import { MapCanvas, type MapNode } from "./MapCanvas";
 import { DEFAULT_MAP_SIZE, type ConnectionData, type MapImageData, type RegionData, type TeamData, type TerrainAreaData } from "./mapData";
 import { ConnectionPanel, CsvDialog, RegionPanel, regionFields, TerrainPanel } from "./mapEditorParts";
@@ -35,10 +38,11 @@ import { terrainColour } from "./terrainStyle";
 // on the server (syncBorders) and can be blocked or hidden here.
 //
 // Modes: Select (edit details), Shapes (drag corners; shared corners move in
-// every shape), Draw region, Draw terrain, Link, and Scale. Corner and shape
+// every shape), Draw region, Draw terrain, Link, Scale, and 3D & light (the
+// height map and lighting, with a 3D preview). Corner and shape
 // edits wait until "Save shapes"; everything else saves straight away.
 
-type Mode = "select" | "shapes" | "draw" | "terrain" | "link" | "scale";
+type Mode = "select" | "shapes" | "draw" | "terrain" | "link" | "scale" | "look";
 type Selection = { kind: "region"; id: string } | { kind: "connection"; id: string } | { kind: "terrain"; id: string } | null;
 
 const button = "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-background disabled:opacity-50";
@@ -52,6 +56,7 @@ const MODE_HELP: Record<Mode, string> = {
   terrain: "Draw a terrain area like a region: click corners, then click the first one (or press Enter). The part of a move inside it follows its terrain's rules.",
   link: "Click a region, then another region it doesn't touch, to join them with a link (a tunnel, a sea lane…). Esc to stop.",
   scale: "Click two points a known distance apart on the map image (a scale bar, or two towns), then say how many miles apart they are.",
+  look: "How the map looks in 3D: the height map and the lighting. The preview shows changes at once; Save look to show them to everyone. Drag to pan, right-drag to turn and tilt, scroll to zoom.",
 };
 
 export function MapEditor(props: {
@@ -64,6 +69,7 @@ export function MapEditor(props: {
   mapImage: MapImageData | null;
   milesAcross: number;
   conversionReport: string | null;
+  map3d: Map3dInfo;
 }) {
   const { gameId, ruleset, teams } = props;
   const router = useRouter();
@@ -73,6 +79,10 @@ export function MapEditor(props: {
   const [mapImage, setMapImage] = useState(props.mapImage);
   const [milesAcross, setMilesAcross] = useState(props.milesAcross);
   const [mode, setModeState] = useState<Mode>("select");
+  const [look, setLook] = useState(props.map3d.look);
+  const [savedLook, setSavedLook] = useState(props.map3d.look);
+  const [heightUrl, setHeightUrl] = useState(props.map3d.heightUrl);
+  const webgl = useWebGL();
   const [layer, setLayer] = useState<"regions" | "terrain">("regions");
   const [selection, setSelection] = useState<Selection>(null);
   // Unsaved shape edits (Shapes mode), by region / terrain area ID.
@@ -495,6 +505,7 @@ export function MapEditor(props: {
         {modeButton("terrain", "Draw terrain", "T")}
         {modeButton("link", "Link", "L")}
         {modeButton("scale", "Measure scale", "")}
+        {modeButton("look", "3D & light", "")}
         {dirty > 0 && (
           <>
             <span className="mx-1 h-6 w-px bg-border" />
@@ -582,28 +593,50 @@ export function MapEditor(props: {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_24rem] [&>*]:min-w-0">
-        <MapCanvas
-          width={size.width}
-          height={size.height}
-          imageUrl={mapImage ? `/api/assets/${mapImage.id}` : null}
-          nodes={nodes}
-          edges={edges}
-          terrain={terrainView}
-          selectedNodeId={selectedRegion?.id ?? linkFrom}
-          selectedEdgeId={selectedConnection?.id}
-          onNodeClick={onNodeClick}
-          onEdgeClick={(id) => mode === "select" && setSelection({ kind: "connection", id })}
-          onBackgroundClick={() => mode === "select" && setSelection(null)}
-          onPointClick={onPointClick}
-          onHandleMove={onHandleMove}
-          onHandleClick={onHandleClick}
-          onHover={mode === "draw" || mode === "terrain" || mode === "scale" ? setHover : undefined}
-          linkFrom={mode === "link" ? linkFrom : null}
-          overlay={overlay}
-          className="h-[72vh]"
-        />
+        {mode === "look" ? (
+          webgl ? (
+            <Map3D
+              width={size.width}
+              height={size.height}
+              imageUrl={mapImage ? `/api/assets/${mapImage.id}` : null}
+              nodes={nodes}
+              edges={edges}
+              terrain={terrainView}
+              heightUrl={heightUrl}
+              look={look}
+              className="h-[72vh]"
+            />
+          ) : (
+            <p className="grid h-[72vh] place-items-center rounded-xl border border-border text-sm text-muted">This browser can&apos;t show 3D (it has no WebGL), so there&apos;s no preview.</p>
+          )
+        ) : (
+          <MapCanvas
+            width={size.width}
+            height={size.height}
+            imageUrl={mapImage ? `/api/assets/${mapImage.id}` : null}
+            nodes={nodes}
+            edges={edges}
+            terrain={terrainView}
+            selectedNodeId={selectedRegion?.id ?? linkFrom}
+            selectedEdgeId={selectedConnection?.id}
+            onNodeClick={onNodeClick}
+            onEdgeClick={(id) => mode === "select" && setSelection({ kind: "connection", id })}
+            onBackgroundClick={() => mode === "select" && setSelection(null)}
+            onPointClick={onPointClick}
+            onHandleMove={onHandleMove}
+            onHandleClick={onHandleClick}
+            onHover={mode === "draw" || mode === "terrain" || mode === "scale" ? setHover : undefined}
+            linkFrom={mode === "link" ? linkFrom : null}
+            overlay={overlay}
+            className="h-[72vh]"
+            tint={nightTint({ heightUrl, look })}
+          />
+        )}
 
         <aside className="min-w-0 glass rounded-xl border border-border shadow-panel p-4 lg:max-h-[72vh] lg:overflow-y-auto">
+          {mode === "look" && (
+            <LookPanel gameId={gameId} look={look} saved={savedLook} onChange={setLook} onSaved={setSavedLook} heightUrl={heightUrl} onHeight={setHeightUrl} />
+          )}
           {selectedRegion && (
             <RegionPanel
               key={selectedRegion.id}

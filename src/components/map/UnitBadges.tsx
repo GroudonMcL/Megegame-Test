@@ -109,7 +109,7 @@ export function SpotBadges({
             data-handle={handle?.(g)}
             data-node-id={clickable ? g.regionId : undefined}
             data-badge={clickable ? g.owner : undefined}
-            pointerEvents={clickable || handle?.(g) ? undefined : "none"}
+            pointerEvents={clickable || handle?.(g) ? "auto" : "none"}
             className={handle?.(g) ? "cursor-grab" : clickable ? "cursor-pointer" : undefined}
             opacity={ghost ? 0.75 : undefined}
           >

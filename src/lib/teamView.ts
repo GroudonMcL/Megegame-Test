@@ -9,6 +9,7 @@ import { fogHoles, fogKey } from "./fogImage";
 import { loadMapImage } from "./map";
 import { loadGameRows, rowsFromSnapshot, toWorldConnection, toWorldRegion, toWorldTerrain, toWorldUnit } from "./world";
 import { mapAspect } from "@/engine/geo/mapSize";
+import { parseMapLook, type Map3dInfo } from "@/engine/world/mapLook";
 
 /** Round statuses during which players see the start-of-resolution snapshot. */
 export const FROZEN_STATUSES = new Set(["resolving", "review"]);
@@ -26,6 +27,8 @@ export interface LoadedTeamView {
   fullRuleset: Ruleset;
   /** The fogged map image (the URL changes whenever the fog does). */
   mapImage: { width: number; height: number; url: string } | null;
+  /** The 3D view's height map (fogged like the image) and lighting. */
+  map3d: Map3dInfo;
   round: typeof schema.rounds.$inferSelect | null;
   orderState: typeof schema.teamRoundOrders.$inferSelect | null;
   orders: OrderDraft[];
@@ -160,6 +163,12 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
           url: `/api/play/map?v=${ruleset.settings.fog.fogImage ? fogKey(state.mapImage.id, fogHoles(view), ruleset.settings.fog.revealRadius) : "open"}`,
         }
       : null,
+    map3d: {
+      heightUrl: game.heightAssetId
+        ? `/api/play/height?v=${ruleset.settings.fog.fogImage ? fogKey(`h:${game.heightAssetId}`, fogHoles(view), ruleset.settings.fog.revealRadius) : "open"}`
+        : null,
+      look: parseMapLook(game.mapLook),
+    },
     round: round ?? null,
     orderState,
     orders,

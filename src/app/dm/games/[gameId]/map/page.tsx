@@ -19,6 +19,7 @@ export default async function MapEditorPage({ params }: PageProps<"/dm/games/[ga
       mapImage={state.mapImage}
       milesAcross={state.milesAcross}
       conversionReport={conversionReport}
+      map3d={state.map3d}
     />
   );
 }

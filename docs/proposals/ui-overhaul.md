@@ -72,14 +72,15 @@ Each phase leaves the app working. I stop after each one with a summary and test
 - Tap-to-move: **Move on map** in a unit's panel, then tap the stops; **Done** (or Enter) queues it, Undo (Backspace) removes the last stop, Cancel (Esc) stops. This is also how to move one unit out of a stack.
 - The order list is shared between the map and the Orders window (`src/components/play/ordersDraft.tsx`), so changes in one show in the other. Changes made on the map save the draft straight away; submitted orders need submitting again, as before.
 - Everything is a preview: the Orders window and the server check each order as before, and moves still resolve only when the DM resolves the round.
-### Phase 6: Toggleable 3D map
-- First a standalone prototype page (`/dev/map3d`), then integration.
-- **react-three-fiber** (Three.js for React). It's added only to the 3D page's code, so 2D users don't download it.
-- The GM uploads a height map in the editor. The server fogs it like the map image, so hidden terrain shape never reaches players.
-- The terrain is displaced by the height map, with the map image as its texture. Borders, routes and planned paths are draped on the surface, and tokens sit on it with labels above.
-- Camera: pan, zoom and limited tilt and rotation, clamped to the map.
-- Click-to-inspect and drag-to-move use raycasting and share the 2D logic.
-- 2D stays the default. 3D turns itself off if WebGL is missing or the frame rate stays low, and remembers that.
+### Phase 6: Toggleable 3D map (built)
+- **2D / 3D** switch in the corner of the player map and the DM's World map, remembered on each device. three.js (react-three-fiber and drei) is loaded only when 3D is turned on.
+- The DM uploads a greyscale height map in the map editor (**3D & light**); it's stored as a PNG at most 1024 px across. Players get it from `/api/play/height`, flattened outside the regions they have seen (remembered regions keep their hills), like the fogged map image.
+- The ground is a mesh raised by the height map. The map image and everything the 2D map draws over it (regions, terrain, borders, labels, planned routes) are drawn once as SVG (the same `MapLayers` component the 2D map uses) and painted onto it as a texture. Unit stacks stand on the ground as the same badges as in 2D; the move being planned is a line just above the ground.
+- Camera: pan (drag, one finger), turn and tilt (right-drag, two fingers), zoom (wheel, pinch); it can't tilt to the horizon or leave the map. Fit and zoom buttons.
+- Clicks and drags work as in 2D: the pointer's ray is followed to the ground (`three/heightField.ts`), then the region, badge or route there is used. Drag-to-move, tap-to-move, route clicks and the DM's panel drags all work in 3D.
+- **Lighting** (DM, in the map editor, with a live preview): the sun is a point light with a colour, direction, height in the sky and brightness; sky light with a colour and strength; hills can cast shadows; **Darkness** dims every light for night and also lays a dark wash over the 2D map. Stored as `games.map_look`.
+- 2D stays the default. 3D turns itself off if WebGL is missing, or if it draws fewer than 15 frames a second in its first few seconds; the player sees why and can try again.
+- Not done: the separate `/dev/map3d` prototype page (built straight into the map instead), 3D in the Orders window's route picker (2D there).
 
 ### Phase 7: Phone and tablet view
 - Small or touch screens use 2D only. A tap opens a bottom sheet; overlays become full-screen sheets with large touch targets.

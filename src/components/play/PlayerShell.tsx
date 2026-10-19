@@ -14,6 +14,7 @@ import { WindowSlot } from "@/components/shell/WindowSlot";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button, IconButton } from "@/components/ui";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
+import type { Map3dInfo } from "@/engine/world/mapLook";
 import type { TeamView } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES } from "@/engine/world/types";
 import { Countdown } from "./Countdown";
@@ -59,6 +60,7 @@ interface ShellProps {
   view: TeamView;
   rules: Ruleset;
   mapImage: { width: number; height: number; url: string } | null;
+  map3d: Map3dInfo;
   children: ReactNode;
 }
 
@@ -71,7 +73,7 @@ export function PlayerShell({ orders, ...props }: ShellProps & { orders: OrdersS
   );
 }
 
-function Shell({ info, view, rules, mapImage, children }: ShellProps) {
+function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [focus, setFocus] = useState<{ nodeId: string; key: number } | null>(null);
@@ -163,6 +165,7 @@ function Shell({ info, view, rules, mapImage, children }: ShellProps) {
           className="h-full"
           bare
           focus={focus}
+          map3d={map3d}
           {...moves.map}
         />
       }

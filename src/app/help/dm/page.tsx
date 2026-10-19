@@ -35,7 +35,10 @@ export default function DmGuide() {
                 <B>Draw terrain</B> adds forest, swamp or water areas over the regions: the part of a move inside one follows its terrain type&apos;s rules. <B>Link</B> joins regions that
                 don&apos;t touch (tunnels, sea lanes). In <B>Select</B>, click a region to name it, set its owner, settlement, buildings, deposits, ruins and hazards, mark it hidden, move
                 its centre (where its name and new units go), and block or hide its border with each neighbour. You can also import regions from a spreadsheet, then use{" "}
-                <B>Fill in starting shapes</B>.
+                <B>Fill in starting shapes</B>.{" "}
+                <B>3D &amp; light</B> sets how the map looks in 3D: upload a greyscale <B>height map</B> the same shape as the map (white = highest), choose how tall it&apos;s drawn,
+                and set the lighting: the sun&apos;s colour, direction, height and brightness, the sky light, whether hills cast shadows, and <B>Darkness</B> for night (it darkens the
+                2D map too). The preview shows changes at once; <B>Save look</B> shows them to everyone. Players only get the heights of regions they&apos;ve seen.
               </li>
               <li>
                 <B>Teams</B>: add each team. Open <B>Edit team</B> to set its colour, emblem, base race, other races, starting resources and secret objectives. Each new team gets an unused emblem; teams are shown by emblem as well as colour so colour-blind players can tell them apart. Tick <B>DM-run (NPC)</B> for factions you play

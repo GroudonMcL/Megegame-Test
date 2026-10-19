@@ -1,6 +1,8 @@
 "use client";
 
-import { MapCanvas, type MapNode } from "@/components/map/MapCanvas";
+import type { MapNode } from "@/components/map/MapCanvas";
+import { MapSurface } from "@/components/map/MapSurface";
+import type { Map3dInfo } from "@/engine/world/mapLook";
 import { DEFAULT_MAP_SIZE } from "@/components/map/mapData";
 import { connectionEdges, terrainLayer } from "@/components/map/mapLayers";
 import { groupBadges, SpotBadges, type BadgeTeam } from "@/components/map/UnitBadges";
@@ -46,6 +48,8 @@ export interface TeamMapProps {
   /** The move being planned: the line it walks, the rest to where it's aimed (if it stops short), and a label. */
   preview?: { walked: Pt[]; rest: Pt[]; ok: boolean; label: string } | null;
   onHover?: (p: Pt | null) => void;
+  /** Height map and lighting: offers the 3D view. */
+  map3d?: Map3dInfo;
 }
 
 export interface PlannedRoute {
@@ -120,8 +124,34 @@ export function TeamMap(props: TeamMapProps) {
     }
   };
 
+  const size2 = { width: size.width, height: size.height };
+  const routeLines = (scale: number) => (
+    <>
+      {routes?.map((r) => (
+        <PlannedLine key={r.id} route={r} {...size2} scale={scale} clickable={Boolean(props.onRouteClick)} />
+      ))}
+      {path && path.length > 1 && <RouteLine path={path} {...size2} scale={scale} />}
+    </>
+  );
+  // at the origin = for 3D, where each stack stands on the ground as its own little picture.
+  const ownBadges = (scale: number, groups: (typeof spots)[number], origin = false) => (
+    <SpotBadges key={groups[0].key} groups={groups} {...(origin ? { width: 0, height: 0 } : size2)} scale={scale} ownTeamId={view.team.id} clickable={Boolean(onBadgeClick)} handle={ownHandle} />
+  );
+  const ghostBadges = (scale: number, groups: (typeof spots)[number], origin = false) => (
+    <SpotBadges key={groups[0].key} groups={groups} {...(origin ? { width: 0, height: 0 } : size2)} scale={scale} ownTeamId={view.team.id} handle={ghostHandle} ghost />
+  );
+  const token = (key: string, at: Pt, badges: React.ReactNode) => ({
+    key,
+    at,
+    content: (
+      <svg width={120} height={48} viewBox="-60 -24 120 48" overflow="visible" className="pointer-events-none block">
+        {badges}
+      </svg>
+    ),
+  });
+
   return (
-    <MapCanvas
+    <MapSurface
       width={size.width}
       height={size.height}
       imageUrl={mapImage?.url}
@@ -139,21 +169,30 @@ export function TeamMap(props: TeamMapProps) {
       bare={bare}
       focus={focus}
       fitToNodes
+      map3d={props.map3d}
       overlay={(scale) => (
         <>
-          {routes?.map((r) => (
-            <PlannedLine key={r.id} route={r} width={size.width} height={size.height} scale={scale} clickable={Boolean(props.onRouteClick)} />
-          ))}
-          {spots.map((groups) => (
-            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} clickable={Boolean(onBadgeClick)} handle={ownHandle} />
-          ))}
-          {ghostSpots.map((groups) => (
-            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} handle={ghostHandle} ghost />
-          ))}
-          {path && path.length > 1 && <RouteLine path={path} width={size.width} height={size.height} scale={scale} />}
-          {preview && <PreviewLine preview={preview} width={size.width} height={size.height} scale={scale} />}
+          {routeLines(scale)}
+          {spots.map((groups) => ownBadges(scale, groups))}
+          {ghostSpots.map((groups) => ghostBadges(scale, groups))}
+          {preview && <PreviewLine preview={preview} {...size2} scale={scale} />}
         </>
       )}
+      three={{
+        drape: routeLines,
+        tokens: [
+          ...spots.map((groups) => token(groups[0].key, groups[0].at, ownBadges(1, groups, true))),
+          ...ghostSpots.map((groups) => token(`ghost:${groups[0].key}`, groups[0].at, ghostBadges(1, groups, true))),
+          ...(preview ? [previewLabel(preview)] : []),
+        ],
+        lines: preview
+          ? [
+              { key: "walked", points: preview.walked, colour: preview.ok ? "var(--map-path)" : "var(--danger)", dashed: true },
+              { key: "rest", points: preview.rest, colour: "var(--danger)", dashed: true },
+            ]
+          : [],
+        hitLines: props.onRouteClick ? routes?.map((r) => ({ handle: `route:${r.id}`, points: r.points })) : undefined,
+      }}
     />
   );
 }
@@ -175,6 +214,23 @@ export function RouteLine({ path, width, height, scale, colour = "var(--map-path
       ))}
     </g>
   );
+}
+
+/** In 3D: the planned move's miles (or why it can't happen), by where it's aimed. */
+function previewLabel(preview: NonNullable<TeamMapProps["preview"]>) {
+  const tip = preview.rest.length ? preview.rest[preview.rest.length - 1] : preview.walked[preview.walked.length - 1];
+  return {
+    key: "preview-label",
+    at: tip ?? ([0, 0] as Pt),
+    content: (
+      <span
+        className={`pointer-events-none ml-24 block -translate-y-4 rounded-md border px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${preview.ok ? "border-accent text-white" : "border-danger text-danger"}`}
+        style={{ background: "var(--map-outline)" }}
+      >
+        {preview.label}
+      </span>
+    ),
+  };
 }
 
 /** A queued move: a solid line with its number by the start; click it to change or cancel it. */

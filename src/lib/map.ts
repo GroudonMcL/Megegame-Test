@@ -1,6 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { parseMapLook, type Map3dInfo } from "@/engine/world/mapLook";
 
 export type RegionRow = typeof schema.regions.$inferSelect;
 export type ConnectionRow = typeof schema.connections.$inferSelect;
@@ -46,7 +47,8 @@ export async function loadMapState(gameId: string) {
       : Promise.resolve(undefined),
   ]);
   const mapImage: MapImage | null = image?.width && image.height ? { id: image.id, width: image.width, height: image.height } : null;
-  return { regions, connections, terrainAreas, units, teams, mapImage, milesAcross: game?.mapMilesAcross ?? 200 };
+  const map3d: Map3dInfo = { heightUrl: game?.heightAssetId ? `/api/assets/${game.heightAssetId}` : null, look: parseMapLook(game?.mapLook) };
+  return { regions, connections, terrainAreas, units, teams, mapImage, milesAcross: game?.mapMilesAcross ?? 200, map3d };
 }
 
 /** What the conversion from an old node map left for the DM to check, if it ran for this game. */

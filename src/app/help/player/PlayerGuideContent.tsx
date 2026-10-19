@@ -69,7 +69,7 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                 <li>
                   <B>The map</B>: tap a region, or a unit badge, to see what you know about it in a panel on the right (<B>Esc</B> or × closes it). Your own units show
                   everything; other sides&apos; units show only their type and owner. Under <B>Give an order</B>, pick an order (for a unit: <B>Move</B> and the rest) and your
-                  Orders window opens with it already filled in, ready to finish and save. <B>Show on map</B> in the Units and Regions windows takes you to that place. <B>Map key</B> in the corner explains the symbols. Regions you can see now are clear; regions you&apos;ve only seen before are greyed and show what was there last time;
+                  Orders window opens with it already filled in, ready to finish and save. <B>Show on map</B> in the Units and Regions windows takes you to that place. <B>Map key</B> in the corner explains the symbols. <B>2D / 3D</B> in the bottom corner shows the map as terrain you can turn and tilt (drag to move, right-drag or two fingers to turn, scroll or pinch to zoom); everything works the same in both. If 3D runs slowly on your device it switches back to 2D. Regions you can see now are clear; regions you&apos;ve only seen before are greyed and show what was there last time;
                   the rest is hidden. Each team has a colour and an emblem (a shield, crown, tower…), so you can tell teams apart without relying on colour. Unit badges show the owner&apos;s
                   emblem and how many units are there; your own have square corners.
                 </li>

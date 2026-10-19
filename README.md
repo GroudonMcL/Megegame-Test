@@ -30,8 +30,8 @@ UI overhaul ([plan](docs/proposals/ui-overhaul.md)):
 | 2 | Map-first layout: the map always on screen, tools as windows over it | ✅ done |
 | 3 | Click a region or unit on the map to see it and give it orders | ✅ done |
 | 4 | Regions as shapes, measured movement, terrain areas, GM map editor | ✅ done |
-| 5 | Drag-and-drop movement | planned |
-| 6 | Toggleable 3D map | planned |
+| 5 | Drag-and-drop movement | ✅ done |
+| 6 | Toggleable 3D map, with a height map and lighting | ✅ done |
 | 7 | Simplified phone and tablet view | planned |
 
 ## Tech

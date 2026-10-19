@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { deriveStats, unitBonuses } from "@/engine/ruleset/derive";
 import { formatCr } from "@/engine/ruleset/common";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import { deleteUnitAction, moveUnitAction, spawnUnitsAction, updateUnitAction } from "@/app/dm/games/[gameId]/map/actions";
 import { SidePanel } from "@/components/shell/SidePanel";
-import { MapCanvas, type MapNode } from "./MapCanvas";
+import { indexShapes, regionAt } from "@/engine/geo/regions";
+import type { Map3dInfo } from "@/engine/world/mapLook";
+import type { MapNode } from "./MapCanvas";
+import { MapSurface } from "./MapSurface";
 import { connectionEdges, terrainLayer } from "./mapLayers";
 import { groupBadges, SpotBadges } from "./UnitBadges";
 import { DEFAULT_MAP_SIZE, type ConnectionData, type MapImageData, type RegionData, type TeamData, type TerrainAreaData, type UnitData } from "./mapData";
@@ -30,6 +33,7 @@ export function WorldMap(props: {
   teams: TeamData[];
   terrainAreas: TerrainAreaData[];
   mapImage: MapImageData | null;
+  map3d?: Map3dInfo;
 }) {
   const { gameId, ruleset, regions, connections, teams } = props;
   const [units, setUnits] = useState(props.units);
@@ -100,12 +104,17 @@ export function WorldMap(props: {
       } else report(false, r.error);
     });
 
+  // Where the pointer is over the map (either view), for dropping units dragged from the panel.
+  const hover = useRef<[number, number] | null>(null);
+  const shapes = useMemo(() => indexShapes(regions.filter((r) => r.polygon.length >= 3).map((r) => ({ id: r.id, polygon: r.polygon }))), [regions]);
+
   // Dragging a unit from the side panel onto a region node moves it there.
   useEffect(() => {
     if (!dragging) return;
     const move = (e: PointerEvent) => setDragging((d) => (d ? { ...d, x: e.clientX, y: e.clientY } : d));
     const up = (e: PointerEvent) => {
-      const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-node-id]")?.getAttribute("data-node-id");
+      // A region's dot (old maps), else the region under the pointer (shapes, and the 3D view).
+      const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-node-id]")?.getAttribute("data-node-id") ?? (hover.current && regionAt(shapes, hover.current));
       const unitId = dragging.unitId;
       setDragging(null);
       if (target) moveUnit(unitId, target);
@@ -161,9 +170,17 @@ export function WorldMap(props: {
           {message.text}
         </p>
       )}
-      <MapCanvas
+      <MapSurface
         bare
         className="h-full"
+        map3d={props.map3d}
+        onHover={
+          dragging
+            ? (p) => {
+                hover.current = p;
+              }
+            : undefined
+        }
         width={size.width}
         height={size.height}
         imageUrl={props.mapImage ? `/api/assets/${props.mapImage.id}` : null}
@@ -174,6 +191,17 @@ export function WorldMap(props: {
         onBackgroundClick={() => setSelected(null)}
         terrain={terrain}
         overlay={(scale) => spots.map((groups) => <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} />)}
+        three={{
+          tokens: spots.map((groups) => ({
+            key: groups[0].key,
+            at: groups[0].at,
+            content: (
+              <svg width={160} height={48} viewBox="-80 -24 160 48" overflow="visible" className="pointer-events-none block">
+                <SpotBadges groups={groups} width={0} height={0} scale={1} />
+              </svg>
+            ),
+          })),
+        }}
       />
 
       {(region || selected === "unplaced") && (

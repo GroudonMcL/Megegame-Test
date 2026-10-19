@@ -14,8 +14,10 @@ config();
 
 async function main() {
   // Vercel also builds "preview" copies of unmerged changes. Only the real
-  // (production) deploy may change the shared database.
-  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+  // (production) deploy may change the shared database, unless MIGRATE_PREVIEWS
+  // is "true" (for testing a branch whose migrations only add things, so the
+  // live site keeps working).
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production" && process.env.MIGRATE_PREVIEWS !== "true") {
     console.log(`Skipping migrations on a ${process.env.VERCEL_ENV} deploy.`);
     return;
   }

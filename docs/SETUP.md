@@ -148,7 +148,7 @@ Vercel then calls the reminder at 08:00 UTC every day (the free plan allows one 
 
 **If an update breaks something:** in Vercel → **Deployments**, find the last working deployment, click the **⋯** menu and choose **Instant Rollback**. The site goes straight back to the previous version.
 
-Vercel also builds a private **preview** copy for each pull request before you merge it. Those previews are only visible to you (Vercel asks you to log in), and they never change the database.
+Vercel also builds a private **preview** copy for each pull request before you merge it. Those previews are only visible to you (Vercel asks you to log in), and they normally never change the database. A preview of a change that adds to the database (new tables or columns) won't work until the database has them. To try one anyway, add an environment variable `MIGRATE_PREVIEWS` = `true` for **Preview** only (Vercel → your project → **Settings → Environment Variables**), then redeploy the preview: it updates the shared database first. Only do this when the change only adds things, so the live site keeps working; remove the variable afterwards.
 
 ---
 
