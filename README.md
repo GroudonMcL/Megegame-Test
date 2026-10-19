@@ -17,8 +17,8 @@ The app is theme-neutral. "Utterdark" will be one preset ruleset.
 | 4 | Player view, fog of war, order builder | ✅ done |
 | 5 | Resolution engine (non-combat) | ✅ done |
 | 6 | Combat simulation | ✅ done |
-| 7 | Stealth, trades, Discord, history, export | next |
-| 8 | Polish, guides | |
+| 7 | Stealth, trades, Discord, history, export | ✅ done |
+| 8 | Polish, guides | next |
 
 ## Tech
 

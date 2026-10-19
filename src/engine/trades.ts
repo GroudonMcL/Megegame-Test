@@ -53,7 +53,7 @@ export function isEmpty(b: TradeBundle): boolean {
 }
 
 /** "5 Gold, 2× Metal, the Guard “Iron Fist”, region A3, their map". */
-export function describeBundle(r: Ruleset, world: Pick<World, "units" | "regions">, b: TradeBundle): string {
+export function describeBundle(r: Ruleset, world: Pick<World, "units" | "regions">, b: TradeBundle, mapOf = "their"): string {
   const parts: string[] = [];
   const res = Object.fromEntries(Object.entries(b.resources).filter(([, v]) => v > 0));
   if (Object.keys(res).length) parts.push(fmtRes(res, r.resources));
@@ -72,7 +72,7 @@ export function describeBundle(r: Ruleset, world: Pick<World, "units" | "regions
     const reg = world.regions.find((x) => x.id === id);
     parts.push(`region ${reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "?"}`);
   }
-  if (b.map) parts.push("a copy of their map");
+  if (b.map) parts.push(`a copy of ${mapOf} map`);
   return parts.length ? parts.join(", ") : "nothing";
 }
 
@@ -131,6 +131,6 @@ export function executeTrade(r: Ruleset, world: World, t: TradeInput): TradeOutc
   transfer(r, world, t.fromTeamId, t.toTeamId, t.give, problems, changes);
   transfer(r, world, t.toTeamId, t.fromTeamId, t.get, problems, changes);
   const name = (id: string) => world.teams.find((x) => x.id === id)?.name ?? "?";
-  const summary = `${name(t.fromTeamId)} gave ${describeBundle(r, world, t.give)}; ${name(t.toTeamId)} gave ${describeBundle(r, world, t.get)}.`;
+  const summary = `${name(t.fromTeamId)} gave ${describeBundle(r, world, t.give, "its")}; ${name(t.toTeamId)} gave ${describeBundle(r, world, t.get, "its")}.`;
   return { tradeId: t.id, ok: problems.length === 0, problems, changes: problems.length ? [] : changes, summary };
 }

@@ -9,6 +9,7 @@ import { buildQueue, interactionFlags, scenes } from "./queue";
 import { resolveOrder } from "./resolveOrder";
 import { rollOnTable } from "./rollTable";
 import { watchers } from "../stealth/stealth";
+import { EMPTY_BUNDLE, executeTrade } from "../trades";
 import type { World } from "./types";
 
 const r = buildPreset("utterdark");
@@ -207,6 +208,54 @@ describe("stealth", () => {
     expect(p.rolls).toHaveLength(1);
     const found = p.rolls[0].outcome === "found";
     expect(p.changes.some((c) => c.type === "detectUnits" && c.unitIds.includes(spy.id))).toBe(found);
+  });
+});
+
+describe("trades", () => {
+  it("swaps resources, items and units when both sides can pay", () => {
+    const g = unit({});
+    const w = world([g]);
+    w.inventory[THEM] = { metal: 2 };
+    const res = executeTrade(r, w, { id: "t1", fromTeamId: ME, toTeamId: THEM, give: { ...EMPTY_BUNDLE, resources: { gold: 5 }, unitIds: [g.id] }, get: { ...EMPTY_BUNDLE, items: { metal: 2 }, map: true } });
+    expect(res.ok).toBe(true);
+    expect(res.changes.some((c) => c.type === "shareMap")).toBe(true);
+    const after = applyChanges(w, res.changes.filter((c) => c.type !== "shareMap") as never);
+    expect(after.teams[0].resources.gold).toBe(15);
+    expect(after.teams[1].resources.gold).toBe(10);
+    expect(after.inventory[ME].metal).toBe(2);
+    expect(after.units[0].ownerTeamId).toBe(THEM);
+    expect(res.summary).toMatch(/Me gave 5 Gold, a Guard; Them gave 2× Metal, a copy of its map/);
+  });
+
+  it("fails with a reason when a side no longer has what it offered", () => {
+    const res = executeTrade(r, world([]), { id: "t2", fromTeamId: THEM, toTeamId: ME, give: { ...EMPTY_BUNDLE, resources: { gold: 50 } }, get: EMPTY_BUNDLE });
+    expect(res.ok).toBe(false);
+    expect(res.changes).toEqual([]);
+    expect(res.problems[0]).toMatch(/Them doesn't have 50 Gold/);
+  });
+
+  it("runs accepted trades at the end of the round, after income", () => {
+    const end = endOfRound(r, world([], { gold: 0, food: 5, growth: 0 }), "seed", {
+      trades: [{ id: "t3", fromTeamId: ME, toTeamId: THEM, give: { ...EMPTY_BUNDLE, resources: { gold: 1 } }, get: EMPTY_BUNDLE }],
+    });
+    // The outpost's +1 Gold arrives first, so the trade can be paid.
+    expect(end.trades[0].ok).toBe(true);
+  });
+});
+
+describe("random events", () => {
+  it("rolls the event table for the chosen teams, with +1 per 6 regions", () => {
+    const w = world([]);
+    const end = endOfRound(r, w, "seed", { events: { tableId: "turn-event", teamIds: [ME] } });
+    const me = end.teams.find((t) => t.teamId === ME)!;
+    expect(me.rolls.some((x) => x.tableId === "turn-event")).toBe(true);
+    expect(me.lines.some((l) => l.startsWith("Event:"))).toBe(true);
+    expect(end.teams.find((t) => t.teamId === THEM)!.rolls.some((x) => x.tableId === "turn-event")).toBe(false);
+  });
+
+  it("survivors join as a new race", () => {
+    const res = rollOnTable(r, "race", createRng("r"));
+    expect(res.results[0].type).toBe("gainRace");
   });
 });
 

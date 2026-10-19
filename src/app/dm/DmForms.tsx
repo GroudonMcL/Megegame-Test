@@ -33,7 +33,7 @@ export function CreateGameForm({ presets }: { presets: { id: string; name: strin
   );
 }
 
-export function CreateTeamForm({ gameId }: { gameId: string }) {
+export function CreateTeamForm({ gameId, colour = "#2a78d6" }: { gameId: string; colour?: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(async (prev: Parameters<typeof createTeam>[0], fd: FormData) => {
     const result = await createTeam(prev, fd);
@@ -53,7 +53,8 @@ export function CreateTeamForm({ gameId }: { gameId: string }) {
           id={`team-colour-${gameId}`}
           name="colour"
           type="color"
-          defaultValue="#4f46e5"
+          key={colour}
+          defaultValue={colour}
           className="h-10 w-16 rounded-lg border border-border bg-background"
         />
       </div>

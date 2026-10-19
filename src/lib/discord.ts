@@ -15,7 +15,8 @@ import { loadRuleset } from "./rulesets";
 const WEBHOOK = /^https:\/\/(?:canary\.|ptb\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/;
 
 export function validWebhook(url: string): boolean {
-  return url === "" || WEBHOOK.test(url) || (process.env.NODE_ENV !== "production" && url.startsWith("http://localhost:"));
+  // ALLOW_LOCAL_WEBHOOKS=1 lets automated tests point the app at a local stand-in for Discord.
+  return url === "" || WEBHOOK.test(url) || (process.env.ALLOW_LOCAL_WEBHOOKS === "1" && url.startsWith("http://localhost:"));
 }
 
 /** The app's address, for links in messages. */
@@ -54,8 +55,9 @@ async function post(gameId: string, url: string, content: string, what: string) 
   if (!r.ok) await audit(db, { gameId, actor: "system", kind: "discord.fail", description: `Discord (${what}): ${r.error}` });
 }
 
-function when(d: Date | null) {
-  return d ? `<t:${Math.floor(d.getTime() / 1000)}:F> (<t:${Math.floor(d.getTime() / 1000)}:R>)` : "no deadline set";
+/** "Orders are due <time> (in 2 days)." Discord shows the time in each reader's own timezone. */
+function due(subject: string, d: Date | null) {
+  return d ? `${subject} are due <t:${Math.floor(d.getTime() / 1000)}:F> (<t:${Math.floor(d.getTime() / 1000)}:R>).` : `${subject} have no deadline yet.`;
 }
 
 async function gameAndRound(gameId: string) {
@@ -72,7 +74,7 @@ async function gameAndRound(gameId: string) {
 export async function notifyRoundOpened(gameId: string, origin: string) {
   const g = await gameAndRound(gameId);
   if (!g?.round || !g.game.discordWebhookUrl) return;
-  await post(gameId, g.game.discordWebhookUrl, `📜 **${g.game.name}: round ${g.round.number} is open.** Orders are due ${when(g.round.deadline)}.${origin ? `\n${origin}/play/orders` : ""}`, "round opened");
+  await post(gameId, g.game.discordWebhookUrl, `📜 **${g.game.name}: round ${g.round.number} is open.** ${due("Orders", g.round.deadline)}${origin ? `\n${origin}/play/orders` : ""}`, "round opened");
 }
 
 /** A reminder in the public channel naming the teams that haven't submitted yet. */
@@ -85,7 +87,7 @@ export async function notifyReminder(gameId: string, origin: string): Promise<{ 
     db.select().from(schema.teamRoundOrders).where(eq(schema.teamRoundOrders.roundId, g.round.id)),
   ]);
   const waiting = teams.filter((t) => !t.isNpc && !states.find((s) => s.teamId === t.id)?.submittedAt).map((t) => t.name);
-  const text = `⏰ **Reminder: round ${g.round.number} orders are due ${when(g.round.deadline)}.** ${waiting.length ? `Still to submit: ${waiting.join(", ")}.` : "Every team has submitted."}${origin ? `\n${origin}/play/orders` : ""}`;
+  const text = `⏰ **Reminder: ${due(`round ${g.round.number} orders`, g.round.deadline)}** ${waiting.length ? `Still to submit: ${waiting.join(", ")}.` : "Every team has submitted."}${origin ? `\n${origin}/play/orders` : ""}`;
   const r = await postDiscord(g.game.discordWebhookUrl, text);
   if (!r.ok) await audit(db, { gameId, actor: "system", kind: "discord.fail", description: `Discord (reminder): ${r.error}` });
   return r;
@@ -115,6 +117,10 @@ export async function notifyPublished(gameId: string, roundNumber: number, origi
     const change: Record<string, number> = { ...(mine?.economy.change ?? {}) };
     for (const o of orders) for (const [k, v] of Object.entries((o.outcome as { delta?: Record<string, number> } | null)?.delta ?? {})) change[k] = (change[k] ?? 0) + v;
     for (const [k, v] of Object.entries(eor?.adjust[t.id] ?? {})) change[k] = (change[k] ?? 0) + v;
+    for (const trade of eor?.result.trades ?? []) {
+      if (!trade.ok) continue;
+      for (const c of trade.changes) if (c.type === "resources" && c.teamId === t.id) for (const [k, v] of Object.entries(c.delta)) change[k] = (change[k] ?? 0) + v;
+    }
     const signed = Object.entries(change)
       .filter(([, v]) => v)
       .map(([k, v]) => `${v > 0 ? "+" : ""}${Math.round(v * 100) / 100} ${ruleset.resources.find((x) => x.id === k)?.name ?? k}`)

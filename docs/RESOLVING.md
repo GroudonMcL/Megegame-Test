@@ -12,12 +12,11 @@ Everything happens on the game's **Resolve round** tab.
    - When you accept, the app re-runs the order with the same dice against the current state, so earlier decisions are taken into account. If it can no longer happen, you're told why.
    - **Fights** caused by an order (a move into monsters, an Attack or a Capture Monster) are simulated and shown on the order with their log. See **[COMBAT.md](COMBAT.md)** for the rules and your controls.
 3. **Undo last** reverses the most recent accept, fail, skip or end of round, one step at a time.
-4. **Go to end of round.** The app works out each team's production and upkeep, per-round building rolls, region hazards, and an economy-deficit roll for anyone who goes negative. Adjust any team's resources, or **Recalculate and re-roll**, then **Apply end of round**. This also resets every unit's movement.
-5. **Publish.** Teams see their results (each order's outcome, rolls you didn't hide, resource changes, and the end-of-round summary) on their **Results** page and dashboard. A snapshot of the game is kept for history. Then open the next round on the Teams page.
+4. **Go to end of round.** The app works out each team's production and upkeep, per-round building rolls, random events (pick the teams in **Random events**), region hazards, a deficit roll for each resource a team runs short of, and finally any **accepted trades** (each one goes through only if both sides still have what they offered). Adjust any team's resources, or **Recalculate and re-roll**, then **Apply end of round**. This also resets every unit's movement.
+5. **Publish.** Teams whose units saw each other this round are marked as having met (so they can trade), the game's Discord channel hears that the round is done, and each team's channel gets "your results are ready". Teams see their results (each order's outcome, rolls you didn't hide, resource changes, and the end-of-round summary) on their **Results** page and dashboard. A snapshot of the game is kept for history. Then open the next round on the Teams page.
 
 ## Things you still do by hand (for now)
 
-- **Stealth checks** on stealthy moves (Phase 7).
 - **Discoveries**: revealing a passage or region, adding a deposit or ruin. The order tells you what the table rolled; make the change in the Map editor.
 - **Trades, portals, taming, spells and Improvise**: these are marked **Needs DM**. Write the outcome and add resources, or make the changes on the World map.
 - Changes you make on the World map or Map editor take effect at once and aren't part of **Undo last**.

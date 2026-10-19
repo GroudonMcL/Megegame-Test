@@ -92,7 +92,7 @@ export function endOfRound(r: Ruleset, world: World, seed: string, opts: EndOfRo
       t.changes.push(...p.changes);
       t.rolls.push(...p.rolls);
       t.notes.push(...p.notes);
-      t.lines.push(`Event: ${[...res.texts, ...lines].filter(Boolean).join(" ")}`);
+      t.lines.push(`Event: ${res.texts.filter(Boolean).join(" → ")}.${lines.length ? ` ${lines.join(" ")}` : ""}`);
       if (eventTable.modifierNote) t.notes.push(`The event roll also adds: ${eventTable.modifierNote}`);
     }
 

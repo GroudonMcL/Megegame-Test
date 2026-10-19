@@ -4,7 +4,8 @@ Fights are simulated by the app and shown to you on the **Resolve round** tab, w
 
 ## When a fight starts
 
-- **Monsters attack anyone who walks in.** A Move (normal or force march) stops at the first region on its path with wild monsters, and the units fight them there. Stealthy moves don't trigger this; stealth checks come in Phase 7.
+- **Monsters attack anyone who walks in.** A Move (normal or force march) stops at the first region on its path with wild monsters, and the units fight them there. If all the monsters there are hidden, they roll Stealth against the movers' best passive Perception; if they all succeed, they ambush (surprise).
+- **Stealthy moves** only fight monsters that spot them (see STEALTH.md). Searching for hidden units can also start a fight with hidden monsters.
 - **Teams only fight each other through an Attack order.** Units of different teams can share a region peacefully. The Attack order names one target; its whole team's units in that region (those out in the open) defend together.
 - **Capture Monster** is an Attack on a monster that tries to capture it instead of killing it (see below).
 - Attacking with units that are all **hidden** is a surprise attack: advantage on initiative and on each unit's first attack. The attackers are revealed.

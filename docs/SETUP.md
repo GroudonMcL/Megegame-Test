@@ -124,6 +124,21 @@ If anything has a red ✗, see **Troubleshooting** below.
 
 ---
 
+## Optional: Discord notifications and the daily reminder
+
+The app can post to Discord when rounds open and are published, and remind teams before a deadline. Set the webhook URLs on the game's **Settings & export** page (it explains where to find them in Discord).
+
+For the **automatic** reminder (once a day, for any round whose deadline is less than 24 hours away), add two more environment variables in Vercel (**Project → Settings → Environment Variables**), then redeploy:
+
+| Name | Value |
+|---|---|
+| `CRON_SECRET` | another random string, made the same way as `SESSION_SECRET` in Step 3 |
+| `APP_URL` | your app's address, e.g. `https://megegame-test.vercel.app` (used for links in Discord messages) |
+
+Vercel then calls the reminder at 08:00 UTC every day (the free plan allows one scheduled job per day). Without `CRON_SECRET` the daily reminder is off, but the **Remind teams on Discord** button still works.
+
+---
+
 ## How updates get deployed (from now on)
 
 1. At the end of each phase I push the new code to my branch and (when you're happy with it) open a **pull request** on GitHub. It shows exactly what changed.

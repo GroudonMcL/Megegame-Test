@@ -740,7 +740,7 @@ export function utterdarkPreset() {
       },
       {
         id: "explore",
-        name: "Explore",
+        name: "Search",
         description:
           "Search a region for resources, a ruin or dungeon for treasure, or the region for hidden units. Units make an Intelligence or Wisdom check. A region and a ruin can only be searched once; searching for hidden units can find stealthed units and hidden monsters, which may start a fight.",
         kind: "numbered",

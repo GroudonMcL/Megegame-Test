@@ -7,6 +7,7 @@ import { findReferenceProblems } from "@/engine/ruleset/validate";
 import { loadRuleset } from "@/lib/rulesets";
 import { regenerateJoinCode } from "../../actions";
 import { CreateTeamForm } from "../../DmForms";
+import { nextTeamColour } from "@/components/teamColours";
 import { RoundControls } from "./RoundControls";
 import { viewAsTeamAction } from "./rounds";
 
@@ -82,7 +83,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
           {teams.length === 0 && <li className="text-sm text-muted">No teams yet.</li>}
         </ul>
         <div className="mt-4">
-          <CreateTeamForm gameId={gameId} />
+          <CreateTeamForm gameId={gameId} colour={nextTeamColour(teams.map((t) => t.colour))} />
         </div>
       </Card>
 
