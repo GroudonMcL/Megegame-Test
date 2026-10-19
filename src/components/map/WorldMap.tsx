@@ -141,7 +141,7 @@ export function WorldMap(props: {
           {message.text}
         </p>
       )}
-      <div className="grid gap-4 lg:grid-cols-[1fr_26rem]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_26rem] [&>*]:min-w-0">
         <MapCanvas
           width={size.width}
           height={size.height}

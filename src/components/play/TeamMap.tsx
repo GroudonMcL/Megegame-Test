@@ -76,6 +76,7 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
       selectedNodeId={selectedId}
       onNodeClick={(id) => onRegionClick?.(id)}
       className={className}
+      fitToNodes
       renderNodeExtras={(n, p, scale) => {
         const list = badges.get(n.id) ?? [];
         const stepIndex = path ? path.indexOf(n.id) : -1;

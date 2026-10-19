@@ -19,7 +19,7 @@ export default async function SettingsPage({ params }: PageProps<"/dm/games/[gam
     db.select().from(schema.teams).where(eq(schema.teams.gameId, gameId)).orderBy(asc(schema.teams.createdAt)),
   ]);
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
       <Card>
         <h2 className="text-lg font-medium">Discord notifications</h2>
         <p className="mt-1 text-sm text-muted">

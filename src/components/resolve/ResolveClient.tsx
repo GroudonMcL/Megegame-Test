@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   acceptAction,
@@ -107,12 +107,88 @@ export function ResolveClient(props: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [team, setTeam] = useState("");
   const [showDone, setShowDone] = useState(false);
+  const [stepFilter, setStepFilter] = useState(0);
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [showKeys, setShowKeys] = useState(false);
+  // Where the keyboard focus goes once the order just decided by a shortcut is done.
+  const advanceTo = useRef<string | null | undefined>(undefined);
 
   const act = (fn: () => Promise<Result>) =>
     start(async () => {
       const r = await fn();
       setMessage(r.ok ? (r.message ? { ok: true, text: r.message } : null) : { ok: false, text: r.error });
+      if (r.ok && advanceTo.current !== undefined) setFocusId(advanceTo.current);
+      advanceTo.current = undefined;
     });
+
+  useEffect(() => {
+    if (focusId) document.querySelector(`[data-order-card="${focusId}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusId]);
+
+  // Keyboard shortcuts for the queue (see SHORTCUTS). Ignored while typing in a box.
+  const resolving = round?.status === "resolving";
+  useEffect(() => {
+    if (!resolving) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("input, textarea, select, [contenteditable]")) {
+        if (e.key === "Escape") target.blur();
+        return;
+      }
+      const cards = [...document.querySelectorAll<HTMLElement>("[data-order-card]")];
+      const at = cards.findIndex((c) => c.dataset.orderCard === focusId);
+      const card = cards[at];
+      const goTo = (i: number) => {
+        const c = cards[Math.max(0, Math.min(cards.length - 1, i))];
+        if (c) setFocusId(c.dataset.orderCard!);
+      };
+      const press = (el: Element | null | undefined, advance: boolean) => {
+        if (!(el instanceof HTMLButtonElement) || el.disabled) return;
+        if (advance) advanceTo.current = cards[at + 1]?.dataset.orderCard ?? cards[at - 1]?.dataset.orderCard ?? null;
+        el.click();
+      };
+      const button = (name: string) => card?.querySelector(`[data-shortcut="${name}"]`);
+      switch (e.key) {
+        case "j":
+          goTo(at + 1);
+          break;
+        case "k":
+          goTo(at < 0 ? 0 : at - 1);
+          break;
+        case "a":
+          press(button("accept"), true);
+          break;
+        case "f":
+          press(button("fail"), true);
+          break;
+        case "s":
+          press(button("skip"), true);
+          break;
+        case "r":
+          press(button("reroll"), false);
+          break;
+        case "e":
+          card?.querySelector("textarea")?.focus();
+          break;
+        case "A":
+          press(card?.closest("section")?.querySelector('[data-shortcut="accept-all"]') ?? document.querySelector('[data-shortcut="accept-all"]'), false);
+          break;
+        case "p":
+          press(document.querySelector('[data-shortcut="prepare"]'), false);
+          break;
+        case "?":
+          setShowKeys((v) => !v);
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [resolving, focusId]);
 
   if (!round) return <p className="text-sm text-muted">Open a round on the Teams page first.</p>;
   const teams = [...new Map(props.steps.flatMap((s) => s.items.map((i) => [i.teamId, i.teamName] as const))).entries()];
@@ -175,15 +251,49 @@ export function ResolveClient(props: Props) {
             <label className="flex items-center gap-1">
               <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show decided orders
             </label>
+            <label className="flex items-center gap-1">
+              Action
+              <select className="rounded-md border border-border bg-background px-2 py-1" value={stepFilter} onChange={(e) => setStepFilter(Number(e.target.value))}>
+                <option value={0}>All</option>
+                {props.steps.map((s) => (
+                  <option key={s.step} value={s.step}>
+                    {s.step}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1" title="Orders grouped into a scene because they meet, target each other or end up in the same region">
+              <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} /> Only flagged
+            </label>
             <span className="text-muted">{totalPending} still to decide</span>
             <button type="button" className={`${primary} ml-auto`} disabled={pending} onClick={() => act(() => computeEndAction(gameId, false))}>
               Go to end of round →
             </button>
           </div>
+          <div className="text-xs text-muted">
+            <button type="button" className="underline" onClick={() => setShowKeys(!showKeys)} aria-expanded={showKeys}>
+              Keyboard shortcuts
+            </button>{" "}
+            (press <kbd>?</kbd>)
+            {showKeys && (
+              <dl className="mt-2 grid max-w-md grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-lg border border-border bg-card p-3 text-foreground">
+                {SHORTCUTS.map(([k, what]) => (
+                  <div key={k} className="contents">
+                    <dt>
+                      <kbd className="rounded border border-border px-1 font-mono">{k}</kbd>
+                    </dt>
+                    <dd>{what}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
           {props.steps.length === 0 && <p className="text-sm text-muted">No orders this round.</p>}
-          {props.steps.map((s) => (
-            <Step key={s.step} step={s} props={props} team={team} showDone={showDone} act={act} busy={pending} />
-          ))}
+          {props.steps
+            .filter((s) => !stepFilter || s.step === stepFilter)
+            .map((s) => (
+              <Step key={s.step} step={s} props={props} filter={{ team, showDone, onlyFlagged }} focusId={focusId} setFocusId={setFocusId} act={act} busy={pending} />
+            ))}
         </>
       )}
 
@@ -192,8 +302,30 @@ export function ResolveClient(props: Props) {
   );
 }
 
-function Step({ step: s, props, team, showDone, act, busy }: { step: Props["steps"][number]; props: Props; team: string; showDone: boolean; act: (fn: () => Promise<Result>) => void; busy: boolean }) {
-  const items = s.items.filter((i) => (!team || i.teamId === team) && (showDone || !DONE.has(i.status)));
+const SHORTCUTS: [string, string][] = [
+  ["j / k", "Next / previous order"],
+  ["a", "Accept the highlighted order and move on"],
+  ["f", "Mark it failed"],
+  ["s", "Skip it"],
+  ["r", "Re-roll it"],
+  ["e", "Edit its outcome text (Esc to leave the box)"],
+  ["Shift + A", "Accept all ready orders in this action"],
+  ["p", "Prepare the next action"],
+  ["?", "Show or hide this list"],
+];
+
+interface StepProps {
+  step: Props["steps"][number];
+  props: Props;
+  filter: { team: string; showDone: boolean; onlyFlagged: boolean };
+  focusId: string | null;
+  setFocusId: (id: string) => void;
+  act: (fn: () => Promise<Result>) => void;
+  busy: boolean;
+}
+
+function Step({ step: s, props, filter: { team, showDone, onlyFlagged }, focusId, setFocusId, act, busy }: StepProps) {
+  const items = s.items.filter((i) => (!team || i.teamId === team) && (showDone || !DONE.has(i.status)) && (!onlyFlagged || i.scene !== null));
   const unprepared = s.items.some((i) => !DONE.has(i.status) && i.status !== "prepared" && i.backup !== "waiting");
   const ready = s.items.filter((i) => i.status === "prepared" && i.outcome?.proposal?.status === "ready" && i.backup !== "waiting").length;
   return (
@@ -205,12 +337,12 @@ function Step({ step: s, props, team, showDone, act, busy }: { step: Props["step
         </span>
         <span className="ml-auto flex gap-2">
           {unprepared && (
-            <button type="button" className={primary} disabled={busy} onClick={() => act(() => prepareStepAction(props.gameId, s.step))}>
+            <button type="button" className={primary} data-shortcut="prepare" disabled={busy} onClick={() => act(() => prepareStepAction(props.gameId, s.step))}>
               Prepare action {s.step}
             </button>
           )}
           {ready > 0 && (
-            <button type="button" className={btn} disabled={busy} onClick={() => act(() => acceptAllReadyAction(props.gameId, s.step))}>
+            <button type="button" className={btn} data-shortcut="accept-all" disabled={busy} onClick={() => act(() => acceptAllReadyAction(props.gameId, s.step))}>
               Accept all ready ({ready})
             </button>
           )}
@@ -227,7 +359,7 @@ function Step({ step: s, props, team, showDone, act, busy }: { step: Props["step
       )}
       <ol className="mt-3 space-y-3">
         {items.map((i) => (
-          <OrderItem key={i.id} item={i} props={props} act={act} busy={busy} />
+          <OrderItem key={i.id} item={i} props={props} act={act} busy={busy} focused={focusId === i.id} onFocus={() => setFocusId(i.id)} />
         ))}
         {items.length === 0 && <li className="text-sm text-muted">Nothing to show.</li>}
       </ol>
@@ -235,7 +367,17 @@ function Step({ step: s, props, team, showDone, act, busy }: { step: Props["step
   );
 }
 
-function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Props; act: (fn: () => Promise<Result>) => void; busy: boolean }) {
+interface OrderItemProps {
+  item: ResolveItem;
+  props: Props;
+  act: (fn: () => Promise<Result>) => void;
+  busy: boolean;
+  /** Highlighted for the keyboard shortcuts. */
+  focused: boolean;
+  onFocus: () => void;
+}
+
+function OrderItem({ item: i, props, act, busy, focused, onFocus }: OrderItemProps) {
   const o = i.outcome;
   const p = o?.proposal ?? null;
   const [text, setText] = useState(o?.text ?? "");
@@ -254,7 +396,11 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
   const label = i.kind === "numbered" ? `Action ${i.slot}` : i.kind === "free" ? "Free" : "Backup";
 
   return (
-    <li className={`rounded-lg border p-3 ${done ? "border-border opacity-70" : p?.status === "invalid" ? "border-danger" : "border-border"}`}>
+    <li
+      data-order-card={i.id}
+      onClick={onFocus}
+      className={`scroll-mt-4 rounded-lg border p-3 ${done ? "border-border opacity-70" : p?.status === "invalid" ? "border-danger" : "border-border"} ${focused ? "ring-2 ring-accent" : ""}`}
+    >
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="h-3 w-3 rounded-full" style={{ background: i.teamColour }} />
         <strong>{i.teamName}</strong>
@@ -335,24 +481,25 @@ function OrderItem({ item: i, props, act, busy }: { item: ResolveItem; props: Pr
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={primary} disabled={busy || waiting || p.status === "invalid"} onClick={() => act(() => acceptAction(props.gameId, i.id, { text, adjust, hideRolls }))}>
+            <button type="button" className={primary} data-shortcut="accept" disabled={busy || waiting || p.status === "invalid"} onClick={() => act(() => acceptAction(props.gameId, i.id, { text, adjust, hideRolls }))}>
               Accept
             </button>
             {(p.rolls.length > 0 || p.fights.length > 0) && (
-              <button type="button" className={btn} disabled={busy} onClick={() => act(() => rerollAction(props.gameId, i.id))} title="New dice for every roll and fight in this order">
+              <button type="button" className={btn} data-shortcut="reroll" disabled={busy} onClick={() => act(() => rerollAction(props.gameId, i.id))} title="New dice for every roll and fight in this order">
                 Re-roll
               </button>
             )}
             <button
               type="button"
               className={btn}
+              data-shortcut="fail"
               disabled={busy || waiting}
               onClick={() => act(() => failAction(props.gameId, i.id, text || "This action failed.", "failed"))}
               title="Nothing happens; a backup order after it becomes active"
             >
               Mark failed
             </button>
-            <button type="button" className={btn} disabled={busy} onClick={() => act(() => failAction(props.gameId, i.id, text || "Not carried out.", "skipped"))}>
+            <button type="button" className={btn} data-shortcut="skip" disabled={busy} onClick={() => act(() => failAction(props.gameId, i.id, text || "Not carried out.", "skipped"))}>
               Skip
             </button>
           </div>

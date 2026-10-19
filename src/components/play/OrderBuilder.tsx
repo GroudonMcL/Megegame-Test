@@ -132,7 +132,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
   const conditionalOnly = rules.actionTypes.filter((a) => a.kind === "conditional");
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_24rem] [&>*]:min-w-0">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-medium">{props.roundNumber ? `Round ${props.roundNumber}` : "No round open"}</span>

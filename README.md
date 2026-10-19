@@ -3,7 +3,9 @@
 A web app for running a megagame: a long-running, many-team strategy and roleplay game.
 Players submit structured orders. The app pre-rolls, pre-calculates and simulates as much as possible, and the DM reviews and publishes the results.
 
-The app is theme-neutral. "Utterdark" will be one preset ruleset.
+The app is theme-neutral. "Utterdark" is one preset ruleset.
+
+In the app, **/help/player** and **/help/dm** are short guides for players and the DM.
 
 **First time?** Follow **[docs/SETUP.md](docs/SETUP.md)**. It walks through putting the app online with free Supabase and Vercel accounts, on Windows, step by step.
 
@@ -18,7 +20,7 @@ The app is theme-neutral. "Utterdark" will be one preset ruleset.
 | 5 | Resolution engine (non-combat) | ✅ done |
 | 6 | Combat simulation | ✅ done |
 | 7 | Stealth, trades, Discord, history, export | ✅ done |
-| 8 | Polish, guides | next |
+| 8 | Polish: phone layout, DM keyboard shortcuts, performance, in-app guides | ✅ done |
 
 ## Tech
 
@@ -49,10 +51,11 @@ src/
     dm/            DM login, games, teams, round resolution, world map, map editor, ruleset editor
     api/assets     Serves uploaded images (DM only)
     api/play/map   The map image with the team's fog of war painted on
-    play/          Player screens: dashboard, map, orders, results, units, regions, inventory, rules
+    play/          Player screens: dashboard, map, orders, results, units, regions, inventory, trades, rules
+    help/          The player guide and DM guide
     api/health     JSON setup check
 drizzle/       SQL migrations (generated from schema.ts, applied on every deploy)
-scripts/       migrate.ts
+scripts/       migrate.ts, the Utterdark sheet importer, the load-test game
 docs/          Setup guide, data model, fog of war, resolving a round, Utterdark preset notes, proposals
 ```
 
@@ -65,6 +68,7 @@ docs/          Setup guide, data model, fog of war, resolving a round, Utterdark
 | `npm run typecheck` / `npm run lint` | Check types and code style |
 | `npm run db:generate` | After editing `src/db/schema.ts`: write a new SQL migration into `drizzle/` |
 | `npm run db:migrate` | Apply migrations to the database in `DATABASE_URL` (Vercel does this on each production deploy) |
+| `npm run seed:load-test` | Add a 15-team, 160-region test game to the database in `DATABASE_URL` (see [docs/PERFORMANCE.md](docs/PERFORMANCE.md)) |
 
 ## Security model
 

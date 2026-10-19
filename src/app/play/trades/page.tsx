@@ -36,7 +36,7 @@ export default async function TradesPage() {
   const past = trades.filter((t) => !pending.includes(t));
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
       <Card>
         <h2 className="text-lg font-medium">Open trades</h2>
         <p className="mt-1 text-sm text-muted">Accepted trades happen at the end of the round, if both sides still have what they offered.</p>

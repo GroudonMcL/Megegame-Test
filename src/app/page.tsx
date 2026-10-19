@@ -13,7 +13,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   return (
     <Page>
       <h1 className="text-3xl font-semibold tracking-tight">Megagame</h1>
-      <p className="mt-2 text-muted">Hello, world! Join your team with the code your DM gave you.</p>
+      <p className="mt-2 text-muted">Join your team with the code your DM gave you.</p>
 
       <div className="mt-8 grid gap-6">
         {current && (
@@ -38,6 +38,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <p className="text-sm text-muted">
           Running the game? <Link href="/dm/login" className="text-accent underline">DM login</Link>
+        </p>
+        <p className="text-sm text-muted">
+          New here? Read the <Link href="/help/player" className="text-accent underline">player guide</Link> or the{" "}
+          <Link href="/help/dm" className="text-accent underline">DM guide</Link>.
         </p>
       </div>
 

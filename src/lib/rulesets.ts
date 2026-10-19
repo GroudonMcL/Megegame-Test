@@ -11,7 +11,16 @@ export interface LoadedRuleset {
   version: number;
 }
 
+// Parsed rulesets kept between requests while the server is warm. A ruleset can
+// be large (Utterdark's is about 400 KB), so it's only read again when its
+// version changes, and every save bumps the version.
+const rulesetCache = new Map<string, LoadedRuleset>();
+
 export async function loadRuleset(gameId: string): Promise<LoadedRuleset> {
+  const [head] = await db.select({ version: schema.gameRulesets.version }).from(schema.gameRulesets).where(eq(schema.gameRulesets.gameId, gameId)).limit(1);
+  const hit = rulesetCache.get(gameId);
+  // A copy, so a caller that changes its ruleset can't change anyone else's.
+  if (head && hit?.version === head.version) return { ruleset: structuredClone(hit.ruleset), version: hit.version };
   const [row] = await db.select().from(schema.gameRulesets).where(eq(schema.gameRulesets.gameId, gameId)).limit(1);
   if (!row) {
     // Games created before rulesets existed start with a blank one.
@@ -19,11 +28,13 @@ export async function loadRuleset(gameId: string): Promise<LoadedRuleset> {
     await db.insert(schema.gameRulesets).values({ gameId, data: ruleset }).onConflictDoNothing();
     return { ruleset, version: 1 };
   }
-  const parsed = Ruleset.safeParse(row.data);
-  if (!parsed.success) {
-    throw new Error(`The stored ruleset for this game is invalid: ${parsed.error.issues[0]?.message}`);
+  const result = Ruleset.safeParse(row.data);
+  if (!result.success) {
+    throw new Error(`The stored ruleset for this game is invalid: ${result.error.issues[0]?.message}`);
   }
-  return { ruleset: parsed.data, version: row.version };
+  if (rulesetCache.size > 50) rulesetCache.clear();
+  rulesetCache.set(gameId, { ruleset: result.data, version: row.version });
+  return { ruleset: structuredClone(result.data), version: row.version };
 }
 
 export type SaveResult =

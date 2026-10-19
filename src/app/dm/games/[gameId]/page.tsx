@@ -9,6 +9,7 @@ import { regenerateJoinCode } from "../../actions";
 import { CreateTeamForm } from "../../DmForms";
 import { nextTeamColour } from "@/components/teamColours";
 import { RoundControls } from "./RoundControls";
+import { TeamEditor } from "./TeamEditor";
 import { viewAsTeamAction } from "./rounds";
 
 export default async function GameOverview({ params }: PageProps<"/dm/games/[gameId]">) {
@@ -33,7 +34,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
     : [[], []];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+    <div className="grid gap-6 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0">
       <Card className="lg:col-span-2">
         <h2 className="text-lg font-medium">{round ? `Round ${round.number}: ${round.status}` : "No round yet"}</h2>
         {round && (
@@ -55,6 +56,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="h-4 w-4 rounded-full" style={{ background: team.colour }} aria-hidden />
                   <span className="font-medium">{team.name}</span>
+                  {team.isNpc && <span className="rounded border border-border px-1.5 text-xs">NPC</span>}
                   <code className="rounded bg-background px-2 py-1 font-mono text-sm select-all">{team.joinCode}</code>
                   <form action={regenerateJoinCode} className="ml-auto">
                     <input type="hidden" name="teamId" value={team.id} />
@@ -77,6 +79,22 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
                     </Button>
                   </form>
                 </div>
+                <TeamEditor
+                  gameId={gameId}
+                  team={{
+                    id: team.id,
+                    name: team.name,
+                    colour: team.colour,
+                    isNpc: team.isNpc,
+                    baseRaceId: team.baseRaceId,
+                    raceIds: team.raceIds,
+                    resources: team.resources,
+                    secretObjectives: team.secretObjectives,
+                    notes: team.notes,
+                  }}
+                  races={ruleset.races.map((r) => ({ id: r.id, name: r.name }))}
+                  resources={ruleset.resources.map((r) => ({ id: r.id, name: r.name, icon: r.icon }))}
+                />
               </li>
             );
           })}

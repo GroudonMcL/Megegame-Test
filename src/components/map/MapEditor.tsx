@@ -279,7 +279,7 @@ export function MapEditor(props: {
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_24rem] [&>*]:min-w-0">
         <MapCanvas
           width={size.width}
           height={size.height}

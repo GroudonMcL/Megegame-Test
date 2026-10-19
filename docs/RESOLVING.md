@@ -9,6 +9,8 @@ Everything happens on the game's **Resolve round** tab.
    - **⚑ Flags** above the list show teams acting in the same region, orders aimed at another team, and different sides ending up in the same region (a likely fight). Linked orders share a **scene** number so you can resolve them together.
    - For each order you can edit the outcome text, add or take away resources, hide the rolls from the team, then **Accept**. You can also **Re-roll** it, **Mark failed** (any backup order after it becomes active), or **Skip** it.
    - **Accept all ready** accepts every Ready order in that action.
+   - **Filters**: show one **Team**, one **Action**, or **Only flagged** orders (those in a scene).
+   - **Keyboard shortcuts** (press **?** on the page for the list): **j**/**k** next/previous order, **a** accept and move on, **f** mark failed, **s** skip, **r** re-roll, **e** edit the outcome text (**Esc** to leave it), **Shift+A** accept all ready in this action, **p** prepare the next action. They're ignored while you're typing in a box.
    - When you accept, the app re-runs the order with the same dice against the current state, so earlier decisions are taken into account. If it can no longer happen, you're told why.
    - **Fights** caused by an order (a move into monsters, an Attack or a Capture Monster) are simulated and shown on the order with their log. See **[COMBAT.md](COMBAT.md)** for the rules and your controls.
 3. **Undo last** reverses the most recent accept, fail, skip or end of round, one step at a time.

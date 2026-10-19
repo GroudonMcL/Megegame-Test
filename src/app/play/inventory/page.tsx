@@ -17,7 +17,7 @@ export default async function InventoryPage() {
     rec.inputs.every((i) => (view.inventory[i.itemId] ?? 0) >= i.qty) && Object.entries(rec.resources).every(([k, v]) => (view.team.resources[k] ?? 0) >= v);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
       <Card>
         <h2 className="text-lg font-medium">Items</h2>
         {owned.length === 0 && <p className="mt-2 text-sm text-muted">Your inventory is empty.</p>}

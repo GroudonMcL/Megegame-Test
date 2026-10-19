@@ -21,7 +21,7 @@ export default async function Dashboard() {
   const owned = view.regions.filter((r) => r.ownerTeamId === view.team.id);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_22rem] [&>*]:min-w-0">
       <div className="space-y-4">
         <Card>
           <h2 className="text-lg font-medium">Resources</h2>
