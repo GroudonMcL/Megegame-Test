@@ -1,0 +1,93 @@
+import type { ReactNode } from "react";
+import { StatBlockView } from "@/components/StatBlockView";
+import { unitEffects, unitUpkeep } from "@/engine/orders/economy";
+import { milesPerRound } from "@/engine/orders/movement";
+import { unitBonuses, unitTags } from "@/engine/ruleset/derive";
+import { describeEffect, fmtRes, namesFrom } from "@/engine/ruleset/effects";
+import type { Ruleset } from "@/engine/ruleset/ruleset";
+import type { WorldUnit } from "@/engine/world/types";
+import { unitMaxHp } from "./RegionDetails";
+import { RenameUnit } from "./RenameUnit";
+
+// Everything about one of the team's own units: shown in the Units window and
+// in the side panel when the unit is clicked on the map.
+
+export const STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  hidden: "Stealthed",
+  tamed: "Tamed",
+  captured: "Captured",
+  stored: "Stored",
+  dead: "Dead",
+  disbanded: "Disbanded",
+};
+
+/** regionLabel: the unit's location as text (or a button, in the side panel). compact: a narrow panel. */
+export function UnitDetails({ unit: u, rules, regionLabel, compact = false }: { unit: WorldUnit; rules: Ruleset; regionLabel: ReactNode; compact?: boolean }) {
+  const names = namesFrom(rules);
+  const c = rules.creatures.find((x) => x.id === u.creatureId);
+  const archetype = rules.archetypes.find((x) => x.id === u.archetypeId);
+  const race = rules.races.find((x) => x.id === u.raceId);
+  const max = unitMaxHp(rules, u);
+  const per = milesPerRound(rules, u);
+  const tags = c ? unitTags(rules, c, u.archetypeId) : [];
+  const abilities = unitEffects(rules, u);
+  const upkeep = unitUpkeep(rules, u);
+  return (
+    <>
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
+        <RenameUnit unitId={u.id} name={u.name} placeholder={c?.statBlock.name ?? "Unit"} />
+        <span className="text-sm text-muted">
+          {[c?.statBlock.name ?? u.creatureId, archetype?.name, race?.name].filter(Boolean).join(" · ")}
+          {u.isLeader ? " · Leader" : ""}
+        </span>
+        <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-xs">{STATUS_LABEL[u.status] ?? u.status}</span>
+      </div>
+      <dl className={`mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm ${compact ? "" : "@xl:grid-cols-4"}`}>
+        <div>
+          <dt className="text-muted">HP</dt>
+          <dd className={u.hp < max / 2 ? "text-danger" : ""}>
+            {u.hp} / {max}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted">Location</dt>
+          <dd>{regionLabel}</dd>
+        </div>
+        <div>
+          <dt className="text-muted">Movement this round</dt>
+          <dd>
+            {Math.max(0, Math.round(per - u.milesUsed))} of {Math.round(per)} miles left
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted">Upkeep</dt>
+          <dd>{u.isLeader ? "none (leader)" : fmtRes(upkeep, rules.resources)}</dd>
+        </div>
+      </dl>
+      {tags.length > 0 && <p className="mt-2 text-xs text-muted">Tags: {tags.join(", ")}</p>}
+      <div className="mt-2 text-sm">
+        <span className="font-medium">Augments: </span>
+        {u.augmentIds.length ? u.augmentIds.map((id) => rules.items.find((x) => x.id === id)?.name ?? id).join(", ") : <span className="text-muted">none</span>}
+      </div>
+      {abilities.length > 0 && (
+        <div className="mt-2 text-sm">
+          <span className="font-medium">Abilities</span>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {abilities.map((e, i) => (
+              <li key={i}>{describeEffect(e, names)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {c && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm text-link">Stat block</summary>
+          <div className="mt-2">
+            <StatBlockView sb={c.statBlock} bonuses={unitBonuses(rules, u)} />
+          </div>
+        </details>
+      )}
+    </>
+  );
+}

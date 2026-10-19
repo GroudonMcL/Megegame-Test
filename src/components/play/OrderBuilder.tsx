@@ -35,6 +35,33 @@ export interface OrderBuilderProps {
   open: { open: boolean; reason: string };
   isDm: boolean;
   roundNumber: number | null;
+  /** A new order to add, from a quick action on the map (see QuickOrders). */
+  prefill?: OrderPrefill | null;
+}
+
+export interface OrderPrefill {
+  /** Different for every press, so the same quick action can be used twice. */
+  key: string;
+  /** The new order's ID (made on the server, so server and browser render the same). */
+  id: string;
+  actionTypeId: string;
+  unitId?: string;
+  regionId?: string;
+  targetId?: string;
+}
+
+/** The order a quick action asks for, with its unit, region or target filled in. */
+function prefillOrder(rules: Ruleset, p: OrderPrefill, slotsFree: boolean): OrderDraft | null {
+  const action = rules.actionTypes.find((a) => a.id === p.actionTypeId);
+  if (!action) return null;
+  const kinds = allowedKinds(action.kind);
+  const inputs: Record<string, unknown> = {};
+  action.inputs.forEach((input, i) => {
+    if (input.type === "unit" && p.unitId) inputs[String(i)] = input.multiple ? [p.unitId] : p.unitId;
+    if (input.type === "region" && p.regionId) inputs[String(i)] = p.regionId;
+    if (input.type === "targetUnit" && p.targetId) inputs[String(i)] = p.targetId;
+  });
+  return { id: p.id, kind: kinds.includes("numbered") && slotsFree ? "numbered" : kinds[0], actionTypeId: action.id, inputs, notes: "" };
 }
 
 function newId() {
@@ -70,6 +97,30 @@ export function OrderBuilder(props: OrderBuilderProps) {
 
   const check = useMemo(() => validateOrders(rules, view, orders), [rules, view, orders]);
   const byId = new Map(check.orders.map((c) => [c.id, c]));
+
+  // A quick action from the map: add its order to the list (keeping any unsaved
+  // changes), and for a move, go straight to picking the path.
+  const [seenPrefill, setSeenPrefill] = useState<string | null>(null);
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  if (props.prefill && props.prefill.key !== seenPrefill) {
+    setSeenPrefill(props.prefill.key);
+    const order = editable && !orders.some((o) => o.id === props.prefill!.id) ? prefillOrder(rules, props.prefill, check.slotsUsed < check.slotsTotal) : null;
+    if (order) {
+      setOrders([...orders, order]);
+      setDirty(true);
+      setMessage({ ok: true, text: `Added ${rules.actionTypes.find((a) => a.id === order.actionTypeId)?.name ?? "an order"}. Finish it below, then save or submit.` });
+      setScrollTo(order.id);
+      if (rules.actionTypes.find((a) => a.id === order.actionTypeId)?.handler === "move") setPicking(order.id);
+    }
+  }
+  useEffect(() => {
+    if (!props.prefill) return;
+    // Drop the quick action from the address, so a reload doesn't add it again.
+    router.replace("/play/orders", { scroll: false });
+  }, [props.prefill, router]);
+  useEffect(() => {
+    if (scrollTo) document.querySelector(`[data-order-id="${scrollTo}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [scrollTo]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -158,6 +209,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
             return (
               <li
                 key={o.id}
+                data-order-id={o.id}
                 draggable={editable}
                 onDragStart={() => setDragId(o.id)}
                 onDragOver={(e) => e.preventDefault()}

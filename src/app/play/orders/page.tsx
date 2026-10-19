@@ -1,11 +1,18 @@
-import { OrderBuilder } from "@/components/play/OrderBuilder";
+import { OrderBuilder, type OrderPrefill } from "@/components/play/OrderBuilder";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
 import { requireViewer } from "@/lib/viewer";
 
-export default async function OrdersPage() {
+const one = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
+
+export default async function OrdersPage({ searchParams }: PageProps<"/play/orders">) {
   const viewer = await requireViewer();
-  const loaded = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
+  const [loaded, params] = await Promise.all([loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm }), searchParams]);
   const { orderState } = loaded;
+  // ?add=<action>&unit=…|region=…|target=…&n=… comes from a quick action on the map.
+  const add = one(params.add);
+  const prefill: OrderPrefill | null = add
+    ? { key: one(params.n) ?? add, id: crypto.randomUUID(), actionTypeId: add, unitId: one(params.unit), regionId: one(params.region), targetId: one(params.target) }
+    : null;
   return (
     <OrderBuilder
       key={loaded.round?.id ?? "none"}
@@ -18,6 +25,7 @@ export default async function OrdersPage() {
       open={ordersOpen(loaded.round)}
       isDm={viewer.isDm}
       roundNumber={loaded.round?.number ?? null}
+      prefill={prefill}
     />
   );
 }

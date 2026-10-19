@@ -1,6 +1,6 @@
 import { PlayerShell } from "@/components/play/PlayerShell";
 import { teamThemeProps } from "@/components/theme/teamTheme";
-import { loadTeamView } from "@/lib/teamView";
+import { loadTeamView, ordersOpen } from "@/lib/teamView";
 import { requireViewer } from "@/lib/viewer";
 
 // Every player screen sits on the team's fogged map. The map, toolbar and dock
@@ -20,6 +20,8 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           isDm: viewer.isDm,
           round: round ? { number: round.number, status: round.status, deadline: round.deadline?.toISOString() ?? null } : null,
           orders: orderState?.submittedAt ? "submitted" : orders.length ? "draft" : "none",
+          // The DM viewing as a team can edit its orders even when they're closed.
+          ordersOpen: viewer.isDm ? { open: true, reason: "" } : ordersOpen(round),
           resources: rules.resources.map((r) => ({ id: r.id, name: r.name, icon: r.icon, amount: view.team.resources[r.id] ?? 0 })),
         }}
         view={view}

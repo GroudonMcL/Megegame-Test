@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui";
 import { regionTitle } from "@/components/play/format";
+import { ShowOnMap } from "@/components/play/mapSelection";
 import { addTo, buildingTier } from "@/engine/orders/economy";
 import type { ResourceAmounts } from "@/engine/ruleset/common";
 import { fmtRes } from "@/engine/ruleset/effects";
@@ -41,7 +42,7 @@ export default async function RegionsPage() {
       <Card>
         <p className="text-sm">
           {owned.length} region{owned.length === 1 ? "" : "s"} · production <strong>{fmtRes(totals.production, rules.resources)}</strong> · upkeep{" "}
-          <strong>{fmtRes(totals.upkeep, rules.resources)}</strong> per round (units&apos; upkeep is on the Units page)
+          <strong>{fmtRes(totals.upkeep, rules.resources)}</strong> per round (units&apos; upkeep is in the Units window)
         </p>
       </Card>
       <div className="grid gap-3 @2xl:grid-cols-2 [&>*]:min-w-0">
@@ -73,6 +74,7 @@ export default async function RegionsPage() {
                 <span className="text-ok">+ {fmtRes(production, rules.resources)}</span> · <span className="text-danger">− {fmtRes(upkeep, rules.resources)}</span>
               </p>
               {r.deposits.length > 0 && <p className="mt-1 text-xs text-muted">Deposits: {r.deposits.map((d) => d.name).join(", ")}</p>}
+              <ShowOnMap selection={{ kind: "region", id: r.id }} className="mt-3" />
             </Card>
           );
         })}

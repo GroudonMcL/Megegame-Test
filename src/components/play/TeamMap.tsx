@@ -23,11 +23,15 @@ export interface TeamMapProps {
   /** A path to draw, as region IDs, starting with where it begins. */
   path?: string[];
   onBackgroundClick?: () => void;
+  /** A unit badge was clicked: the region, and the owner (a team ID, or "wild"). */
+  onBadgeClick?: (regionId: string, owner: string) => void;
   className?: string;
   bare?: boolean;
+  /** Centre the map on this region whenever key changes. */
+  focus?: { nodeId: string; key: number } | null;
 }
 
-export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onBackgroundClick, className, bare }: TeamMapProps) {
+export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onBackgroundClick, onBadgeClick, className, bare, focus }: TeamMapProps) {
   const size = mapImage ?? DEFAULT_MAP_SIZE;
   const allTeams = new Map([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
   const colour = new Map([...allTeams].map(([id, t]) => [id, t.colour]));
@@ -85,16 +89,17 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
       nodes={nodes}
       edges={edges}
       selectedNodeId={selectedId}
-      onNodeClick={(id) => onRegionClick?.(id)}
+      onNodeClick={(id, e) => (e.badge && onBadgeClick ? onBadgeClick(id, e.badge) : onRegionClick?.(id))}
       onBackgroundClick={onBackgroundClick && (() => onBackgroundClick())}
       className={className}
       bare={bare}
+      focus={focus}
       fitToNodes
       renderNodeExtras={(n, p, scale) => {
         const list = badges.get(n.id) ?? [];
         const stepIndex = path ? path.indexOf(n.id) : -1;
         return (
-          <g pointerEvents="none">
+          <g>
             {list.map((b, i) => {
               // A pill: emblem on the left, count on the right. Own units get square corners.
               const h = 18 * scale;
@@ -102,7 +107,8 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
               const x = p.x + 12 * scale + i * (w + 3 * scale);
               const y = p.y - h / 2;
               return (
-                <g key={b.owner}>
+                <g key={b.owner} data-badge={onBadgeClick ? b.owner : undefined} pointerEvents={onBadgeClick ? undefined : "none"}>
+                  <title>{`${b.count} ${b.own ? "of your units" : b.owner === "wild" ? "wild monster" + (b.count === 1 ? "" : "s") : `unit${b.count === 1 ? "" : "s"} of ${allTeams.get(b.owner)?.name ?? "another side"}`}`}</title>
                   <rect x={x} y={y} width={w} height={h} rx={b.own ? 4 * scale : h / 2} fill={b.colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} />
                   <EmblemGlyph glyph={b.glyph} x={x + h * 0.55} y={p.y} size={h * 0.68} fill={b.ink} />
                   <text x={x + w - h * 0.5} y={y + h * 0.7} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-label)" stroke="var(--map-label-outline)" strokeWidth={2 * scale} paintOrder="stroke">
@@ -112,7 +118,7 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
               );
             })}
             {stepIndex > 0 && (
-              <text x={p.x} y={p.y + 4 * scale} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-outline)">
+              <text pointerEvents="none" x={p.x} y={p.y + 4 * scale} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-outline)">
                 {stepIndex}
               </text>
             )}

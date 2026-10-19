@@ -42,7 +42,8 @@ export interface MapCanvasProps {
   draggable?: boolean;
   snap?: number | null;
   onNodeMove?: (id: string, x: number, y: number) => void;
-  onNodeClick?: (id: string, e: { shiftKey: boolean }) => void;
+  /** badge = the data-badge value of the extra (from renderNodeExtras) that was clicked, if any. */
+  onNodeClick?: (id: string, e: { shiftKey: boolean; badge?: string }) => void;
   onEdgeClick?: (id: string) => void;
   onBackgroundClick?: (x: number, y: number) => void;
   /** Draw a rubber-band line from this node to the pointer (connect mode). */
@@ -56,6 +57,8 @@ export interface MapCanvasProps {
   fitToNodes?: boolean;
   /** No frame (border and rounded corners), for a map that fills the screen. */
   bare?: boolean;
+  /** Centre the view on this node whenever key changes. */
+  focus?: { nodeId: string; key: number } | null;
 }
 
 interface View {
@@ -77,7 +80,7 @@ export function MapCanvas(props: MapCanvasProps) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const gesture = useRef<
     | { kind: "pan"; startClient: { x: number; y: number }; startView: View; moved: boolean; edgeId?: string }
-    | { kind: "node"; id: string; startClient: { x: number; y: number }; moved: boolean; shift: boolean }
+    | { kind: "node"; id: string; startClient: { x: number; y: number }; moved: boolean; shift: boolean; badge?: string }
     | { kind: "pinch"; startDist: number; startView: View; mid: { x: number; y: number } }
     | null
   >(null);
@@ -124,6 +127,14 @@ export function MapCanvas(props: MapCanvasProps) {
   if (fittedFor !== fitFor) {
     setFittedFor(fitFor);
     setView(fitView());
+  }
+
+  // Centre on a node when asked (keeping the zoom).
+  const [focusedKey, setFocusedKey] = useState<number | null>(null);
+  if (props.focus && props.focus.key !== focusedKey) {
+    setFocusedKey(props.focus.key);
+    const n = nodes.find((x) => x.id === props.focus!.nodeId);
+    if (n) setView((v) => ({ ...v, x: n.x * width - v.w / 2, y: n.y * height - v.h / 2 }));
   }
 
   /** Screen pixels → map pixels. */
@@ -180,7 +191,8 @@ export function MapCanvas(props: MapCanvasProps) {
     }
     const nodeId = (e.target as Element).closest("[data-node-id]")?.getAttribute("data-node-id");
     if (nodeId) {
-      gesture.current = { kind: "node", id: nodeId, startClient: { x: e.clientX, y: e.clientY }, moved: false, shift: e.shiftKey };
+      const badge = (e.target as Element).closest("[data-badge]")?.getAttribute("data-badge") ?? undefined;
+      gesture.current = { kind: "node", id: nodeId, startClient: { x: e.clientX, y: e.clientY }, moved: false, shift: e.shiftKey, badge };
       return;
     }
     const edgeId = (e.target as Element).closest("[data-edge-id]")?.getAttribute("data-edge-id") ?? undefined;
@@ -222,7 +234,7 @@ export function MapCanvas(props: MapCanvasProps) {
       if (g.moved && props.draggable && dragPos) {
         props.onNodeMove?.(g.id, dragPos.x, dragPos.y);
       } else if (!g.moved) {
-        props.onNodeClick?.(g.id, { shiftKey: g.shift || e.shiftKey });
+        props.onNodeClick?.(g.id, { shiftKey: g.shift || e.shiftKey, badge: g.badge });
       }
       setDragPos(null);
     } else if (g.kind === "pan" && !g.moved && g.edgeId) {

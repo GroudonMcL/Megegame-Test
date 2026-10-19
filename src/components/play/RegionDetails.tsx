@@ -24,8 +24,31 @@ export function ownerName(view: TeamView, id: string | null) {
   return view.teams.find((t) => t.id === id)?.name ?? "another faction";
 }
 
-/** What the team knows about a region. showTitle = false when the panel around it already names the region. */
-export function RegionDetails({ region, view, rules, showTitle = true }: { region: ViewRegion; view: TeamView; rules: Ruleset; showTitle?: boolean }) {
+/**
+ * What the team knows about a region. showTitle = false when the panel around
+ * it already names the region; onUnitClick makes the units listed clickable.
+ */
+export function RegionDetails({
+  region,
+  view,
+  rules,
+  showTitle = true,
+  onUnitClick,
+}: {
+  region: ViewRegion;
+  view: TeamView;
+  rules: Ruleset;
+  showTitle?: boolean;
+  onUnitClick?: (kind: "unit" | "other", id: string) => void;
+}) {
+  const unitButton = (kind: "unit" | "other", id: string, text: string) =>
+    onUnitClick ? (
+      <button type="button" className="text-left text-link underline-offset-2 hover:underline" onClick={() => onUnitClick(kind, id)}>
+        {text}
+      </button>
+    ) : (
+      text
+    );
   const names = namesFrom(rules);
   const tier = rules.settlementTiers.find((t) => t.id === region.settlementTierId);
   const own = view.ownUnits.filter((u) => u.regionId === region.id && ON_MAP_STATUSES.has(u.status));
@@ -117,14 +140,14 @@ export function RegionDetails({ region, view, rules, showTitle = true }: { regio
             {own.map((u) => (
               <li key={u.id}>
                 <TeamEmblem team={view.team} size={14} className="mr-1 align-[-2px]" />
-                {unitLabel(rules, u)} · {u.status === "dead" ? "dead" : `${u.hp}/${unitMaxHp(rules, u)} HP`}
+                {unitButton("unit", u.id, unitLabel(rules, u))} · {u.status === "dead" ? "dead" : `${u.hp}/${unitMaxHp(rules, u)} HP`}
                 {u.status === "hidden" ? " · stealthed" : ""}
               </li>
             ))}
             {others.map((u) => (
               <li key={u.id}>
                 <TeamEmblem team={(u.ownerTeamId && view.teams.find((t) => t.id === u.ownerTeamId)) || null} size={14} className="mr-1 align-[-2px]" />
-                {u.creatureName} · {u.ownerTeamId ? ownerName(view, u.ownerTeamId) : "wild"}
+                {unitButton("other", u.id, u.creatureName)} · {u.ownerTeamId ? ownerName(view, u.ownerTeamId) : "wild"}
                 {u.dead ? " · dead" : ""}
               </li>
             ))}

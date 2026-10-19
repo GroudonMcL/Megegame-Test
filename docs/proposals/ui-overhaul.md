@@ -1,6 +1,6 @@
 # Proposal: UI overhaul
 
-Status: **approved**. Phase 1 (theme) and Phase 2 (layout shell) are built.
+Status: **approved**. Phase 1 (theme), Phase 2 (layout shell) and Phase 3 (click-to-inspect) are built.
 
 The app becomes map-first: the map is always on screen and everything else opens on top of it. Later phases replace map nodes with drawn regions, add drag-to-move with drawn paths, an optional 3D map, and a simpler phone view.
 

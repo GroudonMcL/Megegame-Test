@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { logout } from "@/app/actions";
 import { stopViewingAs } from "@/app/play/actions";
@@ -14,11 +15,15 @@ import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button, IconButton } from "@/components/ui";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
+import { ON_MAP_STATUSES } from "@/engine/world/types";
 import { Countdown } from "./Countdown";
 import { regionTitle } from "./format";
 import { MapKey } from "./MapKey";
-import { RegionDetails } from "./RegionDetails";
+import { MapSelectionContext, type MapSelection } from "./mapSelection";
+import { QuickOrders } from "./QuickOrders";
+import { ownerName, RegionDetails } from "./RegionDetails";
 import { TeamMap } from "./TeamMap";
+import { UnitDetails } from "./UnitDetails";
 
 // The player screen: the team's fogged map is always there; every other screen
 // opens as a window over it, and clicking a region opens its details on the side.
@@ -42,6 +47,8 @@ export interface ToolbarInfo {
   isDm: boolean;
   round: { number: number; status: string; deadline: string | null } | null;
   orders: "submitted" | "draft" | "none";
+  /** Whether orders can be changed now, and why not. */
+  ordersOpen: { open: boolean; reason: string };
   resources: { id: string; name: string; icon: string; amount: number }[];
 }
 
@@ -58,9 +65,29 @@ export function PlayerShell({
   mapImage: { width: number; height: number; url: string } | null;
   children: ReactNode;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selection, setSelection] = useState<MapSelection | null>(null);
   const [leaving, setLeaving] = useState(false);
-  const region = view.regions.find((r) => r.id === selected);
+  const [focus, setFocus] = useState<{ nodeId: string; key: number } | null>(null);
+  const router = useRouter();
+  const panel = selection && sidePanelFor(selection, view, rules, info.ordersOpen, setSelection);
+
+  // "Show on map" from a window: close the window, select the thing and centre the map on it.
+  const showOnMap = (s: MapSelection) => {
+    const regionId = s.kind === "region" ? s.id : s.kind === "unit" ? view.ownUnits.find((u) => u.id === s.id)?.regionId : view.otherUnits.find((u) => u.id === s.id)?.regionId;
+    setSelection(s);
+    if (regionId) setFocus((f) => ({ nodeId: regionId, key: (f?.key ?? 0) + 1 }));
+    router.push("/play");
+  };
+
+  // A unit badge: one unit opens that unit, several open the region (which lists them).
+  const onBadge = (regionId: string, owner: string) => {
+    const units =
+      owner === view.team.id
+        ? view.ownUnits.filter((u) => u.regionId === regionId && ON_MAP_STATUSES.has(u.status)).map((u) => u.id)
+        : view.otherUnits.filter((u) => u.regionId === regionId && (u.ownerTeamId ?? "wild") === owner).map((u) => u.id);
+    if (units.length === 1) setSelection({ kind: owner === view.team.id ? "unit" : "other", id: units[0] });
+    else setSelection({ kind: "region", id: regionId });
+  };
 
   const toolbar = (
     <Toolbar>
@@ -106,14 +133,29 @@ export function PlayerShell({
     <MapShell
       toolbar={toolbar}
       dock={<Dock tools={PLAYER_TOOLS} closeHref="/play" />}
-      map={<TeamMap view={view} rules={rules} mapImage={mapImage} selectedId={selected} onRegionClick={setSelected} onBackgroundClick={() => setSelected(null)} className="h-full" bare />}
+      map={
+        <TeamMap
+          view={view}
+          rules={rules}
+          mapImage={mapImage}
+          selectedId={panel?.regionId}
+          onRegionClick={(id) => setSelection({ kind: "region", id })}
+          onBadgeClick={onBadge}
+          onBackgroundClick={() => setSelection(null)}
+          className="h-full"
+          bare
+          focus={focus}
+        />
+      }
     >
-      <WindowSlot tools={PLAYER_TOOLS} closeHref="/play">
-        {children}
-      </WindowSlot>
-      {region && (
-        <SidePanel title={regionTitle(region)} onClose={() => setSelected(null)}>
-          <RegionDetails region={region} view={view} rules={rules} showTitle={false} />
+      <MapSelectionContext value={showOnMap}>
+        <WindowSlot tools={PLAYER_TOOLS} closeHref="/play">
+          {children}
+        </WindowSlot>
+      </MapSelectionContext>
+      {panel && (
+        <SidePanel title={panel.title} onClose={() => setSelection(null)}>
+          {panel.body}
         </SidePanel>
       )}
       <MapKey view={view} />
@@ -130,6 +172,84 @@ export function PlayerShell({
       </Modal>
     </MapShell>
   );
+}
+
+/**
+ * The side panel for what's selected, or null if it's gone (e.g. the unit
+ * moved out of sight after a refresh). Shows only what the team's view holds.
+ */
+function sidePanelFor(
+  sel: MapSelection,
+  view: TeamView,
+  rules: Ruleset,
+  open: { open: boolean; reason: string },
+  select: (s: MapSelection | null) => void,
+): { title: ReactNode; body: ReactNode; regionId: string | null } | null {
+  const regionLink = (id: string | null) => {
+    const r = view.regions.find((x) => x.id === id);
+    if (!r) return "off the map";
+    return (
+      <button type="button" className="text-left text-link underline-offset-2 hover:underline" onClick={() => select({ kind: "region", id: r.id })}>
+        {regionTitle(r)}
+      </button>
+    );
+  };
+
+  if (sel.kind === "region") {
+    const region = view.regions.find((r) => r.id === sel.id);
+    if (!region) return null;
+    return {
+      title: regionTitle(region),
+      regionId: region.id,
+      body: (
+        <>
+          <RegionDetails region={region} view={view} rules={rules} showTitle={false} onUnitClick={(kind, id) => select({ kind, id })} />
+          <QuickOrders rules={rules} target={{ kind: "region", region }} open={open} />
+        </>
+      ),
+    };
+  }
+
+  if (sel.kind === "unit") {
+    const unit = view.ownUnits.find((u) => u.id === sel.id);
+    if (!unit) return null;
+    const creature = rules.creatures.find((c) => c.id === unit.creatureId);
+    return {
+      title: unit.name || creature?.statBlock.name || "Unit",
+      regionId: unit.regionId,
+      body: (
+        <>
+          <UnitDetails unit={unit} rules={rules} regionLabel={regionLink(unit.regionId)} compact />
+          <QuickOrders rules={rules} target={{ kind: "unit", unit }} open={open} />
+          <Link href="/play/units" className="mt-3 inline-block text-xs text-link underline">
+            All your units →
+          </Link>
+        </>
+      ),
+    };
+  }
+
+  const unit = view.otherUnits.find((u) => u.id === sel.id);
+  if (!unit) return null;
+  const owner = unit.ownerTeamId ? (view.teams.find((t) => t.id === unit.ownerTeamId) ?? null) : null;
+  return {
+    title: unit.creatureName,
+    regionId: unit.regionId,
+    body: (
+      <>
+        <p className="flex items-center gap-2">
+          <TeamEmblem team={owner} size={22} />
+          <span>
+            {unit.creatureName} · <strong>{unit.ownerTeamId ? ownerName(view, unit.ownerTeamId) : "wild monster"}</strong>
+            {unit.dead ? " · dead" : ""}
+          </span>
+        </p>
+        <p className="mt-2">In {regionLink(unit.regionId)}</p>
+        <p className="mt-2 text-xs text-muted">You can only make out its type and who it belongs to. {unit.ownerTeamId ? "" : "Once you've met a monster type, its stat block is in your Rules."}</p>
+        <QuickOrders rules={rules} target={{ kind: "other", unit }} open={open} />
+      </>
+    ),
+  };
 }
 
 function RoundChip({ info }: { info: ToolbarInfo }) {
