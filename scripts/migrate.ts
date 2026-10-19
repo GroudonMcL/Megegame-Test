@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { parseConnectionString } from "../src/db/connectionString";
 import * as schema from "../src/db/schema";
 import { convertMaps } from "./convert-maps";
+import { untagActions } from "./untag-actions";
 
 config({ path: ".env.local" });
 config();
@@ -30,6 +31,7 @@ async function main() {
   await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
   // One-off data changes that need app code, not just SQL.
   await convertMaps(drizzle(client, { schema }));
+  await untagActions(drizzle(client, { schema }));
   await client.end();
   console.log("Migrations complete.");
 }

@@ -50,7 +50,8 @@ export function newOrder(
 
 export interface MoveStart {
   at: Pt;
-  regionId: string;
+  /** Null = ground the team doesn't know (after an earlier move into the fog). */
+  regionId: string | null;
   /** Fraction of the round's movement each unit has used so far (same order as the units). */
   used: number[];
 }
@@ -61,8 +62,8 @@ export function moveStart(check: OrdersCheck, unitIds: string[]): MoveStart | { 
   if (!spots.length || spots.some((s) => !s)) return { error: "Those units can't move." };
   const regionId = spots[0].regionId;
   if (spots.some((s) => s.regionId !== regionId)) return { error: "Those units end up in different places; move them one at a time." };
-  if (!regionId || regionId === UNKNOWN_REGION || !spots[0].at) return { error: "Those units' earlier move goes somewhere you can't see, so the map can't plan from there. Add the next move in the Orders window." };
-  return { at: spots[0].at, regionId, used: spots.map((s) => s.used) };
+  if (!regionId || !spots[0].at) return { error: "Those units aren't on the map." };
+  return { at: spots[0].at, regionId: regionId === UNKNOWN_REGION ? null : regionId, used: spots.map((s) => s.used) };
 }
 
 /** What a move would do, for the preview line. */
@@ -94,8 +95,8 @@ export function orderUnits(rules: Ruleset, order: OrderDraft): string[] {
  * to. Only for units with no moves of their own yet (so they are where that
  * move starts when it happens).
  */
-export function findJoin(rules: Ruleset, view: TeamView, orders: OrderDraft[], action: Action, unitIds: string[], from: string, to: string | null): OrderDraft | null {
-  if (!to) return null;
+export function findJoin(rules: Ruleset, view: TeamView, orders: OrderDraft[], action: Action, unitIds: string[], from: string | null, to: string | null): OrderDraft | null {
+  if (!from || !to) return null;
   const input = action.inputs[unitInput(action)];
   if (!input || input.type !== "unit" || !input.multiple) return null;
   const moving = new Set(orders.filter((o) => rules.actionTypes.find((a) => a.id === o.actionTypeId)?.handler === "move").flatMap((o) => orderUnits(rules, o)));

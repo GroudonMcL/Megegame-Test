@@ -46,7 +46,7 @@ export interface TeamMapProps {
   routes?: PlannedRoute[];
   onRouteClick?: (id: string) => void;
   /** The move being planned: the line it walks, the rest to where it's aimed (if it stops short), and a label. */
-  preview?: { walked: Pt[]; rest: Pt[]; ok: boolean; label: string } | null;
+  preview?: { walked: Pt[]; rest: Pt[]; ok: boolean; forced?: boolean; label: string } | null;
   onHover?: (p: Pt | null) => void;
   /** Height map and lighting: offers the 3D view. */
   map3d?: Map3dInfo;
@@ -187,7 +187,7 @@ export function TeamMap(props: TeamMapProps) {
         ],
         lines: preview
           ? [
-              { key: "walked", points: preview.walked, colour: preview.ok ? "var(--map-path)" : "var(--danger)", dashed: true },
+              { key: "walked", points: preview.walked, colour: preview.forced ? "var(--map-forced)" : preview.ok ? "var(--map-path)" : "var(--danger)", dashed: !preview.forced },
               { key: "rest", points: preview.rest, colour: "var(--danger)", dashed: true },
             ]
           : [],
@@ -224,7 +224,7 @@ function previewLabel(preview: NonNullable<TeamMapProps["preview"]>) {
     at: tip ?? ([0, 0] as Pt),
     content: (
       <span
-        className={`pointer-events-none ml-24 block -translate-y-4 rounded-md border px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${preview.ok ? "border-accent text-white" : "border-danger text-danger"}`}
+        className={`pointer-events-none ml-24 block -translate-y-4 rounded-md border px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${preview.forced ? "border-[var(--map-forced)] text-[var(--map-forced)]" : preview.ok ? "border-accent text-white" : "border-danger text-danger"}`}
         style={{ background: "var(--map-outline)" }}
       >
         {preview.label}
@@ -262,7 +262,7 @@ function PreviewLine({ preview, width, height, scale }: { preview: NonNullable<T
   const line = (p: Pt[]) => p.map(([x, y]) => `${x * width},${y * height}`).join(" ");
   const tip = preview.rest.length ? preview.rest[preview.rest.length - 1] : preview.walked[preview.walked.length - 1];
   if (!tip) return null;
-  const colour = preview.ok ? "var(--map-path)" : "var(--danger)";
+  const colour = preview.forced ? "var(--map-forced)" : preview.ok ? "var(--map-path)" : "var(--danger)";
   const fontSize = 12 * scale;
   const w = Math.max(40 * scale, preview.label.length * fontSize * 0.56 + 12 * scale);
   return (
@@ -270,7 +270,15 @@ function PreviewLine({ preview, width, height, scale }: { preview: NonNullable<T
       {preview.walked.length > 1 && (
         <>
           <polyline points={line(preview.walked)} fill="none" stroke="var(--map-outline)" strokeOpacity={0.6} strokeWidth={6 * scale} strokeLinejoin="round" strokeLinecap="round" />
-          <polyline points={line(preview.walked)} fill="none" stroke={colour} strokeWidth={3 * scale} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={`${8 * scale} ${5 * scale}`} />
+          {preview.forced ? (
+            // A forced march: a solid double line.
+            <>
+              <polyline points={line(preview.walked)} fill="none" stroke={colour} strokeWidth={6 * scale} strokeLinejoin="round" strokeLinecap="round" />
+              <polyline points={line(preview.walked)} fill="none" stroke="var(--map-outline)" strokeWidth={2 * scale} strokeLinejoin="round" strokeLinecap="round" />
+            </>
+          ) : (
+            <polyline points={line(preview.walked)} fill="none" stroke={colour} strokeWidth={3 * scale} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={`${8 * scale} ${5 * scale}`} />
+          )}
         </>
       )}
       {preview.rest.length > 1 && <polyline points={line(preview.rest)} fill="none" stroke="var(--danger)" strokeWidth={2.5 * scale} strokeDasharray={`${4 * scale} ${4 * scale}`} />}
@@ -279,7 +287,7 @@ function PreviewLine({ preview, width, height, scale }: { preview: NonNullable<T
       ))}
       <g transform={`translate(${tip[0] * width + 12 * scale} ${tip[1] * height - 22 * scale})`}>
         <rect width={w} height={20 * scale} rx={6 * scale} fill="var(--map-outline)" fillOpacity={0.85} stroke={colour} strokeWidth={1.5 * scale} />
-        <text x={6 * scale} y={14 * scale} fontSize={fontSize} fontWeight={600} fill={preview.ok ? "#fff" : "var(--danger)"}>
+        <text x={6 * scale} y={14 * scale} fontSize={fontSize} fontWeight={600} fill={preview.forced ? "var(--map-forced)" : preview.ok ? "#fff" : "var(--danger)"}>
           {preview.label}
         </text>
       </g>

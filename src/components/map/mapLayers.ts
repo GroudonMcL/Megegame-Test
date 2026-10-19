@@ -1,7 +1,7 @@
 import { sharedBorder } from "@/engine/geo/regions";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { MapEdge } from "./MapCanvas";
-import { terrainColour } from "./terrainStyle";
+import { terrainColour, terrainEffect } from "./terrainStyle";
 
 // What the map draws for connections, shared by the player and DM maps:
 //  - a link (regions that don't touch): a curve between their centres;
@@ -55,6 +55,6 @@ export function connectionEdges(
 export function terrainLayer(areas: { id: string; terrainId: string; pieces: Pt[][][] }[], rules: Ruleset) {
   return areas.map((a) => {
     const t = rules.terrainTypes.find((x) => x.id === a.terrainId);
-    return { id: a.id, pieces: a.pieces, colour: terrainColour(t), title: t?.name ?? a.terrainId };
+    return { id: a.id, pieces: a.pieces, colour: terrainColour(t), title: t?.name ?? a.terrainId, effect: terrainEffect(t) };
   });
 }

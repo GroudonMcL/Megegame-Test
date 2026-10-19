@@ -456,12 +456,13 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
         }
         if (!path.length) break;
         const startAt = s.unitPos[units[0].id];
-        if (!startAt || !from || from === UNKNOWN_REGION) {
+        if (!startAt || !from) {
           note("These units are somewhere you can't see after an earlier move; the DM works out this one.");
           break;
         }
         const group = units.map((u) => ({ unit: u, used: s.unitUsed[u.id] ?? 1 }));
-        const route = traceRoute(r, routeMap ??= routeMapFromView(view), startAt, from, path, group, mode);
+        // After a move into ground the team doesn't know, the next one starts there (in no known region).
+        const route = traceRoute(r, routeMap ??= routeMapFromView(view), startAt, from === UNKNOWN_REGION ? null : from, path, group, mode);
         if (route.blocked) problem(route.blocked);
         if (route.outOfMovement) {
           group.forEach((g, i) => {

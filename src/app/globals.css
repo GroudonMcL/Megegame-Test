@@ -54,6 +54,8 @@
   --map-border: #f1f5f9;
   --map-water: #38bdf8;
   --map-path: #22c55e;
+  /* A move that is a forced march (double the distance, at a cost). */
+  --map-forced: #ff8a2a;
   --map-label: #ffffff;
   --map-label-outline: #000000;
   --wild: #dc2626;

@@ -21,6 +21,7 @@ export function routeMapFromView(view: TeamView): RouteMap {
       return !r ? "an unknown region" : r.state === "frontier" ? `${r.code} (unexplored)` : r.name ? `${r.code} ${r.name}` : r.code;
     },
     connections: view.connections,
+    knowsBorders: (id) => byId.get(id)?.state === "visible",
     terrain: view.terrain.flatMap((t) => t.pieces.map((rings) => ({ terrainId: t.terrainId, rings }))),
     scale: view.map,
     partial: true,

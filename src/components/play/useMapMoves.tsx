@@ -8,7 +8,7 @@ import type { Pt } from "@/engine/geo/polygon";
 import { milesPerRound, modeMultiplier } from "@/engine/orders/movement";
 import type { PathStep, RouteResult } from "@/engine/orders/route";
 import { routeMapFromView } from "@/engine/orders/routeMap";
-import { UNKNOWN_REGION, validateOrders, type OrderDraft, type OrdersCheck } from "@/engine/orders/validate";
+import { validateOrders, type OrderDraft, type OrdersCheck } from "@/engine/orders/validate";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES, type WorldUnit } from "@/engine/world/types";
@@ -91,7 +91,7 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
   // Where units with queued moves end up.
   const ghosts = view.ownUnits.flatMap((u) => {
     const end = check.units[u.id];
-    return moving.has(u.id) && canMove(u) && end?.at && end.regionId && end.regionId !== UNKNOWN_REGION ? [{ id: u.id, regionId: end.regionId, at: end.at }] : [];
+    return moving.has(u.id) && canMove(u) && end?.at && end.regionId ? [{ id: u.id, regionId: end.regionId, at: end.at }] : [];
   });
 
   const routes: PlannedRoute[] = check.orders.flatMap((c) =>
@@ -223,15 +223,30 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
   let label = "";
   if (plan) {
     const steps = plan.cursor ? [...plan.stops, plan.cursor] : plan.stops;
-    const action = actionsFor(plan)[0];
+    const actions = actionsFor(plan);
     const units = unitsOf(plan.unitIds);
+    let action = actions[0];
     if (action && steps.length) {
-      const route = previewMove(rules, routeMap, units, plan.start, steps, action);
+      let route = previewMove(rules, routeMap, units, plan.start, steps, action);
+      // Too far for a normal move, but a forced march would get there: show that instead (it's what letting go will queue).
+      let forced = false;
+      const march = actions.find((a) => moveMode(a) === "forceMarch");
+      if (route.outOfMovement && !route.blocked && march && march !== action) {
+        const marched = previewMove(rules, routeMap, units, plan.start, steps, march);
+        if (!marched.blocked && !marched.outOfMovement) {
+          action = march;
+          route = marched;
+          forced = true;
+        }
+      }
       const left = milesLeft(rules, units, plan.start, action);
       const ok = !route.blocked && !route.outOfMovement;
-      label = route.blocked ? "Can't cross here" : route.outOfMovement ? `Too far (${left} mi left)` : `${miles(route)} / ${left} mi${route.unknown ? " · into the unknown" : ""}`;
+      const distance = `${miles(route)} / ${left} mi${route.unknown ? " · into the unknown" : ""}`;
+      const marchLeft = march && march !== action ? milesLeft(rules, units, plan.start, march) : null;
+      const tooFar = marchLeft !== null ? `Too far (${left} mi left, ${marchLeft} on a forced march)` : `Too far (${left} mi left)`;
+      label = route.blocked ? "Can't cross here" : route.outOfMovement ? tooFar : forced ? `Forced march · ${distance}` : distance;
       const aim = steps[steps.length - 1];
-      preview = { walked: route.walked, rest: ok || !Array.isArray(aim) ? [] : [route.end, aim], ok, label };
+      preview = { walked: route.walked, rest: ok || !Array.isArray(aim) ? [] : [route.end, aim], ok, forced, label };
     }
   }
 

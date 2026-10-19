@@ -72,7 +72,7 @@ export interface MapCanvasProps {
   /** Centre the view on this node whenever key changes. */
   focus?: { nodeId: string; key: number } | null;
   /** Difficult ground, hatched in its colour: pieces of outlines (outer ring, then holes). */
-  terrain?: { id: string; pieces: Pt[][][]; colour: string; title?: string }[];
+  terrain?: { id: string; pieces: Pt[][][]; colour: string; title?: string; effect?: string }[];
   /** Extra SVG on top of everything (unit badges, paths), given the screen scale. */
   overlay?: (scale: number) => ReactNode;
   /**
