@@ -15,6 +15,8 @@ export interface BadgeTeam {
 }
 
 export interface BadgeUnit {
+  /** Own units only, for dragging the stack. */
+  id?: string;
   regionId: string;
   /** Null = the region's centre. */
   x: number | null;
@@ -35,6 +37,8 @@ export interface BadgeGroup {
   count: number;
   dead: number;
   hidden: number;
+  /** The IDs of the units that have one. */
+  ids: string[];
 }
 
 /** Groups units by spot and owner. centre gives each region's centre. */
@@ -48,10 +52,11 @@ export function groupBadges(units: BadgeUnit[], centre: (regionId: string) => Pt
     const owner = u.ownerTeamId ?? "wild";
     const list = spots.get(spot) ?? [];
     let g = list.find((x) => x.owner === owner);
-    if (!g) list.push((g = { key: `${spot}|${owner}`, regionId: u.regionId, at, owner, team: u.ownerTeamId ? team(u.ownerTeamId) : undefined, count: 0, dead: 0, hidden: 0 }));
+    if (!g) list.push((g = { key: `${spot}|${owner}`, regionId: u.regionId, at, owner, team: u.ownerTeamId ? team(u.ownerTeamId) : undefined, count: 0, dead: 0, hidden: 0, ids: [] }));
     g.count++;
     if (u.dead) g.dead++;
     if (u.hidden) g.hidden++;
+    if (u.id) g.ids.push(u.id);
     spots.set(spot, list);
   }
   return [...spots.values()];
@@ -60,7 +65,9 @@ export function groupBadges(units: BadgeUnit[], centre: (regionId: string) => Pt
 /**
  * The pills for one spot, in a row centred just below it. ownTeamId's pills
  * get square corners. With clickable, each pill carries data-node-id and
- * data-badge so MapCanvas reports clicks on it.
+ * data-badge so MapCanvas reports clicks on it; a pill that handle names gets
+ * data-handle instead (it can be dragged). ghost = where units will be after
+ * their planned moves (dashed, see-through).
  */
 export function SpotBadges({
   groups,
@@ -69,6 +76,8 @@ export function SpotBadges({
   scale,
   ownTeamId,
   clickable,
+  handle,
+  ghost,
 }: {
   groups: BadgeGroup[];
   width: number;
@@ -76,6 +85,8 @@ export function SpotBadges({
   scale: number;
   ownTeamId?: string;
   clickable?: boolean;
+  handle?: (g: BadgeGroup) => string | undefined;
+  ghost?: boolean;
 }) {
   const h = 18 * scale;
   const w = h * 1.9;
@@ -93,8 +104,16 @@ export function SpotBadges({
         const colour = g.team?.colour ?? (g.owner === "wild" ? "var(--wild)" : "var(--map-unknown-owner)");
         const label = own ? "of your units" : g.owner === "wild" ? `wild monster${g.count === 1 ? "" : "s"}` : `unit${g.count === 1 ? "" : "s"} of ${g.team?.name ?? "another side"}`;
         return (
-          <g key={g.key} data-node-id={clickable ? g.regionId : undefined} data-badge={clickable ? g.owner : undefined} pointerEvents={clickable ? undefined : "none"} className={clickable ? "cursor-pointer" : undefined}>
-            <title>{`${g.count} ${label}${g.hidden ? ` (${g.hidden} hidden)` : ""}`}</title>
+          <g
+            key={g.key}
+            data-handle={handle?.(g)}
+            data-node-id={clickable ? g.regionId : undefined}
+            data-badge={clickable ? g.owner : undefined}
+            pointerEvents={clickable || handle?.(g) ? "auto" : "none"}
+            className={handle?.(g) ? "cursor-grab" : clickable ? "cursor-pointer" : undefined}
+            opacity={ghost ? 0.75 : undefined}
+          >
+            <title>{ghost ? `${g.count} of your units, after their planned moves (drag to move them on)` : `${g.count} ${label}${g.hidden ? ` (${g.hidden} hidden)` : ""}${handle?.(g) ? " (drag to move)" : ""}`}</title>
             <rect
               x={x}
               y={y}
@@ -104,7 +123,7 @@ export function SpotBadges({
               fill={colour}
               stroke="var(--map-outline)"
               strokeWidth={1.5 * scale}
-              strokeDasharray={g.hidden ? `${3 * scale} ${2 * scale}` : undefined}
+              strokeDasharray={g.hidden || ghost ? `${3 * scale} ${2 * scale}` : undefined}
             />
             <EmblemGlyph glyph={g.team ? emblemFor(g.team) : WILD_EMBLEM} x={x + h * 0.55} y={py} size={h * 0.68} fill={g.team ? emblemInk(g.team.colour) : "#ffffff"} />
             <text x={x + w - h * 0.5} y={y + h * 0.7} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-label)" stroke="var(--map-label-outline)" strokeWidth={2 * scale} paintOrder="stroke">

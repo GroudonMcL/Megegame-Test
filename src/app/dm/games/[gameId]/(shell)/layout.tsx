@@ -37,6 +37,7 @@ export default async function DmShellLayout({ children, params }: LayoutProps<"/
           teams={state.teams}
           terrainAreas={state.terrainAreas as TerrainAreaData[]}
           mapImage={state.mapImage}
+          map3d={state.map3d}
         />
       }
     >

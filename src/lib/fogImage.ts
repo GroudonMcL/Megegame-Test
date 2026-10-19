@@ -22,14 +22,18 @@ export function fogHoles(view: { regions: { x: number; y: number; polygon: [numb
   return view.regions.filter((r) => r.state !== "frontier").map((r) => ({ polygon: r.polygon, x: r.x, y: r.y, dim: r.state === "remembered" }));
 }
 
-/** An SVG of the fog layer: solid everywhere except softened holes over seen regions. */
-export function fogSvg(width: number, height: number, holes: FogHole[], radiusFraction: number): string {
+/**
+ * An SVG of the fog layer: solid everywhere except softened holes over seen
+ * regions. For the height map, colour = black (unseen ground is flat) and
+ * remembered regions are cleared like visible ones (hills don't change).
+ */
+export function fogSvg(width: number, height: number, holes: FogHole[], radiusFraction: number, opts: { colour?: string; dimClear?: boolean } = {}): string {
   const r = Math.max(8, Math.round(width * radiusFraction));
   // In the mask, white = fog shows, black = fog removed (grey = dimmed).
   const shapes = [...holes]
     .sort((a, b) => Number(b.dim) - Number(a.dim))
     .map((h) => {
-      const fill = h.dim ? "#737373" : "#000";
+      const fill = h.dim && !opts.dimClear ? "#737373" : "#000";
       if (h.polygon.length < 3) return `<circle cx="${(h.x * width).toFixed(1)}" cy="${(h.y * height).toFixed(1)}" r="${r}" fill="${fill}"/>`;
       const d = h.polygon.map(([x, y]) => `${(x * width).toFixed(1)} ${(y * height).toFixed(1)}`).join("L");
       return `<path d="M${d}Z" fill="${fill}"/>`;
@@ -43,7 +47,7 @@ export function fogSvg(width: number, height: number, holes: FogHole[], radiusFr
 <filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${blur}"/></filter>
 <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#fff"/><g filter="url(#soft)">${shapes}</g></mask>
 </defs>
-<rect width="${width}" height="${height}" fill="${FOG}" mask="url(#m)"/>
+<rect width="${width}" height="${height}" fill="${opts.colour ?? FOG}" mask="url(#m)"/>
 </svg>`;
 }
 
@@ -72,6 +76,21 @@ export async function renderFoggedMap(key: string, image: Buffer, holes: FogHole
     .composite([{ input: fog, top: 0, left: 0 }])
     .webp({ quality: 80 })
     .toBuffer();
+  cache.set(key, out);
+  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
+  return out;
+}
+
+/** The height map with unseen ground flattened, so its shape never reaches the browser. */
+export async function renderFoggedHeight(key: string, image: Buffer, holes: FogHole[], radiusFraction: number): Promise<Buffer> {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const base = sharp(image).greyscale();
+  const meta = await base.metadata();
+  const width = meta.width ?? 1;
+  const height = meta.height ?? 1;
+  const fog = Buffer.from(fogSvg(width, height, holes, radiusFraction, { colour: "#000", dimClear: true }));
+  const out = await base.composite([{ input: fog, top: 0, left: 0 }]).png().toBuffer();
   cache.set(key, out);
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
   return out;

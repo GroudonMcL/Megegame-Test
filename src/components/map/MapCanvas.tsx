@@ -84,6 +84,8 @@ export interface MapCanvasProps {
   onHandleClick?: (id: string, e: { button: number; shiftKey: boolean }) => void;
   /** Where the pointer is over the map (fractions), for drawing previews. */
   onHover?: (p: [number, number] | null) => void;
+  /** A colour laid over the map image (night), under everything drawn on it. */
+  tint?: string | null;
 }
 
 interface View {
@@ -295,7 +297,6 @@ export function MapCanvas(props: MapCanvasProps) {
 
   const pos = (n: MapNode) => (dragPos?.id === n.id ? { x: dragPos.x * width, y: dragPos.y * height } : { x: n.x * width, y: n.y * height });
   const byId = new Map(props.nodes.map((n) => [n.id, n]));
-  const r = 9 * scale;
   const linkFrom = props.linkFrom ? byId.get(props.linkFrom) : undefined;
 
   return (
@@ -324,139 +325,12 @@ export function MapCanvas(props: MapCanvasProps) {
         ) : (
           <rect x={0} y={0} width={width} height={height} fill="url(#map-grid)" className="text-foreground" />
         )}
+        {props.tint && <rect x={0} y={0} width={width} height={height} fill={props.tint} pointerEvents="none" />}
         <rect x={0} y={0} width={width} height={height} fill="none" stroke="currentColor" strokeOpacity={0.3} strokeWidth={2 * scale} className="text-foreground" />
 
-        {/* Region shapes: fills (owner tint) and outlines. The selected one last, so its outline is on top. */}
-        {[...props.nodes]
-          .filter((n) => n.polygon && n.polygon.length >= 3)
-          .sort((a, b) => Number(a.id === props.selectedNodeId) - Number(b.id === props.selectedNodeId))
-          .map((n) => {
-            const selected = props.selectedNodeId === n.id;
-            const d = `M${n.polygon!.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`;
-            return (
-              <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.55 : 1}>
-                <path d={d} fill={n.fill ?? "transparent"} fillOpacity={n.fill ? 0.3 : 1} stroke="var(--map-outline)" strokeOpacity={0.7} strokeWidth={4.5 * scale} strokeLinejoin="round" />
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-border)")}
-                  strokeOpacity={selected ? 1 : 0.85}
-                  strokeWidth={(selected ? 3.5 : 2) * scale}
-                  strokeLinejoin="round"
-                  strokeDasharray={n.dashed ? `${6 * scale} ${4 * scale}` : undefined}
-                />
-              </g>
-            );
-          })}
-
-        {props.terrain && props.terrain.length > 0 && (
-          <g pointerEvents="none">
-            <defs>
-              {props.terrain.map((t, i) => (
-                <pattern key={t.id} id={`terrain-${i}`} width={12 * scale} height={12 * scale} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                  <line x1={0} y1={0} x2={0} y2={12 * scale} stroke={t.colour} strokeWidth={3 * scale} strokeOpacity={0.55} />
-                </pattern>
-              ))}
-            </defs>
-            {props.terrain.map((t, i) => (
-              <path
-                key={t.id}
-                d={t.pieces
-                  .flat()
-                  .map((ring) => `M${ring.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`)
-                  .join("")}
-                fillRule="evenodd"
-                fill={`url(#terrain-${i})`}
-                stroke={t.colour}
-                strokeOpacity={0.7}
-                strokeWidth={1.5 * scale}
-              >
-                {t.title && <title>{t.title}</title>}
-              </path>
-            ))}
-          </g>
-        )}
-
-        {props.edges.map((e) => {
-          const a = byId.get(e.a);
-          const b = byId.get(e.b);
-          if (!a || !b) return null;
-          const selected = props.selectedEdgeId === e.id;
-          const stroke = selected ? "var(--accent)" : (e.colour ?? "var(--map-route)");
-          const strokeWidth = (selected ? 5 : e.heavy ? 4 : 2.5) * scale;
-          if (e.segments) {
-            // A blocked border: a heavy dashed line along the shared edge.
-            const d = e.segments.map(([[x1, y1], [x2, y2]]) => `M${x1 * width} ${y1 * height}L${x2 * width} ${y2 * height}`).join("");
-            return (
-              <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
-                <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
-                <path d={d} stroke="var(--map-outline)" strokeWidth={strokeWidth + 3 * scale} strokeOpacity={0.6} fill="none" strokeLinecap="round" />
-                <path d={d} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={`${5 * scale} ${4 * scale}`} fill="none" strokeLinecap="round" />
-              </g>
-            );
-          }
-          const pa = pos(a);
-          const pb = pos(b);
-          // Links bow out a little, so they don't hide what's under them.
-          const mx = (pa.x + pb.x) / 2 - (pb.y - pa.y) * 0.15;
-          const my = (pa.y + pb.y) / 2 + (pb.x - pa.x) * 0.15;
-          const d = e.curved ? `M${pa.x} ${pa.y}Q${mx} ${my} ${pb.x} ${pb.y}` : `M${pa.x} ${pa.y}L${pb.x} ${pb.y}`;
-          return (
-            <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
-              <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
-              <path
-                d={d}
-                fill="none"
-                stroke={stroke}
-                strokeOpacity={e.dim ? 0.35 : 0.9}
-                strokeWidth={strokeWidth}
-                strokeDasharray={e.dashed ? `${8 * scale} ${6 * scale}` : undefined}
-                style={{ filter: "drop-shadow(0 0 1px rgba(0,0,0,.9))" }}
-              />
-            </g>
-          );
-        })}
-
+        <MapLayers {...props} scale={scale} pos={pos} />
         {linkFrom && pointer && <line x1={pos(linkFrom).x} y1={pos(linkFrom).y} x2={pointer.x} y2={pointer.y} stroke="var(--accent)" strokeWidth={2.5 * scale} strokeDasharray={`${6 * scale} ${4 * scale}`} pointerEvents="none" />}
 
-        {/* Labels (and dots for regions without an outline), on top of every shape. */}
-        {props.nodes.map((n) => {
-          const p = pos(n);
-          const selected = props.selectedNodeId === n.id;
-          const shaped = Boolean(n.polygon && n.polygon.length >= 3);
-          return (
-            <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.5 : 1} pointerEvents={shaped ? "none" : undefined}>
-              {n.ring && <circle cx={p.x} cy={p.y} r={r * (shaped ? 0.9 : 1.6)} fill={shaped ? (n.fill ?? "var(--map-region)") : "none"} stroke={n.stroke ?? "var(--map-label)"} strokeWidth={2.5 * scale} />}
-              {!shaped && (
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={selected ? r * 1.3 : r}
-                  fill={n.fill ?? "var(--map-region)"}
-                  stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-outline)")}
-                  strokeWidth={(selected ? 4 : 2) * scale}
-                  strokeDasharray={n.dashed ? `${4 * scale} ${3 * scale}` : undefined}
-                />
-              )}
-              <text
-                x={p.x}
-                y={shaped ? p.y - r * (n.ring ? 1.3 : 0) : p.y - r * 1.9}
-                textAnchor="middle"
-                dominantBaseline={shaped && !n.ring ? "middle" : undefined}
-                fontSize={12 * scale}
-                fontWeight={600}
-                fill="var(--map-label)"
-                stroke="var(--map-label-outline)"
-                strokeWidth={3 * scale}
-                paintOrder="stroke"
-                pointerEvents="none"
-              >
-                {n.label}
-              </text>
-              {props.renderNodeExtras?.(n, p, scale)}
-            </g>
-          );
-        })}
         {props.overlay?.(scale)}
       </svg>
       <div className="absolute bottom-2 right-2 flex gap-1">
@@ -476,5 +350,157 @@ export function MapCanvas(props: MapCanvasProps) {
         )}
       </div>
     </div>
+  );
+}
+
+export type MapLayersProps = Pick<MapCanvasProps, "width" | "height" | "nodes" | "edges" | "terrain" | "selectedNodeId" | "selectedEdgeId" | "draggable" | "renderNodeExtras"> & {
+  /** Map pixels per screen pixel: lines and labels are drawn this much bigger. */
+  scale: number;
+  /** Where a node is drawn, in map pixels (MapCanvas moves a node being dragged). */
+  pos?: (n: MapNode) => { x: number; y: number };
+};
+
+/**
+ * What the map draws over its image: region shapes, terrain, links and
+ * borders, then labels. Shared by the 2D map and the 3D map (which drapes it
+ * over the ground as a picture).
+ */
+export function MapLayers(props: MapLayersProps) {
+  const { width, height, scale } = props;
+  const byId = new Map(props.nodes.map((n) => [n.id, n]));
+  const pos = props.pos ?? ((n: MapNode) => ({ x: n.x * width, y: n.y * height }));
+  const r = 9 * scale;
+  return (
+    <>
+      {/* Region shapes: fills (owner tint) and outlines. The selected one last, so its outline is on top. */}
+      {[...props.nodes]
+        .filter((n) => n.polygon && n.polygon.length >= 3)
+        .sort((a, b) => Number(a.id === props.selectedNodeId) - Number(b.id === props.selectedNodeId))
+        .map((n) => {
+          const selected = props.selectedNodeId === n.id;
+          const d = `M${n.polygon!.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`;
+          return (
+            <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.55 : 1}>
+              <path d={d} fill={n.fill ?? "transparent"} fillOpacity={n.fill ? 0.3 : 1} stroke="var(--map-outline)" strokeOpacity={0.7} strokeWidth={4.5 * scale} strokeLinejoin="round" />
+              <path
+                d={d}
+                fill="none"
+                stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-border)")}
+                strokeOpacity={selected ? 1 : 0.85}
+                strokeWidth={(selected ? 3.5 : 2) * scale}
+                strokeLinejoin="round"
+                strokeDasharray={n.dashed ? `${6 * scale} ${4 * scale}` : undefined}
+              />
+            </g>
+          );
+        })}
+
+      {props.terrain && props.terrain.length > 0 && (
+        <g pointerEvents="none">
+          <defs>
+            {props.terrain.map((t, i) => (
+              <pattern key={t.id} id={`terrain-${i}`} width={12 * scale} height={12 * scale} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1={0} y1={0} x2={0} y2={12 * scale} stroke={t.colour} strokeWidth={3 * scale} strokeOpacity={0.55} />
+              </pattern>
+            ))}
+          </defs>
+          {props.terrain.map((t, i) => (
+            <path
+              key={t.id}
+              d={t.pieces
+                .flat()
+                .map((ring) => `M${ring.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`)
+                .join("")}
+              fillRule="evenodd"
+              fill={`url(#terrain-${i})`}
+              stroke={t.colour}
+              strokeOpacity={0.7}
+              strokeWidth={1.5 * scale}
+            >
+              {t.title && <title>{t.title}</title>}
+            </path>
+          ))}
+        </g>
+      )}
+
+      {props.edges.map((e) => {
+        const a = byId.get(e.a);
+        const b = byId.get(e.b);
+        if (!a || !b) return null;
+        const selected = props.selectedEdgeId === e.id;
+        const stroke = selected ? "var(--accent)" : (e.colour ?? "var(--map-route)");
+        const strokeWidth = (selected ? 5 : e.heavy ? 4 : 2.5) * scale;
+        if (e.segments) {
+          // A blocked border: a heavy dashed line along the shared edge.
+          const d = e.segments.map(([[x1, y1], [x2, y2]]) => `M${x1 * width} ${y1 * height}L${x2 * width} ${y2 * height}`).join("");
+          return (
+            <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
+              <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
+              <path d={d} stroke="var(--map-outline)" strokeWidth={strokeWidth + 3 * scale} strokeOpacity={0.6} fill="none" strokeLinecap="round" />
+              <path d={d} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={`${5 * scale} ${4 * scale}`} fill="none" strokeLinecap="round" />
+            </g>
+          );
+        }
+        const pa = pos(a);
+        const pb = pos(b);
+        // Links bow out a little, so they don't hide what's under them.
+        const mx = (pa.x + pb.x) / 2 - (pb.y - pa.y) * 0.15;
+        const my = (pa.y + pb.y) / 2 + (pb.x - pa.x) * 0.15;
+        const d = e.curved ? `M${pa.x} ${pa.y}Q${mx} ${my} ${pb.x} ${pb.y}` : `M${pa.x} ${pa.y}L${pb.x} ${pb.y}`;
+        return (
+          <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
+            <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
+            <path
+              d={d}
+              fill="none"
+              stroke={stroke}
+              strokeOpacity={e.dim ? 0.35 : 0.9}
+              strokeWidth={strokeWidth}
+              strokeDasharray={e.dashed ? `${8 * scale} ${6 * scale}` : undefined}
+              style={{ filter: "drop-shadow(0 0 1px rgba(0,0,0,.9))" }}
+            />
+          </g>
+        );
+      })}
+
+      {/* Labels (and dots for regions without an outline), on top of every shape. */}
+      {props.nodes.map((n) => {
+        const p = pos(n);
+        const selected = props.selectedNodeId === n.id;
+        const shaped = Boolean(n.polygon && n.polygon.length >= 3);
+        return (
+          <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.5 : 1} pointerEvents={shaped ? "none" : undefined}>
+            {n.ring && <circle cx={p.x} cy={p.y} r={r * (shaped ? 0.9 : 1.6)} fill={shaped ? (n.fill ?? "var(--map-region)") : "none"} stroke={n.stroke ?? "var(--map-label)"} strokeWidth={2.5 * scale} />}
+            {!shaped && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={selected ? r * 1.3 : r}
+                fill={n.fill ?? "var(--map-region)"}
+                stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-outline)")}
+                strokeWidth={(selected ? 4 : 2) * scale}
+                strokeDasharray={n.dashed ? `${4 * scale} ${3 * scale}` : undefined}
+              />
+            )}
+            <text
+              x={p.x}
+              y={shaped ? p.y - r * (n.ring ? 1.3 : 0) : p.y - r * 1.9}
+              textAnchor="middle"
+              dominantBaseline={shaped && !n.ring ? "middle" : undefined}
+              fontSize={12 * scale}
+              fontWeight={600}
+              fill="var(--map-label)"
+              stroke="var(--map-label-outline)"
+              strokeWidth={3 * scale}
+              paintOrder="stroke"
+              pointerEvents="none"
+            >
+              {n.label}
+            </text>
+            {props.renderNodeExtras?.(n, p, scale)}
+          </g>
+        );
+      })}
+    </>
   );
 }

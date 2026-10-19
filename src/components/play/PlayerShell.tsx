@@ -14,16 +14,19 @@ import { WindowSlot } from "@/components/shell/WindowSlot";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button, IconButton } from "@/components/ui";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
+import type { Map3dInfo } from "@/engine/world/mapLook";
 import type { TeamView } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES } from "@/engine/world/types";
 import { Countdown } from "./Countdown";
 import { regionTitle } from "./format";
 import { MapKey } from "./MapKey";
 import { MapSelectionContext, type MapSelection } from "./mapSelection";
+import { OrdersDraftProvider, useOrdersDraft, type OrdersServerState } from "./ordersDraft";
 import { QuickOrders } from "./QuickOrders";
 import { ownerName, RegionDetails } from "./RegionDetails";
 import { TeamMap } from "./TeamMap";
 import { UnitDetails } from "./UnitDetails";
+import { useMapMoves, type MapMoves } from "./useMapMoves";
 
 // The player screen: the team's fogged map is always there; every other screen
 // opens as a window over it, and clicking a region opens its details on the side.
@@ -52,24 +55,40 @@ export interface ToolbarInfo {
   resources: { id: string; name: string; icon: string; amount: number }[];
 }
 
-export function PlayerShell({
-  info,
-  view,
-  rules,
-  mapImage,
-  children,
-}: {
+interface ShellProps {
   info: ToolbarInfo;
   view: TeamView;
   rules: Ruleset;
   mapImage: { width: number; height: number; url: string } | null;
+  map3d: Map3dInfo;
   children: ReactNode;
-}) {
+}
+
+export function PlayerShell({ orders, ...props }: ShellProps & { orders: OrdersServerState }) {
+  // The order list is shared by the Orders window and the map, so it lives here.
+  return (
+    <OrdersDraftProvider server={orders}>
+      <Shell {...props} />
+    </OrdersDraftProvider>
+  );
+}
+
+function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [focus, setFocus] = useState<{ nodeId: string; key: number } | null>(null);
   const router = useRouter();
-  const panel = selection && sidePanelFor(selection, view, rules, info.ordersOpen, setSelection);
+  const draft = useOrdersDraft();
+  const moves = useMapMoves({
+    view,
+    rules,
+    selectedRoute: selection?.kind === "route" ? selection.id : null,
+    onSelectRoute: (id) => setSelection(id ? { kind: "route", id } : null),
+  });
+  const panel = selection && sidePanelFor(selection, view, rules, info.ordersOpen, setSelection, moves, (id) => {
+    draft.reveal(id, false);
+    router.push("/play/orders");
+  });
 
   // "Show on map" from a window: close the window, select the thing and centre the map on it.
   const showOnMap = (s: MapSelection) => {
@@ -98,7 +117,7 @@ export function PlayerShell({
           {info.gameName} · {info.isDm ? "DM" : info.displayName}
         </p>
       </div>
-      <RoundChip info={info} />
+      <RoundChip info={{ ...info, orders: draft.dirty ? "draft" : draft.submitted ? "submitted" : draft.orders.length ? "draft" : "none" }} />
       <ul className="hidden min-w-0 items-center gap-1 overflow-hidden lg:flex" aria-label="Resources">
         {info.resources.map((r) => (
           <li key={r.id} title={r.name} className="rounded-full border border-border bg-raised px-2 py-0.5 text-sm tabular-nums whitespace-nowrap">
@@ -139,12 +158,15 @@ export function PlayerShell({
           rules={rules}
           mapImage={mapImage}
           selectedId={panel?.regionId}
-          onRegionClick={(id) => setSelection({ kind: "region", id })}
-          onBadgeClick={onBadge}
-          onBackgroundClick={() => setSelection(null)}
+          // While tapping out a move, clicks on the map are its stops.
+          onRegionClick={moves.tapping ? undefined : (id) => setSelection({ kind: "region", id })}
+          onBadgeClick={moves.tapping ? undefined : onBadge}
+          onBackgroundClick={moves.tapping ? undefined : () => setSelection(null)}
           className="h-full"
           bare
           focus={focus}
+          map3d={map3d}
+          {...moves.map}
         />
       }
     >
@@ -158,6 +180,7 @@ export function PlayerShell({
           {panel.body}
         </SidePanel>
       )}
+      {moves.ui}
       <MapKey view={view} />
       <Modal open={leaving} onClose={() => setLeaving(false)} title="Leave the game?">
         <p className="text-sm text-muted">You&apos;ll be signed out on this device. To come back, join again with your team&apos;s code.</p>
@@ -184,6 +207,8 @@ function sidePanelFor(
   rules: Ruleset,
   open: { open: boolean; reason: string },
   select: (s: MapSelection | null) => void,
+  moves: MapMoves,
+  openOrder: (id: string) => void,
 ): { title: ReactNode; body: ReactNode; regionId: string | null } | null {
   const regionLink = (id: string | null) => {
     const r = view.regions.find((x) => x.id === id);
@@ -204,7 +229,51 @@ function sidePanelFor(
       body: (
         <>
           <RegionDetails region={region} view={view} rules={rules} showTitle={false} onUnitClick={(kind, id) => select({ kind, id })} />
-          <QuickOrders rules={rules} target={{ kind: "region", region }} open={open} />
+          <QuickOrders rules={rules} view={view} target={{ kind: "region", region }} open={open} />
+        </>
+      ),
+    };
+  }
+
+  if (sel.kind === "route") {
+    const c = moves.check.orders.find((o) => o.id === sel.id);
+    if (!c?.route) return null;
+    const ids = c.route.unitIds;
+    return {
+      title: c.slot ? `Planned move · action ${c.slot}` : "Planned move",
+      regionId: c.route.endRegion,
+      body: (
+        <>
+          <p>{c.summary}</p>
+          {c.problems.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-sm text-danger">
+              {c.problems.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          )}
+          {c.notes.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-muted">
+              {c.notes.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {moves.canMove(view.ownUnits.find((u) => u.id === ids[0])) && (
+              <Button variant="secondary" className="px-3! py-1.5! text-xs" onClick={() => moves.startTap(ids, c.id)}>
+                Redraw on map
+              </Button>
+            )}
+            <Button variant="secondary" className="px-3! py-1.5! text-xs" onClick={() => openOrder(c.id)}>
+              Open in orders
+            </Button>
+            {moves.editable && (
+              <Button variant="danger" className="px-3! py-1.5! text-xs" onClick={() => moves.cancelOrder(c.id)}>
+                Cancel move
+              </Button>
+            )}
+          </div>
         </>
       ),
     };
@@ -220,7 +289,12 @@ function sidePanelFor(
       body: (
         <>
           <UnitDetails unit={unit} rules={rules} regionLabel={regionLink(unit.regionId)} compact />
-          <QuickOrders rules={rules} target={{ kind: "unit", unit }} open={open} />
+          {moves.canMove(unit) && (
+            <Button className="mt-3 px-3! py-1.5! text-xs" onClick={() => moves.startTap([unit.id])}>
+              <Icon name="map" size={14} /> Move on map
+            </Button>
+          )}
+          <QuickOrders rules={rules} view={view} target={{ kind: "unit", unit }} open={open} />
           <Link href="/play/units" className="mt-3 inline-block text-xs text-link underline">
             All your units →
           </Link>
@@ -246,7 +320,7 @@ function sidePanelFor(
         </p>
         <p className="mt-2">In {regionLink(unit.regionId)}</p>
         <p className="mt-2 text-xs text-muted">You can only make out its type and who it belongs to. {unit.ownerTeamId ? "" : "Once you've met a monster type, its stat block is in your Rules."}</p>
-        <QuickOrders rules={rules} target={{ kind: "other", unit }} open={open} />
+        <QuickOrders rules={rules} view={view} target={{ kind: "other", unit }} open={open} />
       </>
     ),
   };

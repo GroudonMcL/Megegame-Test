@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { saveOrdersAction } from "@/app/play/actions";
 import { milesPerRound, modeMultiplier, type MoveMode } from "@/engine/orders/movement";
 import { parsePath, traceRoute, type PathStep } from "@/engine/orders/route";
 import { routeMapFromView } from "@/engine/orders/routeMap";
@@ -14,6 +12,7 @@ import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
 import { EconomyTable } from "./EconomyTable";
+import { useOrdersDraft } from "./ordersDraft";
 import { unitLabel } from "./RegionDetails";
 import { regionTitle } from "./format";
 import { TeamMap } from "./TeamMap";
@@ -31,39 +30,6 @@ export interface OrderBuilderProps {
   view: TeamView;
   rules: Ruleset;
   mapImage: { width: number; height: number; url: string } | null;
-  initialOrders: OrderDraft[];
-  version: number;
-  submitted: { at: string; by: string } | null;
-  open: { open: boolean; reason: string };
-  isDm: boolean;
-  roundNumber: number | null;
-  /** A new order to add, from a quick action on the map (see QuickOrders). */
-  prefill?: OrderPrefill | null;
-}
-
-export interface OrderPrefill {
-  /** Different for every press, so the same quick action can be used twice. */
-  key: string;
-  /** The new order's ID (made on the server, so server and browser render the same). */
-  id: string;
-  actionTypeId: string;
-  unitId?: string;
-  regionId?: string;
-  targetId?: string;
-}
-
-/** The order a quick action asks for, with its unit, region or target filled in. */
-function prefillOrder(rules: Ruleset, p: OrderPrefill, slotsFree: boolean): OrderDraft | null {
-  const action = rules.actionTypes.find((a) => a.id === p.actionTypeId);
-  if (!action) return null;
-  const kinds = allowedKinds(action.kind);
-  const inputs: Record<string, unknown> = {};
-  action.inputs.forEach((input, i) => {
-    if (input.type === "unit" && p.unitId) inputs[String(i)] = input.multiple ? [p.unitId] : p.unitId;
-    if (input.type === "region" && p.regionId) inputs[String(i)] = p.regionId;
-    if (input.type === "targetUnit" && p.targetId) inputs[String(i)] = p.targetId;
-  });
-  return { id: p.id, kind: kinds.includes("numbered") && slotsFree ? "numbered" : kinds[0], actionTypeId: action.id, inputs, notes: "" };
 }
 
 function newId() {
@@ -72,68 +38,37 @@ function newId() {
 
 export function OrderBuilder(props: OrderBuilderProps) {
   const { view, rules } = props;
-  const router = useRouter();
-  const [orders, setOrders] = useState<OrderDraft[]>(props.initialOrders);
-  const [version, setVersion] = useState(props.version);
-  const [submitted, setSubmitted] = useState(props.submitted);
-  const [dirty, setDirty] = useState(false);
+  // The list itself is shared with the map (see ordersDraft.tsx).
+  const draft = useOrdersDraft();
+  const { orders, submitted, dirty, editable } = draft;
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [adding, setAdding] = useState("");
   const [picking, setPicking] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [bypass, setBypass] = useState(false);
   const [pending, startTransition] = useTransition();
-  const editable = props.open.open || props.isDm;
-
-  // When the server has a newer version than ours (a teammate saved), take theirs.
-  const [seenVersion, setSeenVersion] = useState(props.version);
-  if (props.version !== seenVersion) {
-    setSeenVersion(props.version);
-    if (props.version !== version) {
-      setOrders(props.initialOrders);
-      setVersion(props.version);
-      setSubmitted(props.submitted);
-      setDirty(false);
-    }
-  }
 
   const check = useMemo(() => validateOrders(rules, view, orders), [rules, view, orders]);
   const byId = new Map(check.orders.map((c) => [c.id, c]));
 
-  // A quick action from the map: add its order to the list (keeping any unsaved
-  // changes), and for a move, go straight to picking the path.
-  const [seenPrefill, setSeenPrefill] = useState<string | null>(null);
+  // An order added from the map (a quick action or a dragged move): show it, and for a move, start picking its route.
+  const [seenFocus, setSeenFocus] = useState<number | null>(null);
   const [scrollTo, setScrollTo] = useState<string | null>(null);
-  if (props.prefill && props.prefill.key !== seenPrefill) {
-    setSeenPrefill(props.prefill.key);
-    const order = editable && !orders.some((o) => o.id === props.prefill!.id) ? prefillOrder(rules, props.prefill, check.slotsUsed < check.slotsTotal) : null;
-    if (order) {
-      setOrders([...orders, order]);
-      setDirty(true);
-      setMessage({ ok: true, text: `Added ${rules.actionTypes.find((a) => a.id === order.actionTypeId)?.name ?? "an order"}. Finish it below, then save or submit.` });
-      setScrollTo(order.id);
-      if (rules.actionTypes.find((a) => a.id === order.actionTypeId)?.handler === "move") setPicking(order.id);
-    }
+  if (draft.focus && draft.focus.key !== seenFocus) {
+    setSeenFocus(draft.focus.key);
+    setScrollTo(draft.focus.id);
+    if (draft.focus.pick) setPicking(draft.focus.id);
   }
+  const { focus, clearFocus } = draft;
   useEffect(() => {
-    if (!props.prefill) return;
-    // Drop the quick action from the address, so a reload doesn't add it again.
-    router.replace("/play/orders", { scroll: false });
-  }, [props.prefill, router]);
+    if (focus) clearFocus();
+  }, [focus, clearFocus]);
   useEffect(() => {
     if (scrollTo) document.querySelector(`[data-order-id="${scrollTo}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [scrollTo]);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
   const change = (next: OrderDraft[]) => {
-    setOrders(next);
-    setDirty(true);
+    draft.change(next);
     setMessage(null);
   };
   const update = (id: string, patch: Partial<OrderDraft>) => change(orders.map((o) => (o.id === id ? { ...o, ...patch } : o)));
@@ -168,16 +103,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
 
   const save = (submit: boolean) =>
     startTransition(async () => {
-      const r = await saveOrdersAction({ orders, baseVersion: version, submit, bypass });
-      if (!r.ok) {
-        setMessage({ ok: false, text: r.error });
-        return;
-      }
-      setVersion(r.value.version);
-      setDirty(false);
-      setSubmitted(r.value.submitted ? { at: new Date().toISOString(), by: props.isDm ? "DM" : "you" } : null);
-      setMessage({ ok: true, text: r.value.submitted ? "Orders submitted. You can still change them until the deadline; you'll need to submit again." : "Draft saved. Remember to submit before the deadline." });
-      router.refresh();
+      setMessage(await draft.save({ submit, bypass }));
     });
 
   const numbered = rules.actionTypes.filter((a) => a.kind === "numbered" || a.kind === "numberedAndFree");
@@ -188,7 +114,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
     <div className="grid gap-4 @3xl:grid-cols-[1fr_24rem] [&>*]:min-w-0">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">{props.roundNumber ? `Round ${props.roundNumber}` : "No round open"}</span>
+          <span className="font-medium">{draft.roundNumber ? `Round ${draft.roundNumber}` : "No round open"}</span>
           <span className={check.slotsUsed > check.slotsTotal ? "text-danger" : "text-muted"}>
             · {check.slotsUsed}/{check.slotsTotal} numbered
           </span>
@@ -200,7 +126,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
             {dirty && <span className="ml-2 text-muted">· unsaved changes</span>}
           </span>
         </div>
-        {!props.open.open && <p className="rounded-lg border border-border bg-card p-3 text-sm">{props.open.reason}{props.isDm ? " As the DM you can still edit them." : ""}</p>}
+        {!draft.open.open && <p className="rounded-lg border border-border bg-card p-3 text-sm">{draft.open.reason}{draft.isDm ? " As the DM you can still edit them." : ""}</p>}
 
         {orders.length === 0 && <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted">No orders yet. Add your first action below.</p>}
 
@@ -285,13 +211,13 @@ export function OrderBuilder(props: OrderBuilderProps) {
             <button
               type="button"
               className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
-              disabled={pending || (!check.ok && !(props.isDm && bypass))}
+              disabled={pending || (!check.ok && !(draft.isDm && bypass))}
               onClick={() => save(true)}
               title={check.ok ? "" : "Fix the problems marked in red first"}
             >
               Submit orders
             </button>
-            {props.isDm && (
+            {draft.isDm && (
               <label className="flex items-center gap-1 text-sm">
                 <input type="checkbox" checked={bypass} onChange={(e) => setBypass(e.target.checked)} /> Bypass checks (DM)
               </label>

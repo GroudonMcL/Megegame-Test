@@ -3,16 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buttonClass } from "@/components/ui";
+import { validateOrders } from "@/engine/orders/validate";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
+import type { TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
+import { newOrder } from "./movePlan";
+import { useOrdersDraft } from "./ordersDraft";
 import { quickActions, type QuickTarget } from "./quickActions";
 
-// Orders that can start from what's selected on the map. Each one opens the
-// Orders window with a new order already filled in (see OrderBuilder's prefill);
-// the order is checked there and again on the server, as usual.
-
-/** Counts presses, so each one is a new request and the same order can be added twice. */
-let presses = 0;
+// Orders that can start from what's selected on the map. Each one adds a new
+// order with the unit, region or target filled in, and opens the Orders window
+// on it to finish there; the order is checked there and again on the server.
 
 /** Can this thing be given orders at all right now? */
 function usable(target: QuickTarget) {
@@ -21,17 +22,21 @@ function usable(target: QuickTarget) {
   return target.region.state === "visible";
 }
 
-export function QuickOrders({ rules, target, open }: { rules: Ruleset; target: QuickTarget; open: { open: boolean; reason: string } }) {
+export function QuickOrders({ rules, view, target, open }: { rules: Ruleset; view: TeamView; target: QuickTarget; open: { open: boolean; reason: string } }) {
   const router = useRouter();
+  const draft = useOrdersDraft();
   const [other, setOther] = useState("");
   if (!usable(target)) return null;
   const actions = quickActions(rules, target);
   if (!actions.length) return null;
 
   const start = (actionId: string) => {
-    const id = target.kind === "region" ? target.region.id : target.unit.id;
-    const param = target.kind === "unit" ? "unit" : target.kind === "other" ? "target" : "region";
-    router.push(`/play/orders?add=${encodeURIComponent(actionId)}&${param}=${id}&n=${++presses}`);
+    const action = rules.actionTypes.find((a) => a.id === actionId);
+    if (!action) return;
+    const check = validateOrders(rules, view, draft.orders);
+    const fill = target.kind === "unit" ? { unitIds: [target.unit.id] } : target.kind === "other" ? { targetId: target.unit.id } : { regionId: target.region.id };
+    draft.add(newOrder(rules, action, fill, check.slotsUsed < check.slotsTotal, crypto.randomUUID()), { pick: action.handler === "move" });
+    router.push("/play/orders");
   };
   // Movement gets its own buttons (up to three); the rest go in a list.
   const buttons = actions.filter((a) => a.handler === "move").slice(0, 3);
@@ -40,8 +45,8 @@ export function QuickOrders({ rules, target, open }: { rules: Ruleset; target: Q
   return (
     <section className="mt-4 border-t border-border pt-3" aria-label="Give an order">
       <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Give an order</h3>
-      {!open.open && <p className="mt-1 text-xs text-muted">{open.reason}</p>}
-      {open.open && (
+      {!draft.editable && <p className="mt-1 text-xs text-muted">{open.reason}</p>}
+      {draft.editable && (
         <div className="mt-2 space-y-2">
           {buttons.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

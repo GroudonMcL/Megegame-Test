@@ -41,6 +41,10 @@ export const games = pgTable("games", {
   // "regions" = regions are drawn shapes. "nodes" = an old map of dots and
   // connections, converted to shapes once by scripts/convert-maps.ts.
   mapKind: text("map_kind").notNull().default("regions"),
+  // The height map for the 3D view (an asset, greyscale: white = highest), if one has been uploaded.
+  heightAssetId: uuid("height_asset_id"),
+  // How the map looks: relief height and lighting (see engine/world/mapLook.ts). Missing fields use the defaults.
+  mapLook: jsonb("map_look").notNull().default({}),
   // The public channel's Discord webhook (round opened, reminders, published). Secret: DM only.
   discordWebhookUrl: text("discord_webhook_url").notNull().default(""),
   createdAt: created(),

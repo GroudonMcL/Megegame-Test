@@ -8,7 +8,7 @@ import { requireViewer } from "@/lib/viewer";
 
 export default async function PlayLayout({ children }: LayoutProps<"/play">) {
   const viewer = await requireViewer();
-  const { view, rules, mapImage, round, orderState, orders } = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
+  const { view, rules, mapImage, map3d, round, orderState, orders } = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
   return (
     // data-team: accents inside use the team colour (globals.css).
     <div {...teamThemeProps(viewer.team.colour)}>
@@ -27,6 +27,16 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
         view={view}
         rules={rules}
         mapImage={mapImage}
+        map3d={map3d}
+        orders={{
+          roundKey: round?.id ?? "none",
+          orders,
+          version: orderState?.version ?? 0,
+          submitted: orderState?.submittedAt ? { at: orderState.submittedAt.toISOString(), by: orderState.submittedBy ?? "" } : null,
+          open: ordersOpen(round),
+          isDm: viewer.isDm,
+          roundNumber: round?.number ?? null,
+        }}
       >
         {children}
       </PlayerShell>
