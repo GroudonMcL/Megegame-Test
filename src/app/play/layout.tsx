@@ -27,6 +27,15 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
         view={view}
         rules={rules}
         mapImage={mapImage}
+        orders={{
+          roundKey: round?.id ?? "none",
+          orders,
+          version: orderState?.version ?? 0,
+          submitted: orderState?.submittedAt ? { at: orderState.submittedAt.toISOString(), by: orderState.submittedBy ?? "" } : null,
+          open: ordersOpen(round),
+          isDm: viewer.isDm,
+          roundNumber: round?.number ?? null,
+        }}
       >
         {children}
       </PlayerShell>

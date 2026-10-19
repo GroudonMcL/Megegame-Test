@@ -19,7 +19,7 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
       aria-label={title}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
-      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-border bg-card-solid p-0 text-foreground shadow-xl backdrop:bg-overlay backdrop:backdrop-blur-[2px]"
+      className="pointer-events-auto m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-border bg-card-solid p-0 text-foreground shadow-xl backdrop:bg-overlay backdrop:backdrop-blur-[2px]"
     >
       {open && (
         <div className="p-5">

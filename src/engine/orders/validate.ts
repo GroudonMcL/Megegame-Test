@@ -43,6 +43,8 @@ export interface OrderCheck {
   cost: ResourceAmounts;
   gain: ResourceAmounts;
   summary: string;
+  /** For a move: where it starts and the line it walks (for drawing on the map). */
+  route?: { unitIds: string[]; startRegion: string; endRegion: string | null; walked: Pt[]; blocked?: string };
 }
 
 export interface MovementLine {
@@ -454,7 +456,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
         }
         if (!path.length) break;
         const startAt = s.unitPos[units[0].id];
-        if (!startAt || from === UNKNOWN_REGION) {
+        if (!startAt || !from || from === UNKNOWN_REGION) {
           note("These units are somewhere you can't see after an earlier move; the DM works out this one.");
           break;
         }
@@ -468,6 +470,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
             if (route.used[i] >= 1 - MOVE_EPSILON) problem(`${unitName(g.unit.id)} has only ${Math.floor(left)} miles of movement left; this path needs more.`);
           });
         }
+        check.route = { unitIds: units.map((u) => u.id), startRegion: from, endRegion: route.endRegion, walked: route.walked, blocked: route.blocked };
         for (const [i, u] of units.entries()) {
           s.unitUsed[u.id] = route.used[i];
           s.unitRegion[u.id] = route.endRegion ?? UNKNOWN_REGION;

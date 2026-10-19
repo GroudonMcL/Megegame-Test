@@ -4,11 +4,11 @@ import { createContext, useContext } from "react";
 import { Icon } from "@/components/icons/Icon";
 import { buttonClass } from "@/components/ui";
 
-// What's open in the side panel: a region, one of the team's units, or a unit
-// of another side. The player shell owns it. "Show on map" in a window closes
+// What's open in the side panel: a region, one of the team's units, a unit
+// of another side, or a move planned on the map (by its order's ID). The player shell owns it. "Show on map" in a window closes
 // the window, opens the panel and centres the map on the thing.
 
-export type MapSelection = { kind: "region"; id: string } | { kind: "unit"; id: string } | { kind: "other"; id: string };
+export type MapSelection = { kind: "region"; id: string } | { kind: "unit"; id: string } | { kind: "other"; id: string } | { kind: "route"; id: string };
 
 export const MapSelectionContext = createContext<(s: MapSelection) => void>(() => {});
 

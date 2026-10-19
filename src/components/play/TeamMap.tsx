@@ -33,9 +33,31 @@ export interface TeamMapProps {
   bare?: boolean;
   /** Centre the map on this region whenever key changes. */
   focus?: { nodeId: string; key: number } | null;
+  /** Own units that can be dragged (their stacks become drag handles). */
+  movable?: Set<string>;
+  /** A stack (or ghost stack) is being dragged: its units, the pointer, and whether it was let go. */
+  onStackDrag?: (unitIds: string[], p: Pt, done: boolean) => void;
+  /** Where units will be after their planned moves: drawn as see-through stacks you can drag on from. */
+  ghosts?: { id: string; regionId: string; at: Pt }[];
+  onGhostClick?: (unitIds: string[]) => void;
+  /** Planned moves to draw. */
+  routes?: PlannedRoute[];
+  onRouteClick?: (id: string) => void;
+  /** The move being planned: the line it walks, the rest to where it's aimed (if it stops short), and a label. */
+  preview?: { walked: Pt[]; rest: Pt[]; ok: boolean; label: string } | null;
+  onHover?: (p: Pt | null) => void;
 }
 
-export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onPointClick, onBackgroundClick, onBadgeClick, className, bare, focus }: TeamMapProps) {
+export interface PlannedRoute {
+  id: string;
+  points: Pt[];
+  label: string;
+  bad?: boolean;
+  selected?: boolean;
+}
+
+export function TeamMap(props: TeamMapProps) {
+  const { view, rules, mapImage, selectedId, onRegionClick, highlight, path, onPointClick, onBackgroundClick, onBadgeClick, className, bare, focus, movable, onStackDrag, ghosts, routes, preview } = props;
   const size = mapImage ?? DEFAULT_MAP_SIZE;
   const allTeams = new Map<string, BadgeTeam>([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
   const byId = new Map(view.regions.map((r) => [r.id, r]));
@@ -58,7 +80,7 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
 
   const spots = groupBadges(
     [
-      ...view.ownUnits.filter((u) => u.regionId && ON_MAP_STATUSES.has(u.status)).map((u) => ({ regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: view.team.id, dead: u.status === "dead" })),
+      ...view.ownUnits.filter((u) => u.regionId && ON_MAP_STATUSES.has(u.status)).map((u) => ({ id: u.id, regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: view.team.id, dead: u.status === "dead" })),
       ...view.otherUnits.map((u) => ({ regionId: u.regionId, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId, dead: u.dead })),
     ],
     (id) => {
@@ -67,6 +89,36 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
     },
     (id) => allTeams.get(id),
   );
+  const ghostSpots = groupBadges(
+    (ghosts ?? []).map((g) => ({ id: g.id, regionId: g.regionId, x: g.at[0], y: g.at[1], ownerTeamId: view.team.id, dead: false })),
+    () => undefined,
+    (id) => allTeams.get(id),
+  );
+
+  // Drag handles: "stack:<key>" (units that can still move), "ghost:<key>", "route:<id>".
+  const stacks = new Map<string, string[]>();
+  const stackHandle = (prefix: string) => (g: { key: string; owner: string; ids: string[] }) => {
+    if (!onStackDrag || g.owner !== view.team.id) return undefined;
+    const ids = prefix === "stack" ? g.ids.filter((id) => movable?.has(id)) : g.ids;
+    if (!ids.length) return undefined;
+    stacks.set(`${prefix}:${g.key}`, ids);
+    return `${prefix}:${g.key}`;
+  };
+  const ownHandle = stackHandle("stack");
+  const ghostHandle = stackHandle("ghost");
+  const onHandleMove = (id: string, p: Pt, done: boolean) => {
+    const ids = stacks.get(id);
+    if (ids) onStackDrag?.(ids, p, done);
+  };
+  const onHandleClick = (id: string) => {
+    const ids = stacks.get(id);
+    if (id.startsWith("route:")) props.onRouteClick?.(id.slice(6));
+    else if (id.startsWith("ghost:") && ids) props.onGhostClick?.(ids);
+    else if (ids) {
+      const u = view.ownUnits.find((x) => x.id === ids[0]);
+      if (u?.regionId) onBadgeClick?.(u.regionId, view.team.id);
+    }
+  };
 
   return (
     <MapCanvas
@@ -80,16 +132,26 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
       onNodeClick={(id, e) => (e.badge && onBadgeClick ? onBadgeClick(id, e.badge) : onRegionClick?.(id))}
       onBackgroundClick={onBackgroundClick && (() => onBackgroundClick())}
       onPointClick={onPointClick}
+      onHandleMove={onStackDrag || props.onRouteClick ? onHandleMove : undefined}
+      onHandleClick={onStackDrag || props.onRouteClick ? onHandleClick : undefined}
+      onHover={props.onHover}
       className={className}
       bare={bare}
       focus={focus}
       fitToNodes
       overlay={(scale) => (
         <>
+          {routes?.map((r) => (
+            <PlannedLine key={r.id} route={r} width={size.width} height={size.height} scale={scale} clickable={Boolean(props.onRouteClick)} />
+          ))}
           {spots.map((groups) => (
-            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} clickable={Boolean(onBadgeClick)} />
+            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} clickable={Boolean(onBadgeClick)} handle={ownHandle} />
+          ))}
+          {ghostSpots.map((groups) => (
+            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} handle={ghostHandle} ghost />
           ))}
           {path && path.length > 1 && <RouteLine path={path} width={size.width} height={size.height} scale={scale} />}
+          {preview && <PreviewLine preview={preview} width={size.width} height={size.height} scale={scale} />}
         </>
       )}
     />
@@ -111,6 +173,60 @@ export function RouteLine({ path, width, height, scale, colour = "var(--map-path
           </text>
         </g>
       ))}
+    </g>
+  );
+}
+
+/** A queued move: a solid line with its number by the start; click it to change or cancel it. */
+function PlannedLine({ route, width, height, scale, clickable }: { route: PlannedRoute; width: number; height: number; scale: number; clickable: boolean }) {
+  if (route.points.length < 2) return null;
+  const pts = route.points.map(([x, y]) => `${x * width},${y * height}`).join(" ");
+  const colour = route.bad ? "var(--danger)" : "var(--map-path)";
+  const [a, b] = route.points;
+  const at = { x: (a[0] + (b[0] - a[0]) * 0.5) * width, y: (a[1] + (b[1] - a[1]) * 0.5) * height };
+  const end = route.points[route.points.length - 1];
+  return (
+    <g data-handle={clickable ? `route:${route.id}` : undefined} className={clickable ? "cursor-pointer" : undefined} pointerEvents={clickable ? undefined : "none"}>
+      <title>{`Planned move ${route.label}${route.bad ? " (has a problem)" : ""}: click to change or cancel it`}</title>
+      {/* A wide invisible line, so the route is easy to click. */}
+      <polyline points={pts} fill="none" stroke="transparent" strokeWidth={14 * scale} strokeLinejoin="round" />
+      <polyline points={pts} fill="none" stroke="var(--map-outline)" strokeOpacity={0.6} strokeWidth={(route.selected ? 8 : 6) * scale} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke={colour} strokeWidth={(route.selected ? 5 : 3) * scale} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={end[0] * width} cy={end[1] * height} r={4 * scale} fill={colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} />
+      <circle cx={at.x} cy={at.y} r={8 * scale} fill={colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} />
+      <text x={at.x} y={at.y} textAnchor="middle" dominantBaseline="central" fontSize={9 * scale} fontWeight={700} fill="var(--map-outline)">
+        {route.label}
+      </text>
+    </g>
+  );
+}
+
+/** The move being planned: where it gets to, then (red, dashed) the part it can't make. */
+function PreviewLine({ preview, width, height, scale }: { preview: NonNullable<TeamMapProps["preview"]>; width: number; height: number; scale: number }) {
+  const line = (p: Pt[]) => p.map(([x, y]) => `${x * width},${y * height}`).join(" ");
+  const tip = preview.rest.length ? preview.rest[preview.rest.length - 1] : preview.walked[preview.walked.length - 1];
+  if (!tip) return null;
+  const colour = preview.ok ? "var(--map-path)" : "var(--danger)";
+  const fontSize = 12 * scale;
+  const w = Math.max(40 * scale, preview.label.length * fontSize * 0.56 + 12 * scale);
+  return (
+    <g pointerEvents="none">
+      {preview.walked.length > 1 && (
+        <>
+          <polyline points={line(preview.walked)} fill="none" stroke="var(--map-outline)" strokeOpacity={0.6} strokeWidth={6 * scale} strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points={line(preview.walked)} fill="none" stroke={colour} strokeWidth={3 * scale} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={`${8 * scale} ${5 * scale}`} />
+        </>
+      )}
+      {preview.rest.length > 1 && <polyline points={line(preview.rest)} fill="none" stroke="var(--danger)" strokeWidth={2.5 * scale} strokeDasharray={`${4 * scale} ${4 * scale}`} />}
+      {preview.walked.slice(1, -1).map(([x, y], i) => (
+        <circle key={i} cx={x * width} cy={y * height} r={3.5 * scale} fill={colour} stroke="var(--map-outline)" strokeWidth={1.2 * scale} />
+      ))}
+      <g transform={`translate(${tip[0] * width + 12 * scale} ${tip[1] * height - 22 * scale})`}>
+        <rect width={w} height={20 * scale} rx={6 * scale} fill="var(--map-outline)" fillOpacity={0.85} stroke={colour} strokeWidth={1.5 * scale} />
+        <text x={6 * scale} y={14 * scale} fontSize={fontSize} fontWeight={600} fill={preview.ok ? "#fff" : "var(--danger)"}>
+          {preview.label}
+        </text>
+      </g>
     </g>
   );
 }

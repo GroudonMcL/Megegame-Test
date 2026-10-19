@@ -112,7 +112,14 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
               </ul>
               <h3>Moving</h3>
               <p>
-                Pick the units, then <B>Draw route on map</B> and tap the map to add stops: your units walk in straight lines from stop to stop. The miles come from the map&apos;s scale; the
+                The quickest way is on the map: drag one of your unit badges to where it should go (press <B>Shift</B> on the way to add a bend). The line shows the miles it uses
+                out of what&apos;s left, and turns red with the reason if the move can&apos;t happen; letting go then does nothing. Otherwise it queues a Move order (asking which kind of
+                move if there&apos;s a choice) and saves your draft. Drop units where a move of yours from the same region already ends and they join it, without using another action.
+                On a phone, or to move one unit out of a stack, tap the unit and choose <B>Move on map</B>, tap the stops, then <B>Done</B>. Planned moves are drawn on the map, with a
+                see-through badge where the units will end up (drag that to plan their next move); tap a route to redraw or cancel it.
+              </p>
+              <p>
+                In the Orders window, pick the units, then <B>Draw route on map</B> and tap the map to add stops: your units walk in straight lines from stop to stop. The miles come from the map&apos;s scale; the
                 part of the route through difficult terrain costs more, and water needs swimming or flying. A route can only cross into a neighbouring region (not through a blocked border), but
                 it can go on into ground you can&apos;t see: your units go as far as they can, and the DM checks the rest. Units that move together go at the speed of the slowest, and each
                 unit&apos;s miles for the round are shared between all its moves.
