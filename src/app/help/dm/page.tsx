@@ -38,7 +38,8 @@ export default function DmGuide() {
                 yourself. Give each team its <B>join code</B>; <B>New code</B> replaces it and signs everyone on that team out.
               </li>
               <li>
-                <B>World</B>: drag units between regions, or click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
+                <B>World map</B>: the screen behind <B>Teams</B>, <B>Resolve</B> and <B>Diplomacy</B>, which open as windows over it (move, resize or maximise them; × or <B>Esc</B> closes
+                them). Drag units between regions, or click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
                 race or notes.
               </li>
               <li>
@@ -117,7 +118,7 @@ export default function DmGuide() {
           title: "Keyboard shortcuts",
           body: (
             <>
-              <p>On the Resolve page (not while you&apos;re typing in a box):</p>
+              <p>In the Resolve window (not while you&apos;re typing in a box):</p>
               <ul>
                 <li>
                   <K>j</K> / <K>k</K>: next / previous order (or click an order to highlight it)

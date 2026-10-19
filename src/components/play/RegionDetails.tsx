@@ -24,7 +24,8 @@ export function ownerName(view: TeamView, id: string | null) {
   return view.teams.find((t) => t.id === id)?.name ?? "another faction";
 }
 
-export function RegionDetails({ region, view, rules }: { region: ViewRegion; view: TeamView; rules: Ruleset }) {
+/** What the team knows about a region. showTitle = false when the panel around it already names the region. */
+export function RegionDetails({ region, view, rules, showTitle = true }: { region: ViewRegion; view: TeamView; rules: Ruleset; showTitle?: boolean }) {
   const names = namesFrom(rules);
   const tier = rules.settlementTiers.find((t) => t.id === region.settlementTierId);
   const own = view.ownUnits.filter((u) => u.regionId === region.id && ON_MAP_STATUSES.has(u.status));
@@ -33,7 +34,7 @@ export function RegionDetails({ region, view, rules }: { region: ViewRegion; vie
   if (region.state === "frontier") {
     return (
       <div>
-        <h3 className="font-medium">{regionTitle(region)}</h3>
+        {showTitle && <h3 className="font-medium">{regionTitle(region)}</h3>}
         <p className="mt-1 text-sm text-muted">You know there&apos;s a way into this region, but you haven&apos;t seen it yet. Send a unit there, or one that can see further.</p>
       </div>
     );
@@ -42,7 +43,7 @@ export function RegionDetails({ region, view, rules }: { region: ViewRegion; vie
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <h3 className="text-base font-medium">{regionTitle(region)}</h3>
+        {showTitle && <h3 className="text-base font-medium">{regionTitle(region)}</h3>}
         {region.state === "remembered" && (
           <p className="text-xs text-muted">
             You can&apos;t see this region now. This is what you saw{region.lastSeenRound !== null ? ` in round ${region.lastSeenRound}` : ""}.

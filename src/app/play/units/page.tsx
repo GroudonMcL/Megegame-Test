@@ -61,7 +61,7 @@ export default async function UnitsPage() {
               </span>
               <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-xs">{STATUS_LABEL[u.status] ?? u.status}</span>
             </div>
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm @xl:grid-cols-4">
               <div>
                 <dt className="text-muted">HP</dt>
                 <dd className={u.hp < max / 2 ? "text-danger" : ""}>

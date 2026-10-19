@@ -1,6 +1,6 @@
 # Proposal: UI overhaul
 
-Status: **waiting for approval**. Nothing is built until the plan is agreed.
+Status: **approved**. Phase 1 (theme) and Phase 2 (layout shell) are built.
 
 The app becomes map-first: the map is always on screen and everything else opens on top of it. Later phases replace map nodes with drawn regions, add drag-to-move with drawn paths, an optional 3D map, and a simpler phone view.
 
@@ -43,7 +43,7 @@ Each phase leaves the app working. I stop after each one with a summary and test
   - **Side panel:** region and unit info.
   - **Modal:** confirmations and short forms (rename unit, leave game).
   - **Movable, resizable windows:** Orders, Results, Units, Regions, Inventory and economy, Trades, Rules, Help.
-- Which overlays are open is kept in the URL (`/play?w=orders,trades`), so refresh, back and shared links work. Old links like `/play/orders` redirect to the new shell.
+- **One tool window at a time.** Each tool is still its own page (`/play/orders`…) shown in the window, so it always loads fresh data and refresh, back and shared links work. (Keeping several open at once would mean either showing out-of-date data in the background windows or rewriting how every screen loads its data.) `/play` is the bare map; `/play/map` redirects there; the old dashboard is the **Overview** window.
 - Escape closes the top overlay; every overlay has a close button. Window positions are remembered per browser.
 - The DM World map gets the same shell, with Resolve, Teams and Diplomacy as windows.
 - Uses the current node map.

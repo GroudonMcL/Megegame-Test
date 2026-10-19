@@ -7,12 +7,12 @@ import { TeamEmblem } from "@/components/icons/TeamEmblem";
 import { fmtRes } from "@/engine/ruleset/effects";
 import { findReferenceProblems } from "@/engine/ruleset/validate";
 import { loadRuleset } from "@/lib/rulesets";
-import { regenerateJoinCode } from "../../actions";
-import { CreateTeamForm } from "../../DmForms";
+import { regenerateJoinCode } from "../../../actions";
+import { CreateTeamForm } from "../../../DmForms";
 import { nextTeamColour } from "@/components/teamColours";
-import { RoundControls } from "./RoundControls";
-import { TeamEditor } from "./TeamEditor";
-import { viewAsTeamAction } from "./rounds";
+import { RoundControls } from "../RoundControls";
+import { TeamEditor } from "../TeamEditor";
+import { viewAsTeamAction } from "../rounds";
 
 export default async function GameOverview({ params }: PageProps<"/dm/games/[gameId]">) {
   const { gameId } = await params;
@@ -36,8 +36,8 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
     : [[], []];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0">
-      <Card className="lg:col-span-2">
+    <div className="grid gap-6 @3xl:grid-cols-[1fr_20rem] [&>*]:min-w-0">
+      <Card className="@3xl:col-span-2">
         <h2 className="text-lg font-medium">{round ? `Round ${round.number}: ${round.status}` : "No round yet"}</h2>
         {round && (
           <p className="text-sm text-muted">

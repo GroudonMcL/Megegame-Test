@@ -132,7 +132,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
   const conditionalOnly = rules.actionTypes.filter((a) => a.kind === "conditional");
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_24rem] [&>*]:min-w-0">
+    <div className="grid gap-4 @3xl:grid-cols-[1fr_24rem] [&>*]:min-w-0">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-medium">{props.roundNumber ? `Round ${props.roundNumber}` : "No round open"}</span>
@@ -253,7 +253,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
         )}
       </div>
 
-      <aside className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <aside className="space-y-3 @3xl:sticky @3xl:top-4 @3xl:self-start">
         <div className="glass rounded-xl border border-border shadow-panel p-3">
           <h2 className="font-medium">Projection</h2>
           <div className="mt-2">
@@ -357,7 +357,7 @@ function OrderCard(p: {
       )}
 
       {action && (
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="mt-2 grid gap-2 @xl:grid-cols-2">
           {action.inputs.map((inp, i) => (
             <InputField key={i} input={inp} index={i} p={p} />
           ))}
@@ -432,7 +432,7 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
       if (!input.multiple) return select(eligible.map((u) => ({ value: u.id, label: opt(u) })), eligible.length ? "Choose a unit…" : "No eligible units");
       const chosen = new Set(Array.isArray(value) ? (value as string[]) : []);
       return (
-        <fieldset className="sm:col-span-2">
+        <fieldset className="@xl:col-span-2">
           {label}
           {eligible.length === 0 && <p className="text-sm text-muted">No eligible units.</p>}
           <div className="mt-0.5 flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-md border border-border p-1.5">
@@ -537,7 +537,7 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
     case "resources": {
       const amounts = (value && typeof value === "object" ? value : {}) as Record<string, number>;
       return (
-        <fieldset className="sm:col-span-2">
+        <fieldset className="@xl:col-span-2">
           {label}
           <div className="mt-0.5 flex flex-wrap gap-2">
             {rules.resources
@@ -566,7 +566,7 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
     }
     case "text":
       return (
-        <label className="block sm:col-span-2">
+        <label className="block @xl:col-span-2">
           {label}
           <textarea className={field} rows={2} maxLength={2000} value={typeof value === "string" ? value : ""} disabled={disabled} onChange={(e) => set(e.target.value)} />
         </label>
@@ -603,7 +603,7 @@ function PathField({ index, p }: { index: number; p: Parameters<typeof OrderCard
   const code = (id: string) => view.regions.find((r) => r.id === id)?.code ?? "?";
 
   return (
-    <div className="sm:col-span-2">
+    <div className="@xl:col-span-2">
       <span className="text-xs text-muted">{p.action!.inputs[index].label}</span>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">{start ? [start, ...path].map(code).join(" → ") : "Choose the units first"}</span>

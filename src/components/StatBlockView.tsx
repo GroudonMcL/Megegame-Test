@@ -104,7 +104,7 @@ export function StatBlockView({ sb, bonuses = [] }: { sb: StatBlock; bonuses?: B
       </p>
       {row("Speed", speeds.join(", "))}
       <hr className="my-2 border-accent/40" />
-      <div className="grid grid-cols-3 gap-1 text-center sm:grid-cols-6">
+      <div className="grid grid-cols-3 gap-1 text-center @xl:grid-cols-6">
         {ABILITIES.map((a) => (
           <div key={a} title={s.abilities[a].parts.map((p) => `${p.label} ${p.value}`).join(", ")}>
             <div className="text-xs font-semibold">{a.toUpperCase()}</div>

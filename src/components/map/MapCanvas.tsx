@@ -54,6 +54,8 @@ export interface MapCanvasProps {
   fitKey?: number;
   /** Start zoomed to the nodes (e.g. the regions a team knows) rather than the whole map. */
   fitToNodes?: boolean;
+  /** No frame (border and rounded corners), for a map that fills the screen. */
+  bare?: boolean;
 }
 
 interface View {
@@ -237,7 +239,7 @@ export function MapCanvas(props: MapCanvasProps) {
   const linkFrom = props.linkFrom ? byId.get(props.linkFrom) : undefined;
 
   return (
-    <div ref={wrapRef} className={`relative overflow-hidden rounded-xl border border-border bg-background ${props.className ?? "h-[70vh]"}`}>
+    <div ref={wrapRef} className={`relative overflow-hidden ${props.bare ? "" : "rounded-xl border border-border bg-background"} ${props.className ?? "h-[70vh]"}`}>
       <svg
         ref={svgRef}
         className="h-full w-full touch-none select-none"

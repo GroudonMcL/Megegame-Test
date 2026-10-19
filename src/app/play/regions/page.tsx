@@ -44,7 +44,7 @@ export default async function RegionsPage() {
           <strong>{fmtRes(totals.upkeep, rules.resources)}</strong> per round (units&apos; upkeep is on the Units page)
         </p>
       </Card>
-      <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-3 @2xl:grid-cols-2 [&>*]:min-w-0">
         {rows.map(({ r, tier, production, upkeep }) => {
           const free = tier ? tier.buildingSlots - r.buildings.length : 0;
           return (

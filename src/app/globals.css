@@ -20,6 +20,8 @@
   --page-top: #1c3461;
   /* Panels are frosted glass: mostly opaque so text stays readable over the map. */
   --card: rgb(17 30 54 / 0.9);
+  /* Windows over the map: a little more opaque than panels on a page. */
+  --card-strong: rgb(17 30 54 / 0.96);
   --card-solid: #111e36;
   --raised: #1a2b4a;
   --overlay: rgb(3 8 18 / 0.6);
@@ -66,6 +68,7 @@
   --background: #e9eff8;
   --page-top: #ffffff;
   --card: rgb(255 255 255 / 0.9);
+  --card-strong: rgb(255 255 255 / 0.96);
   --card-solid: #ffffff;
   --raised: #f1f5fb;
   --overlay: rgb(10 19 34 / 0.45);
@@ -148,6 +151,12 @@
 /* A frosted-glass panel: use for anything that floats over the map. */
 @utility glass {
   background-color: var(--card);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+/* The same, more opaque: windows and side panels with lots of text. */
+@utility glass-strong {
+  background-color: var(--card-strong);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
 }

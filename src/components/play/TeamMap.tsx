@@ -22,10 +22,12 @@ export interface TeamMapProps {
   highlight?: Set<string>;
   /** A path to draw, as region IDs, starting with where it begins. */
   path?: string[];
+  onBackgroundClick?: () => void;
   className?: string;
+  bare?: boolean;
 }
 
-export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, className }: TeamMapProps) {
+export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onBackgroundClick, className, bare }: TeamMapProps) {
   const size = mapImage ?? DEFAULT_MAP_SIZE;
   const allTeams = new Map([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
   const colour = new Map([...allTeams].map(([id, t]) => [id, t.colour]));
@@ -84,7 +86,9 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
       edges={edges}
       selectedNodeId={selectedId}
       onNodeClick={(id) => onRegionClick?.(id)}
+      onBackgroundClick={onBackgroundClick && (() => onBackgroundClick())}
       className={className}
+      bare={bare}
       fitToNodes
       renderNodeExtras={(n, p, scale) => {
         const list = badges.get(n.id) ?? [];
