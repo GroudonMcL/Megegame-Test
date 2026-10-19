@@ -17,12 +17,13 @@ export async function exportGame(gameId: string) {
   const inTeams = async <T>(q: (ids: string[]) => Promise<T[]>) => (teamIds.length ? q(teamIds) : []);
   const rounds = await db.select().from(schema.rounds).where(eq(schema.rounds.gameId, gameId)).orderBy(asc(schema.rounds.number));
   const roundIds = rounds.map((r) => r.id);
-  const [ruleset, assets, players, regions, connections, units, inventory, regionKnowledge, connectionKnowledge, detections, contacts, trades, orders, roundOrders, rolls, audit] = await Promise.all([
+  const [ruleset, assets, players, regions, connections, terrainAreas, units, inventory, regionKnowledge, connectionKnowledge, detections, contacts, trades, orders, roundOrders, rolls, audit] = await Promise.all([
     db.select().from(schema.gameRulesets).where(eq(schema.gameRulesets.gameId, gameId)),
     db.select().from(schema.assets).where(eq(schema.assets.gameId, gameId)),
     inTeams((ids) => db.select().from(schema.players).where(inArray(schema.players.teamId, ids))),
     db.select().from(schema.regions).where(eq(schema.regions.gameId, gameId)),
     db.select().from(schema.connections).where(eq(schema.connections.gameId, gameId)),
+    db.select().from(schema.terrainAreas).where(eq(schema.terrainAreas.gameId, gameId)),
     db.select().from(schema.units).where(eq(schema.units.gameId, gameId)),
     inTeams((ids) => db.select().from(schema.inventory).where(inArray(schema.inventory.teamId, ids))),
     inTeams((ids) => db.select().from(schema.teamRegionKnowledge).where(inArray(schema.teamRegionKnowledge.teamId, ids))),
@@ -45,6 +46,7 @@ export async function exportGame(gameId: string) {
     players,
     regions,
     connections,
+    terrainAreas,
     units,
     inventory,
     regionKnowledge,

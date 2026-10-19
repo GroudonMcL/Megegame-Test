@@ -1036,6 +1036,8 @@ export function simulateCombat(input: CombatInput): CombatResult {
         augmentIds: [],
         hp: r.creatures.find((c) => c.id === p.creatureId)!.statBlock.hp,
         regionId: region?.id ?? null,
+        x: null,
+        y: null,
         milesUsed: 0,
         status: "active",
         isLeader: false,

@@ -53,7 +53,13 @@ const settingsFields: FieldSpec[] = [
     fields: [
       { kind: "number", key: "milesPerDayAt30ft", label: "Miles per day at 30 ft speed", help: "D&D normal pace = 24", step: 1 },
       { kind: "number", key: "travelDaysPerRound", label: "Travel days per round", step: 0.5 },
-      { kind: "number", key: "defaultConnectionMiles", label: "Default connection length (miles)", step: 1 },
+      {
+        kind: "number",
+        key: "defaultConnectionMiles",
+        label: "Old maps: connection length (miles)",
+        help: "only used when converting a map of dots and connections; distances are now measured on the map (set its scale in the map editor)",
+        step: 1,
+      },
       { kind: "number", key: "forceMarchMultiplier", label: "Force march multiplier", step: 0.5 },
       { kind: "number", key: "stealthMultiplier", label: "Stealth move multiplier", step: 0.25 },
     ],
@@ -82,7 +88,14 @@ const settingsFields: FieldSpec[] = [
     fields: [
       { kind: "checkbox", key: "showPreviouslySeen", label: "Show regions a team has seen before (dimmed, with what it last saw)" },
       { kind: "checkbox", key: "fogImage", label: "Fog the map image outside what a team can see" },
-      { kind: "number", key: "revealRadius", label: "Clear area around each seen region", help: "as a fraction of the map's width, e.g. 0.07", step: 0.01, min: 0.01 },
+      {
+        kind: "number",
+        key: "revealRadius",
+        label: "Clear area around a seen region with no shape",
+        help: "as a fraction of the map's width, e.g. 0.07; regions with shapes are cleared to their outline",
+        step: 0.01,
+        min: 0.01,
+      },
     ],
   },
   {

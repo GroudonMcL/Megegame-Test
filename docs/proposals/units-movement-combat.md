@@ -97,6 +97,8 @@ The unit screen shows the **effective stat block**, with every bonus shown and w
 
 ## 2. Map movement
 
+> **Since the UI overhaul (Phase 4):** regions are shapes, and a move is a route of points measured on the map (miles = length × the map's scale), with difficult terrain drawn as areas instead of being a property of connections. Speeds, the per-round budget, force march, stealth and the terrain rules below still apply. See [ui-overhaul.md](ui-overhaul.md) and `src/engine/orders/route.ts`.
+
 Following D&D overland travel:
 
 - Each **connection** between two regions has a **length in miles** and a **terrain**. The DM picks the terrain from a list they control, e.g. *Normal*, *Difficult*, *Water (needs swim or fly)*, *Sheer (needs climb or fly)*.

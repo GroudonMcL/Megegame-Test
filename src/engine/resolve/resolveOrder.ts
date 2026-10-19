@@ -5,7 +5,7 @@ import { deriveStats, unitBonuses } from "../ruleset/derive";
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
 import { addTo, buildingTier, unitEffects } from "../orders/economy";
-import { findConnection, milesPerRound, stepCost, type MoveMode } from "../orders/movement";
+import { milesPerRound, type MoveMode } from "../orders/movement";
 import { validateOrders, type OrderDraft } from "../orders/validate";
 import type { TeamView } from "../world/teamView";
 import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types";
@@ -15,6 +15,10 @@ import type { CombatOdds, CombatSideInput } from "../combat/types";
 import { passivePerception, searchCheck, stealthCheck, watchers } from "../stealth/stealth";
 import { rollOnTable, type Modifier } from "./rollTable";
 import type { Proposal, World } from "./types";
+import { mapScaleOf } from "../geo/mapSize";
+import type { Pt } from "../geo/polygon";
+import { parsePath, traceRoute } from "../orders/route";
+import { routeMapFromWorld } from "../orders/routeMap";
 
 // Pre-resolves one order against the real game state: checks it again, rolls
 // what needs rolling, and lists the state changes and drafted outcome text for
@@ -32,6 +36,7 @@ export function fullView(world: World, teamId: string, round: number): TeamView 
       code: r.code,
       x: r.x,
       y: r.y,
+      polygon: r.polygon,
       state: "visible" as const,
       name: r.name,
       description: r.description,
@@ -48,7 +53,9 @@ export function fullView(world: World, teamId: string, round: number): TeamView 
     ownUnits: world.units.filter((u) => u.ownerTeamId === teamId),
     otherUnits: world.units
       .filter((u) => u.ownerTeamId !== teamId && u.regionId && ON_MAP_STATUSES.has(u.status))
-      .map((u) => ({ id: u.id, creatureId: u.creatureId, creatureName: u.creatureId, ownerTeamId: u.ownerTeamId, regionId: u.regionId!, dead: u.status === "dead" })),
+      .map((u) => ({ id: u.id, creatureId: u.creatureId, creatureName: u.creatureId, ownerTeamId: u.ownerTeamId, regionId: u.regionId!, x: u.x, y: u.y, dead: u.status === "dead" })),
+    terrain: (world.terrain ?? []).map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: [[a.polygon]] })),
+    map: mapScaleOf(world),
     inventory: world.inventory[teamId] ?? {},
     round,
   };
@@ -184,27 +191,24 @@ export function resolveOrder(input: ResolveInput): Proposal {
   switch (action.handler) {
     case "move": {
       const mode = (["normal", "forceMarch", "stealth"].includes(action.config.mode as string) ? action.config.mode : "normal") as MoveMode;
-      const path = strs(value("path"));
+      const path = parsePath(value("path"));
       const from = units[0]?.regionId;
       if (!from || !path.length) break;
+      const fromRegion = regionById.get(from);
+      const startAt: Pt = units[0].x !== null && units[0].y !== null ? [units[0].x, units[0].y] : [fromRegion?.x ?? 0.5, fromRegion?.y ?? 0.5];
       const group = units.map((u) => ({ unit: u, used: milesPerRound(r, u) > 0 ? u.milesUsed / milesPerRound(r, u) : 1 }));
-      const used = group.map((g) => g.used);
       const wildHere = (id: string) => world.units.filter((u) => u.regionId === id && u.ownerTeamId === null && ACTIVE_STATUSES.has(u.status));
       const sideLabel = (observer: string | null) => (observer ? (world.teams.find((t) => t.id === observer)?.name ?? "another faction") : "wild monsters");
-      let at = from;
       let prev: string | null = null;
+      let last = from;
       // Monsters attack units that walk in, and the move stops there. Stealthy
       // units roll Stealth against everyone watching each region they enter.
       let fightAt: string | null = null;
       let ambush = false;
       const spotted = new Map<string, Set<string>>();
-      for (const next of path) {
-        const c = findConnection(world.connections, at, next)!;
-        const step = stepCost(r, c, group, mode);
-        if ("blocked" in step) break;
-        step.fractions.forEach((f, i) => (used[i] += f));
-        prev = at;
-        at = next;
+      const route = traceRoute(r, routeMapFromWorld(world, teamId), startAt, from, path, group, mode, (next) => {
+        prev = last;
+        last = next;
         const code = regionById.get(next)?.code ?? "?";
         if (mode === "stealth") {
           let caught = false;
@@ -221,34 +225,42 @@ export function resolveOrder(input: ResolveInput): Proposal {
               }
             }
           }
-          if (caught) {
-            fightAt = next;
-            break;
-          }
-        } else if (wildHere(next).length) {
-          fightAt = next;
-          // Monsters that are all hidden may ambush: they roll Stealth against the movers' best passive Perception.
-          const monsters = wildHere(next);
-          if (monsters.every((m) => m.status === "hidden")) {
-            const best = Math.max(...units.map((u) => passivePerception(r, u)));
-            const watch = { observer: teamId, dc: best, source: "your units' best passive Perception", disadvantage: false };
-            ambush = monsters.every((m) => {
-              const res = stealthCheck(r, m, watch, rng, `${name(m)} lies in wait in ${code}`);
-              p.rolls.push(res.roll);
-              return res.success;
-            });
-          }
-          break;
+          if (caught) fightAt = next;
+          return caught;
         }
-      }
-      const walked = path.slice(0, path.indexOf(at) + 1);
+        if (!wildHere(next).length) return false;
+        fightAt = next;
+        // Monsters that are all hidden may ambush: they roll Stealth against the movers' best passive Perception.
+        const monsters = wildHere(next);
+        if (monsters.every((m) => m.status === "hidden")) {
+          const best = Math.max(...units.map((u) => passivePerception(r, u)));
+          const watch = { observer: teamId, dc: best, source: "your units' best passive Perception", disadvantage: false };
+          ambush = monsters.every((m) => {
+            const res = stealthCheck(r, m, watch, rng, `${name(m)} lies in wait in ${code}`);
+            p.rolls.push(res.roll);
+            return res.success;
+          });
+        }
+        return true;
+      });
+      const at = route.endRegion ?? from;
+      const walked = route.entered.flatMap((e) => (e.regionId ? [e.regionId] : []));
       p.regions.push(...walked);
       units.forEach((u, i) => {
-        p.changes.push({ type: "moveUnit", unitId: u.id, regionId: at, milesUsed: fightAt ? milesPerRound(r, u) : Math.min(1, used[i]) * milesPerRound(r, u) });
+        p.changes.push({
+          type: "moveUnit",
+          unitId: u.id,
+          regionId: at,
+          x: route.end[0],
+          y: route.end[1],
+          milesUsed: fightAt ? milesPerRound(r, u) : Math.min(1, route.used[i]) * milesPerRound(r, u),
+        });
         p.endsIn.push({ unitId: u.id, regionId: at });
       });
-      const route = [from, ...walked].map((id) => regionById.get(id)?.code ?? "?").join(" → ");
-      lines.push(`${unitList} ${mode === "forceMarch" ? "force-marched" : mode === "stealth" ? "crept" : "moved"} ${route}${fightAt && walked.length < path.length ? " and stopped there" : ""}.`);
+      const routeText = [from, ...walked].map((id) => regionById.get(id)?.code ?? "?").join(" → ");
+      const stopped = fightAt ? " and stopped there" : route.blocked ? ` and stopped: ${route.blocked}` : route.outOfMovement ? " and ran out of movement" : "";
+      lines.push(`${unitList} ${mode === "forceMarch" ? "force-marched" : mode === "stealth" ? "crept" : "moved"} ${routeText} (${Math.round(Math.max(0, ...route.miles))} miles)${stopped}.`);
+      if (route.blocked) review(`The move stopped early: ${route.blocked}.`);
       for (const id of walked) {
         const others = world.units.filter((u) => u.regionId === id && u.ownerTeamId !== null && u.ownerTeamId !== teamId && ACTIVE_STATUSES.has(u.status));
         if (others.length) {
@@ -335,6 +347,8 @@ export function resolveOrder(input: ResolveInput): Proposal {
         augmentIds: [],
         hp: 0,
         regionId: region.id,
+        x: null,
+        y: null,
         milesUsed: 0,
         status: "active",
         isLeader: false,
@@ -688,6 +702,8 @@ export function applyTableResults(
             augmentIds: [],
             hp: creature.statBlock.hp,
             regionId: where,
+            x: null,
+            y: null,
             milesUsed: 0,
             status: "active",
             isLeader: false,

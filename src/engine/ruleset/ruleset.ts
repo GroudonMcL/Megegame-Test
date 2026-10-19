@@ -27,6 +27,8 @@ export const TerrainType = z.object({
   bypassedByNaturalExplorer: z.boolean().default(false),
   /** If non-empty, a unit needs at least one of these speeds to cross. */
   requiresMovement: z.array(z.enum(["fly", "swim", "climb", "burrow"])).default([]),
+  /** How terrain areas of this type are drawn on the map; empty = chosen from the rules above. */
+  colour: z.string().default(""),
 });
 
 export const SettlementTier = z.object({

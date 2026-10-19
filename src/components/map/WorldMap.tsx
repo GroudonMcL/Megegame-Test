@@ -5,13 +5,13 @@ import { deriveStats, unitBonuses } from "@/engine/ruleset/derive";
 import { formatCr } from "@/engine/ruleset/common";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import { deleteUnitAction, moveUnitAction, spawnUnitsAction, updateUnitAction } from "@/app/dm/games/[gameId]/map/actions";
-import { MapCanvas, type MapEdge, type MapNode } from "./MapCanvas";
-import { DEFAULT_MAP_SIZE, type ConnectionData, type MapImageData, type RegionData, type TeamData, type UnitData } from "./mapData";
-import { emblemFor, WILD_EMBLEM } from "@/components/icons/emblems";
-import { EmblemGlyph, emblemInk, TeamEmblem } from "@/components/icons/TeamEmblem";
+import { SidePanel } from "@/components/shell/SidePanel";
+import { MapCanvas, type MapNode } from "./MapCanvas";
+import { connectionEdges, terrainLayer } from "./mapLayers";
+import { groupBadges, SpotBadges } from "./UnitBadges";
+import { DEFAULT_MAP_SIZE, type ConnectionData, type MapImageData, type RegionData, type TeamData, type TerrainAreaData, type UnitData } from "./mapData";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
 
-const WILD = "wild";
-const WILD_COLOUR = "var(--wild)";
 const STATUSES = ["active", "hidden", "dead", "captured", "tamed", "stored", "disbanded"] as const;
 const ON_MAP = new Set(["active", "hidden", "dead"]);
 const input = "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm";
@@ -28,12 +28,14 @@ export function WorldMap(props: {
   connections: ConnectionData[];
   units: UnitData[];
   teams: TeamData[];
+  terrainAreas: TerrainAreaData[];
   mapImage: MapImageData | null;
 }) {
   const { gameId, ruleset, regions, connections, teams } = props;
   const [units, setUnits] = useState(props.units);
   const [selected, setSelected] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(true);
+  const [showKey, setShowKey] = useState(false);
   const [dragging, setDragging] = useState<{ unitId: string; x: number; y: number } | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -52,35 +54,39 @@ export function WorldMap(props: {
     return c ? deriveStats(c.statBlock, unitBonuses(ruleset, u)).maxHp.total : u.hp;
   };
 
+  const regionById = useMemo(() => new Map(regions.map((r) => [r.id, r])), [regions]);
   const nodes: MapNode[] = regions.map((r) => ({
     id: r.id,
     x: r.x,
     y: r.y,
+    polygon: r.polygon,
     label: r.code,
-    fill: r.ownerTeamId ? team.get(r.ownerTeamId)?.colour : "var(--map-region)",
+    fill: r.ownerTeamId ? team.get(r.ownerTeamId)?.colour : r.polygon.length >= 3 ? undefined : "var(--map-region)",
     ring: Boolean(r.settlementTierId),
     dashed: r.hidden,
     dim: r.hidden,
   }));
-  const edges: MapEdge[] = connections.map((c) => ({ id: c.id, a: c.regionA, b: c.regionB, dashed: c.hidden, dim: c.hidden }));
+  const edges = connectionEdges(connections, (id) => regionById.get(id)?.polygon, ruleset, (c) => ({ dim: c.hidden }));
+  const terrain = terrainLayer(
+    props.terrainAreas.map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: [[a.polygon]] })),
+    ruleset,
+  );
 
-  /** Units on the map, grouped per region and owner. */
-  const groups = useMemo(() => {
-    const out = new Map<string, { owner: string; count: number; hidden: number; dead: number }[]>();
-    for (const u of units) {
-      if (!u.regionId || !ON_MAP.has(u.status)) continue;
-      if (!showHidden && u.status === "hidden") continue;
-      const owner = u.ownerTeamId ?? WILD;
-      const list = out.get(u.regionId) ?? [];
-      let g = list.find((x) => x.owner === owner);
-      if (!g) list.push((g = { owner, count: 0, hidden: 0, dead: 0 }));
-      g.count++;
-      if (u.status === "hidden") g.hidden++;
-      if (u.status === "dead") g.dead++;
-      out.set(u.regionId, list);
-    }
-    return out;
-  }, [units, showHidden]);
+  /** Units on the map, grouped by where they stand and who owns them. */
+  const spots = useMemo(
+    () =>
+      groupBadges(
+        units
+          .filter((u) => u.regionId && ON_MAP.has(u.status) && (showHidden || u.status !== "hidden"))
+          .map((u) => ({ regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId, dead: u.status === "dead", hidden: u.status === "hidden" })),
+        (id) => {
+          const r = regionById.get(id);
+          return r ? [r.x, r.y] : undefined;
+        },
+        (id) => team.get(id),
+      ),
+    [units, showHidden, regionById, team],
+  );
 
   const update = (u: UnitData) => setUnits((us) => us.map((x) => (x.id === u.id ? u : x)));
   const report = (ok: boolean, text: string) => setMessage({ ok, text });
@@ -117,129 +123,118 @@ export function WorldMap(props: {
   const here = units.filter((u) => (selected === "unplaced" ? !u.regionId || !ON_MAP.has(u.status) : u.regionId === selected && ON_MAP.has(u.status)));
   const unplacedCount = units.filter((u) => !u.regionId || !ON_MAP.has(u.status)).length;
 
+  // Fills the DM's map shell: the map underneath, controls and key in the
+  // bottom-left corner, the selected region (or the off-map units) in a side panel.
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-1">
-          <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden units
-        </label>
-        <button type="button" className="rounded-md border border-border px-3 py-1.5" onClick={() => setSelected("unplaced")}>
-          Off-map units ({unplacedCount})
-        </button>
-        <span className="flex flex-wrap items-center gap-2 text-muted">
-          {teams.map((t) => (
-            <span key={t.id} className="flex items-center gap-1">
-              <TeamEmblem team={t} size={16} /> {t.name}
+    <div className="relative h-full">
+      <div className="glass absolute bottom-3 left-3 z-10 max-w-[min(36rem,calc(100%-1.5rem))] space-y-2 rounded-xl border border-border p-2.5 text-xs shadow-panel sm:left-[6.75rem]">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden units
+          </label>
+          <button type="button" className="rounded-md border border-border bg-raised px-2.5 py-1 hover:border-border-strong" onClick={() => setSelected("unplaced")}>
+            Off-map units ({unplacedCount})
+          </button>
+          <button type="button" className="rounded-md border border-border bg-raised px-2.5 py-1 hover:border-border-strong" aria-expanded={showKey} onClick={() => setShowKey(!showKey)}>
+            {showKey ? "Hide key" : "Map key"}
+          </button>
+        </div>
+        {showKey && (
+          <>
+            <p className="text-muted">Click a region to see and edit what&apos;s there, or to place units. Drag a unit&apos;s ⠿ handle onto another region to move it.</p>
+            <span className="flex flex-wrap items-center gap-2 text-muted">
+              {teams.map((t) => (
+                <span key={t.id} className="flex items-center gap-1">
+                  <TeamEmblem team={t} size={16} /> {t.name}
+                </span>
+              ))}
+              <span className="flex items-center gap-1">
+                <TeamEmblem team={null} size={16} /> Wild monsters
+              </span>
+              <span>· dashed badge = hidden units · ✝ = dead</span>
             </span>
-          ))}
-          <span className="flex items-center gap-1">
-            <TeamEmblem team={null} size={16} /> Wild monsters
-          </span>
-          <span>· dashed badge = hidden units · ✝ = dead</span>
-        </span>
+          </>
+        )}
       </div>
       {message && (
-        <p className={`text-sm ${message.ok ? "text-ok" : "text-danger"}`} role="status">
+        <p className={`glass absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border px-4 py-1.5 text-sm shadow-panel ${message.ok ? "text-ok" : "text-danger"}`} role="status">
           {message.text}
         </p>
       )}
-      <div className="grid gap-4 lg:grid-cols-[1fr_26rem] [&>*]:min-w-0">
-        <MapCanvas
-          width={size.width}
-          height={size.height}
-          imageUrl={props.mapImage ? `/api/assets/${props.mapImage.id}` : null}
-          nodes={nodes}
-          edges={edges}
-          selectedNodeId={region?.id}
-          onNodeClick={(id) => setSelected(id)}
-          onBackgroundClick={() => setSelected(null)}
-          renderNodeExtras={(n, p, scale) =>
-            (groups.get(n.id) ?? []).map((g, i, all) => {
-              // Fan the badges out below the node.
-              const angle = Math.PI / 2 + (i - (all.length - 1) / 2) * 0.7;
-              const bx = p.x + Math.cos(angle) * 22 * scale;
-              const by = p.y + Math.sin(angle) * 22 * scale;
-              const t = g.owner === WILD ? undefined : team.get(g.owner);
-              const colour = g.owner === WILD ? WILD_COLOUR : (t?.colour ?? "var(--map-unknown-owner)");
-              // A pill with the owner's emblem and the number of units.
-              const h = 16 * scale;
-              const w = h * 2;
-              return (
-                <g key={g.owner} pointerEvents="none">
-                  <rect x={bx - w / 2} y={by - h / 2} width={w} height={h} rx={h / 2} fill={colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} strokeDasharray={g.hidden ? `${3 * scale} ${2 * scale}` : undefined} />
-                  <EmblemGlyph glyph={t ? emblemFor(t) : WILD_EMBLEM} x={bx - w / 2 + h * 0.55} y={by} size={h * 0.7} fill={t ? emblemInk(t.colour) : "#ffffff"} />
-                  <text x={bx + w / 2 - h * 0.6} y={by + 3.5 * scale} textAnchor="middle" fontSize={10 * scale} fontWeight={700} fill="var(--map-label)" stroke="var(--map-label-outline)" strokeWidth={2 * scale} paintOrder="stroke">
-                    {g.count}
-                    {g.dead ? "✝" : ""}
-                  </text>
-                </g>
-              );
-            })
-          }
-        />
+      <MapCanvas
+        bare
+        className="h-full"
+        width={size.width}
+        height={size.height}
+        imageUrl={props.mapImage ? `/api/assets/${props.mapImage.id}` : null}
+        nodes={nodes}
+        edges={edges}
+        selectedNodeId={region?.id}
+        onNodeClick={(id) => setSelected(id)}
+        onBackgroundClick={() => setSelected(null)}
+        terrain={terrain}
+        overlay={(scale) => spots.map((groups) => <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} />)}
+      />
 
-        <aside className="min-w-0 space-y-3 glass rounded-xl border border-border shadow-panel p-4 lg:max-h-[75vh] lg:overflow-y-auto">
-          {!selected && <p className="text-sm text-muted">Click a region to see and edit what&apos;s there, or to place units. Drag a unit&apos;s ⠿ handle onto another region to move it.</p>}
-          {(region || selected === "unplaced") && (
-            <>
-              <h3 className="text-lg font-semibold">{region ? `${region.code}${region.name ? ` · ${region.name}` : ""}` : "Off-map units"}</h3>
-              {region && (
-                <p className="text-sm text-muted">
-                  {region.ownerTeamId ? `Owned by ${team.get(region.ownerTeamId)?.name}` : "Unowned"}
-                  {region.settlementTierId ? ` · ${ruleset.settlementTiers.find((t) => t.id === region.settlementTierId)?.name ?? region.settlementTierId}` : ""}
-                  {region.buildings.length ? ` · ${region.buildings.map((b) => `${ruleset.buildings.find((x) => x.id === b.buildingId)?.name ?? b.buildingId} ${b.tier}`).join(", ")}` : ""}
-                  {region.hidden ? " · hidden region" : ""}
-                </p>
-              )}
-              <ul className="space-y-2">
-                {here.map((u) => (
-                  <UnitRow
-                    key={u.id}
-                    unit={u}
-                    ruleset={ruleset}
-                    teams={teams}
-                    regions={regions}
-                    maxHp={maxHp(u)}
-                    pending={pending}
-                    onDragStart={(e) => setDragging({ unitId: u.id, x: e.clientX, y: e.clientY })}
-                    onSave={(fields, hp) =>
-                      startTransition(async () => {
-                        const r = await updateUnitAction(gameId, u.id, fields, hp);
-                        if (r.ok) {
-                          update(r.value as UnitData);
-                          report(true, `Saved ${r.value.name}.`);
-                        } else report(false, r.error);
-                      })
-                    }
-                    onDelete={() => {
-                      if (!confirm(`Remove ${u.name} from the game completely? (To kill it, set its status to dead instead.)`)) return;
-                      setUnits((us) => us.filter((x) => x.id !== u.id));
-                      startTransition(() => deleteUnitAction(gameId, u.id));
-                    }}
-                  />
-                ))}
-                {here.length === 0 && <li className="text-sm text-muted">No units here.</li>}
-              </ul>
-              {region && (
-                <SpawnForm
+      {(region || selected === "unplaced") && (
+        <SidePanel title={region ? `${region.code}${region.name ? ` · ${region.name}` : ""}` : "Off-map units"} onClose={() => setSelected(null)}>
+          <div className="space-y-3">
+            {region && (
+              <p className="text-sm text-muted">
+                {region.ownerTeamId ? `Owned by ${team.get(region.ownerTeamId)?.name}` : "Unowned"}
+                {region.settlementTierId ? ` · ${ruleset.settlementTiers.find((t) => t.id === region.settlementTierId)?.name ?? region.settlementTierId}` : ""}
+                {region.buildings.length ? ` · ${region.buildings.map((b) => `${ruleset.buildings.find((x) => x.id === b.buildingId)?.name ?? b.buildingId} ${b.tier}`).join(", ")}` : ""}
+                {region.hidden ? " · hidden region" : ""}
+              </p>
+            )}
+            <ul className="space-y-2">
+              {here.map((u) => (
+                <UnitRow
+                  key={u.id}
+                  unit={u}
                   ruleset={ruleset}
                   teams={teams}
+                  regions={regions}
+                  maxHp={maxHp(u)}
                   pending={pending}
-                  onSpawn={(fields, count) =>
+                  onDragStart={(e) => setDragging({ unitId: u.id, x: e.clientX, y: e.clientY })}
+                  onSave={(fields, hp) =>
                     startTransition(async () => {
-                      const r = await spawnUnitsAction(gameId, { ...fields, regionId: region.id }, count);
+                      const r = await updateUnitAction(gameId, u.id, fields, hp);
                       if (r.ok) {
-                        setUnits((us) => [...us, ...(r.value as UnitData[])]);
-                        report(true, `Placed ${r.value.length} unit${r.value.length === 1 ? "" : "s"} in ${region.code}.`);
+                        update(r.value as UnitData);
+                        report(true, `Saved ${r.value.name}.`);
                       } else report(false, r.error);
                     })
                   }
+                  onDelete={() => {
+                    if (!confirm(`Remove ${u.name} from the game completely? (To kill it, set its status to dead instead.)`)) return;
+                    setUnits((us) => us.filter((x) => x.id !== u.id));
+                    startTransition(() => deleteUnitAction(gameId, u.id));
+                  }}
                 />
-              )}
-            </>
-          )}
-        </aside>
-      </div>
+              ))}
+              {here.length === 0 && <li className="text-sm text-muted">No units here.</li>}
+            </ul>
+            {region && (
+              <SpawnForm
+                ruleset={ruleset}
+                teams={teams}
+                pending={pending}
+                onSpawn={(fields, count) =>
+                  startTransition(async () => {
+                    const r = await spawnUnitsAction(gameId, { ...fields, regionId: region.id }, count);
+                    if (r.ok) {
+                      setUnits((us) => [...us, ...(r.value as UnitData[])]);
+                      report(true, `Placed ${r.value.length} unit${r.value.length === 1 ? "" : "s"} in ${region.code}.`);
+                    } else report(false, r.error);
+                  })
+                }
+              />
+            )}
+          </div>
+        </SidePanel>
+      )}
       {dragging && (
         <div className="pointer-events-none fixed z-50 rounded-md bg-accent px-2 py-1 text-xs text-accent-foreground shadow" style={{ left: dragging.x + 8, top: dragging.y + 8 }}>
           {units.find((u) => u.id === dragging.unitId)?.name} → drop on a region

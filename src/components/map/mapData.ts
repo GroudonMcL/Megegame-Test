@@ -9,6 +9,7 @@ export interface RegionData {
   description: string;
   x: number;
   y: number;
+  polygon: [number, number][];
   settleable: boolean;
   hidden: boolean;
   ownerTeamId: string | null;
@@ -24,6 +25,8 @@ export interface ConnectionData {
   id: string;
   regionA: string;
   regionB: string;
+  kind: string;
+  blocked: boolean;
   miles: number | null;
   terrainId: string;
   hidden: boolean;
@@ -40,9 +43,18 @@ export interface UnitData {
   augmentIds: string[];
   hp: number;
   regionId: string | null;
+  x: number | null;
+  y: number | null;
   status: string;
   isLeader: boolean;
   notes: string;
+}
+
+export interface TerrainAreaData {
+  id: string;
+  terrainId: string;
+  name: string;
+  polygon: [number, number][];
 }
 
 export interface TeamData {
@@ -60,7 +72,7 @@ export interface MapImageData {
 }
 
 /** Without an image the map is a plain grid of this size. */
-export const DEFAULT_MAP_SIZE = { width: 2000, height: 1400 };
+export { DEFAULT_MAP_SIZE } from "@/engine/geo/mapSize";
 
 /** Picks the fields of a region the editor can change. */
 export function regionPatch(r: RegionData) {

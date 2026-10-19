@@ -65,7 +65,9 @@ export function computeVisibility(
     const reg = regionById.get(id);
     return Boolean(reg && (!reg.hidden || knowledge.regions.get(id)?.discovered));
   };
-  const usable = (c: WorldConnection) => !c.hidden || knowledge.connections.has(c.id);
+  const known = (c: WorldConnection) => !c.hidden || knowledge.connections.has(c.id);
+  // A blocked border is as if the regions weren't neighbours: no moving or seeing across it.
+  const usable = (c: WorldConnection) => !c.blocked && known(c);
 
   const neighbours = new Map<string, string[]>();
   for (const c of world.connections) {
@@ -125,9 +127,10 @@ export function computeVisibility(
     for (const n of neighbours.get(id) ?? []) if (!regions.has(n) && knownRegion(n)) regions.set(n, "frontier");
   }
 
+  // Sent to the team: the ways it knows about, and blocked borders it can see (to draw them).
   const connections = new Set<string>();
   for (const c of world.connections) {
-    if (!usable(c)) continue;
+    if (!known(c)) continue;
     const a = regions.get(c.regionA);
     const b = regions.get(c.regionB);
     if (!a || !b || (a === "frontier" && b === "frontier")) continue;

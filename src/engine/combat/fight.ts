@@ -19,7 +19,7 @@ export interface FightOptions {
 export function retreatRegion(world: World, unit: WorldUnit, regionId: string, cameFrom?: string | null): string | null {
   if (cameFrom && cameFrom !== regionId) return cameFrom;
   const neighbours = world.connections
-    .filter((c) => !c.hidden && (c.regionA === regionId || c.regionB === regionId))
+    .filter((c) => !c.hidden && !c.blocked && (c.regionA === regionId || c.regionB === regionId))
     .map((c) => (c.regionA === regionId ? c.regionB : c.regionA))
     .map((id) => world.regions.find((x) => x.id === id))
     .filter((x): x is World["regions"][number] => Boolean(x && !x.hidden))
@@ -80,6 +80,8 @@ export function fightChanges(r: Ruleset, world: World, res: CombatResult, opts: 
           augmentIds: [],
           hp: u.hp,
           regionId: res.regionId,
+          x: null,
+          y: null,
           milesUsed: 0,
           status: "active",
           isLeader: false,

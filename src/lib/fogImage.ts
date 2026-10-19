@@ -4,10 +4,12 @@ import sharp from "sharp";
 
 // Paints fog of war onto the map image on the server, so the parts of the map
 // a team hasn't seen never reach its browser. Unseen areas are solid fog;
-// regions seen now get a clear circle, regions seen before a dimmed one.
+// regions seen now are cleared to their outline, regions seen before dimmed.
+// A region without an outline yet gets a soft circle around its centre.
 
 export interface FogHole {
-  /** Position as fractions of the map's width and height. */
+  /** The region's outline, as fractions of the map; empty = use a circle at x, y. */
+  polygon: [number, number][];
   x: number;
   y: number;
   dim: boolean;
@@ -15,23 +17,31 @@ export interface FogHole {
 
 const FOG = "#101014";
 
-/** Clear circles for the regions a team sees now, dimmed ones for regions seen before. */
-export function fogHoles(view: { regions: { x: number; y: number; state: string }[] }): FogHole[] {
-  return view.regions.filter((r) => r.state !== "frontier").map((r) => ({ x: r.x, y: r.y, dim: r.state === "remembered" }));
+/** Holes for the regions a team sees now (clear) and has seen before (dimmed). */
+export function fogHoles(view: { regions: { x: number; y: number; polygon: [number, number][]; state: string }[] }): FogHole[] {
+  return view.regions.filter((r) => r.state !== "frontier").map((r) => ({ polygon: r.polygon, x: r.x, y: r.y, dim: r.state === "remembered" }));
 }
 
-/** An SVG of the fog layer: solid everywhere except soft holes around seen regions. */
+/** An SVG of the fog layer: solid everywhere except softened holes over seen regions. */
 export function fogSvg(width: number, height: number, holes: FogHole[], radiusFraction: number): string {
   const r = Math.max(8, Math.round(width * radiusFraction));
-  // In the mask, white = fog shows, black = fog removed.
-  const circles = holes
-    .map((h) => `<circle cx="${(h.x * width).toFixed(1)}" cy="${(h.y * height).toFixed(1)}" r="${r}" fill="url(#${h.dim ? "dim" : "clear"})"/>`)
+  // In the mask, white = fog shows, black = fog removed (grey = dimmed).
+  const shapes = [...holes]
+    .sort((a, b) => Number(b.dim) - Number(a.dim))
+    .map((h) => {
+      const fill = h.dim ? "#737373" : "#000";
+      if (h.polygon.length < 3) return `<circle cx="${(h.x * width).toFixed(1)}" cy="${(h.y * height).toFixed(1)}" r="${r}" fill="${fill}"/>`;
+      const d = h.polygon.map(([x, y]) => `${(x * width).toFixed(1)} ${(y * height).toFixed(1)}`).join("L");
+      return `<path d="M${d}Z" fill="${fill}"/>`;
+    })
     .join("");
+  // Clear holes drawn after dimmed ones, so a border shared by both stays clear.
+  // Only the holes are softened: blurring the whole layer would thin the fog along the image's edges.
+  const blur = Math.max(1, Math.round(width * 0.003));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
 <defs>
-<radialGradient id="clear"><stop offset="0.6" stop-color="#000"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
-<radialGradient id="dim"><stop offset="0.6" stop-color="#000" stop-opacity="0.45"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
-<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#fff"/>${circles}</mask>
+<filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${blur}"/></filter>
+<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#fff"/><g filter="url(#soft)">${shapes}</g></mask>
 </defs>
 <rect width="${width}" height="${height}" fill="${FOG}" mask="url(#m)"/>
 </svg>`;
@@ -39,8 +49,10 @@ export function fogSvg(width: number, height: number, holes: FogHole[], radiusFr
 
 export function fogKey(assetId: string, holes: FogHole[], radiusFraction: number): string {
   const h = createHash("sha256");
-  h.update(`${assetId}|${radiusFraction}|`);
-  for (const x of [...holes].sort((a, b) => a.x - b.x || a.y - b.y)) h.update(`${x.x.toFixed(4)},${x.y.toFixed(4)},${x.dim ? 1 : 0};`);
+  h.update(`v3|${assetId}|${radiusFraction}|`);
+  for (const x of [...holes].sort((a, b) => a.x - b.x || a.y - b.y)) {
+    h.update(`${x.x.toFixed(4)},${x.y.toFixed(4)},${x.dim ? 1 : 0}:${x.polygon.map(([px, py]) => `${px.toFixed(4)},${py.toFixed(4)}`).join(" ")};`);
+  }
   return h.digest("hex").slice(0, 32);
 }
 

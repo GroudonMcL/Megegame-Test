@@ -1,3 +1,4 @@
+import type { Polygon } from "../geo/polygon";
 import type { Effect } from "../ruleset/effects";
 
 // Plain shapes of the game state the engine works on. They match the database
@@ -8,8 +9,11 @@ export interface WorldRegion {
   code: string;
   name: string;
   description: string;
+  /** The region's centre (where new units appear), as fractions of the map. */
   x: number;
   y: number;
+  /** Its outline, in the same fractions; empty for a region not drawn yet. */
+  polygon: Polygon;
   settleable: boolean;
   hidden: boolean;
   ownerTeamId: string | null;
@@ -24,9 +28,29 @@ export interface WorldConnection {
   id: string;
   regionA: string;
   regionB: string;
+  /** "border" = the regions touch; "link" = a way between regions that don't (tunnel, sea lane). */
+  kind: string;
+  /** A closed border: as if the regions weren't neighbours, for moving and for seeing. */
+  blocked: boolean;
+  /** Links: miles, or null for the straight-line distance. */
   miles: number | null;
   terrainId: string;
   hidden: boolean;
+}
+
+/** Difficult ground drawn over the regions. */
+export interface WorldTerrainArea {
+  id: string;
+  terrainId: string;
+  polygon: Polygon;
+}
+
+/** What's needed to measure distances on the map. */
+export interface MapScale {
+  /** Map height ÷ width. */
+  aspect: number;
+  /** Miles across the map's full width. */
+  milesAcross: number;
 }
 
 export interface WorldUnit {
@@ -40,6 +64,9 @@ export interface WorldUnit {
   augmentIds: string[];
   hp: number;
   regionId: string | null;
+  /** Where in the region it stands (fractions of the map); null = the region's centre. */
+  x: number | null;
+  y: number | null;
   milesUsed: number;
   status: string;
   isLeader: boolean;

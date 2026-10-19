@@ -17,7 +17,7 @@ import {
   startResolvingAction,
   undoAction,
   type Result,
-} from "@/app/dm/games/[gameId]/resolve/actions";
+} from "@/app/dm/games/[gameId]/(shell)/resolve/actions";
 import { EconomyTable } from "@/components/play/EconomyTable";
 import { FightLog } from "@/components/combat/FightLog";
 import type { CombatOdds, LogEntry } from "@/engine/combat/types";

@@ -1,5 +1,7 @@
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
+import { parsePath, traceRoute } from "../orders/route";
+import { routeMapFromWorld } from "../orders/routeMap";
 import type { OrderDraft } from "../orders/validate";
 import type { Change, World } from "./types";
 
@@ -43,10 +45,20 @@ export function describeInputs(r: Ruleset, world: World, order: OrderDraft): str
         break;
       }
       case "path": {
+        // The regions the route passes through on the real map, from where the first unit stands.
         const units = action.inputs.findIndex((x) => x.type === "unit");
         const first = units >= 0 ? ([] as string[]).concat((order.inputs[String(units)] as string[] | string) ?? [])[0] : undefined;
-        const from = world.units.find((u) => u.id === first)?.regionId;
-        text = [...(from ? [from] : []), ...list].map((id) => world.regions.find((x) => x.id === id)?.code ?? "?").join(" → ");
+        const mover = world.units.find((u) => u.id === first);
+        const home = world.regions.find((x) => x.id === mover?.regionId);
+        const steps = parsePath(v);
+        if (!mover || !home) {
+          text = `${steps.length} stop${steps.length === 1 ? "" : "s"}`;
+          break;
+        }
+        const start: [number, number] = mover.x !== null && mover.y !== null ? [mover.x, mover.y] : [home.x, home.y];
+        const route = traceRoute(r, routeMapFromWorld(world, mover.ownerTeamId ?? ""), start, home.id, steps, [{ unit: mover, used: 0 }], "normal");
+        const codes = [home.id, ...route.entered.map((e) => e.regionId ?? "")].map((id) => world.regions.find((x) => x.id === id)?.code ?? "?");
+        text = `${codes.join(" → ")} (${Math.round(route.miles[0] ?? 0)} mi)${route.blocked ? `, stops: ${route.blocked}` : ""}`;
         break;
       }
       case "creature":

@@ -24,7 +24,7 @@ export default async function DiplomacyPage({ params }: PageProps<"/dm/games/[ga
   const met = (a: string, b: string) => contacts.find((c) => (c.teamA === a && c.teamB === b) || (c.teamA === b && c.teamB === a));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+    <div className="grid gap-6 @3xl:grid-cols-2 [&>*]:min-w-0">
       <Card>
         <h2 className="text-lg font-medium">Who has met</h2>
         <p className="mt-1 text-sm text-muted">

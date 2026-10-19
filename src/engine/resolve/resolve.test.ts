@@ -16,14 +16,30 @@ const r = buildPreset("utterdark");
 const ME = "team-me";
 const THEM = "team-them";
 
+// Three square regions in a row, a | b | c, a third of the map wide each. The
+// map is 36 miles across, so centre to centre is 12 miles (as old connections were).
+const third = 1 / 3;
+const square = (i: number): [number, number][] => [
+  [i * third, 0],
+  [(i + 1) * third, 0],
+  [(i + 1) * third, third],
+  [i * third, third],
+];
+const SHAPES: Record<string, { polygon: [number, number][]; x: number; y: number }> = {
+  a: { polygon: square(0), x: third / 2, y: third / 2 },
+  b: { polygon: square(1), x: 1.5 * third, y: third / 2 },
+  c: { polygon: square(2), x: 2.5 * third, y: third / 2 },
+};
+/** The centre of a region, as a path point. */
+const at = (id: string): [number, number] => [SHAPES[id].x, SHAPES[id].y];
 function region(id: string, extra: Partial<WorldRegion> = {}): WorldRegion {
-  return { id, code: id.toUpperCase(), name: "", description: "", x: 0, y: 0, settleable: true, hidden: false, ownerTeamId: null, settlementTierId: null, buildings: [], structures: [], deposits: [], features: [], ...extra };
+  return { id, code: id.toUpperCase(), name: "", description: "", x: SHAPES[id]?.x ?? 0, y: SHAPES[id]?.y ?? 0, polygon: SHAPES[id]?.polygon ?? [], settleable: true, hidden: false, ownerTeamId: null, settlementTierId: null, buildings: [], structures: [], deposits: [], features: [], ...extra };
 }
-const conn = (a: string, b: string): WorldConnection => ({ id: `${a}-${b}`, regionA: a, regionB: b, miles: null, terrainId: "normal", hidden: false });
+const conn = (a: string, b: string): WorldConnection => ({ id: `${a}-${b}`, regionA: a, regionB: b, kind: "border", blocked: false, miles: null, terrainId: "normal", hidden: false });
 let n = 0;
 const uid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 function unit(extra: Partial<WorldUnit>): WorldUnit {
-  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 11, regionId: "a", milesUsed: 0, status: "active", isLeader: false, usesSpent: {}, ...extra } as WorldUnit;
+  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 11, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {}, ...extra } as WorldUnit;
 }
 function world(units: WorldUnit[], resources = { gold: 20, food: 5, growth: 50 }): World {
   return {
@@ -35,6 +51,7 @@ function world(units: WorldUnit[], resources = { gold: 20, food: 5, growth: 50 }
       { id: THEM, name: "Them", colour: "#f00", isNpc: false, resources: { gold: 5 }, baseRaceId: null, raceIds: [], knownRecipeIds: [] },
     ],
     inventory: {},
+    map: { aspect: 1, milesAcross: 36 },
   };
 }
 const order = (actionTypeId: string, inputs: Record<string, unknown>, kind: OrderDraft["kind"] = "numbered"): OrderDraft => ({ id: uid(), kind, actionTypeId, inputs, notes: "" });
@@ -60,17 +77,17 @@ describe("resolving orders", () => {
   it("moves units and spends their movement", () => {
     const g = unit({});
     const w = world([g]);
-    const p = resolve(w, order("move", { "0": [g.id], "1": ["b"] }));
+    const p = resolve(w, order("move", { "0": [g.id], "1": [at("b")] }));
     const after = applyChanges(w, p.changes);
     expect(after.units[0].regionId).toBe("b");
-    expect(after.units[0].milesUsed).toBe(12);
+    expect(after.units[0].milesUsed).toBeCloseTo(12);
     expect(p.text).toContain("A → B");
   });
 
   it("flags units moving into other sides' regions", () => {
     const g = unit({ regionId: "b" });
     const enemy = unit({ ownerTeamId: THEM, regionId: "c" });
-    const p = resolve(world([g, enemy]), order("move", { "0": [g.id], "1": ["c"] }));
+    const p = resolve(world([g, enemy]), order("move", { "0": [g.id], "1": [at("c")] }));
     expect(p.status).toBe("needsReview");
     expect(p.notes.join(" ")).toMatch(/only fight through an Attack order/);
     expect(p.targetsTeams).toContain(THEM);
@@ -81,7 +98,7 @@ describe("resolving orders", () => {
     const g = unit({ creatureId: "knight", hp: 52 });
     const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
     const w = world([g, lizard]);
-    const p = resolve(w, order("move", { "0": [g.id], "1": ["b", "c"] }));
+    const p = resolve(w, order("move", { "0": [g.id], "1": [at("b"), at("c")] }));
     expect(p.combats).toHaveLength(1);
     expect(p.status).toBe("needsReview");
     expect(p.text).toMatch(/stopped there/);
@@ -94,13 +111,13 @@ describe("resolving orders", () => {
     expect(knight.hp).toBe(mine.hp);
     expect(after.units.find((u) => u.id === lizard.id)!.status).toBe(res.units.find((u) => u.unitId === lizard.id)!.outcome === "dead" ? "dead" : "active");
     // Same seed, same fight.
-    expect(resolve(w, order("move", { "0": [g.id], "1": ["b", "c"] })).combats![0].log).toEqual(res.log);
+    expect(resolve(w, order("move", { "0": [g.id], "1": [at("b"), at("c")] })).combats![0].log).toEqual(res.log);
   });
 
   it("leaves the fight to the DM when asked", () => {
     const g = unit({ creatureId: "knight", hp: 52 });
     const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
-    const p = resolveOrder({ ruleset: r, world: world([g, lizard]), teamId: ME, order: order("move", { "0": [g.id], "1": ["b"] }), round: 1, seed: "s", combat: { byHand: true } });
+    const p = resolveOrder({ ruleset: r, world: world([g, lizard]), teamId: ME, order: order("move", { "0": [g.id], "1": [at("b")] }), round: 1, seed: "s", combat: { byHand: true } });
     expect(p.combats).toBeUndefined();
     expect(p.status).toBe("needsDm");
   });
@@ -123,7 +140,7 @@ describe("resolving orders", () => {
     const g = unit({ creatureId: "knight", hp: 52 });
     const lizard = unit({ ownerTeamId: null, creatureId: "giant-lizard", hp: 19, regionId: "b" });
     const w = world([g, lizard]);
-    const p = resolveOrder({ ruleset: r, world: w, teamId: ME, order: order("move", { "0": [g.id], "1": ["b"] }), round: 1, seed: "s", combat: { overrides: { [g.id]: { outcome: "retreated", hp: 5 } } } });
+    const p = resolveOrder({ ruleset: r, world: w, teamId: ME, order: order("move", { "0": [g.id], "1": [at("b")] }), round: 1, seed: "s", combat: { overrides: { [g.id]: { outcome: "retreated", hp: 5 } } } });
     const after = applyChanges(w, p.changes);
     const knight = after.units.find((u) => u.id === g.id)!;
     expect(knight.hp).toBe(5);
@@ -171,7 +188,7 @@ describe("stealth", () => {
     const sc = scout();
     const watcher = unit({ ownerTeamId: THEM, regionId: "b" });
     const w = world([sc, watcher]);
-    const p = resolve(w, order("move-stealth", { "0": [sc.id], "1": ["b"] }));
+    const p = resolve(w, order("move-stealth", { "0": [sc.id], "1": [at("b")] }));
     expect(p.problems).toEqual([]);
     expect(p.rolls).toHaveLength(1);
     expect(p.rolls[0].breakdown).toMatch(/vs DC \d+ \(Guard's passive Perception\)/);
@@ -192,7 +209,7 @@ describe("stealth", () => {
     const g = unit({ creatureId: "knight", hp: 52 });
     const lurker = unit({ ownerTeamId: null, creatureId: "giant-spider", hp: 26, regionId: "b", status: "hidden" });
     const w = world([g, lurker]);
-    const p = resolve(w, order("move", { "0": [g.id], "1": ["b"] }));
+    const p = resolve(w, order("move", { "0": [g.id], "1": [at("b")] }));
     expect(p.combats).toHaveLength(1);
     expect(p.rolls.some((x) => /lies in wait/.test(x.label))).toBe(true);
     const after = applyChanges(w, p.changes);
@@ -285,7 +302,7 @@ describe("queue", () => {
     const g = unit({ regionId: "b" });
     const enemy = unit({ ownerTeamId: THEM, regionId: "c" });
     const w = world([g, enemy]);
-    const mine = order("move", { "0": [g.id], "1": ["c"] });
+    const mine = order("move", { "0": [g.id], "1": [at("c")] });
     const p = resolve(w, mine);
     const flags = interactionFlags([{ id: mine.id, teamId: ME, proposal: p }], w);
     expect(flags.some((f) => f.kind === "meeting")).toBe(true);

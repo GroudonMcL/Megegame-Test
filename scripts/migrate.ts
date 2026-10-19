@@ -6,6 +6,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { parseConnectionString } from "../src/db/connectionString";
+import * as schema from "../src/db/schema";
+import { convertMaps } from "./convert-maps";
 
 config({ path: ".env.local" });
 config();
@@ -24,6 +26,8 @@ async function main() {
   }
   const client = postgres({ ...parseConnectionString(url), prepare: false, max: 1, onnotice: () => {} });
   await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
+  // One-off data changes that need app code, not just SQL.
+  await convertMaps(drizzle(client, { schema }));
   await client.end();
   console.log("Migrations complete.");
 }

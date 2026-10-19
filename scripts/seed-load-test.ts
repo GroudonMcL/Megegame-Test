@@ -10,6 +10,7 @@ import { parseConnectionString } from "../src/db/connectionString";
 import * as schema from "../src/db/schema";
 import { generateJoinCode } from "../src/lib/joinCode";
 import { buildPreset } from "../src/presets";
+import { adjacentPairs } from "../src/engine/geo/regions";
 
 config({ path: ".env.local" });
 config();
@@ -36,23 +37,25 @@ async function main() {
       .returning();
     await tx.insert(schema.gameRulesets).values({ gameId: game.id, data: ruleset });
 
-    // Regions on a grid, with a few gaps so the map isn't perfectly regular.
+    // Square regions on a grid, with a few gaps (open ground) so the map isn't perfectly regular.
     const cells: { col: number; row: number }[] = [];
     for (let row = 0; row < SIDE; row++) for (let col = 0; col < SIDE; col++) if ((row * 7 + col * 3) % 19 !== 0) cells.push({ col, row });
+    const square = (c: { col: number; row: number }): [number, number][] => [
+      [c.col / SIDE, c.row / SIDE],
+      [(c.col + 1) / SIDE, c.row / SIDE],
+      [(c.col + 1) / SIDE, (c.row + 1) / SIDE],
+      [c.col / SIDE, (c.row + 1) / SIDE],
+    ];
     const regions = await tx
       .insert(schema.regions)
-      .values(cells.map((c) => ({ gameId: game.id, code: `${String.fromCharCode(65 + c.row)}${c.col + 1}`, x: (c.col + 0.5) / SIDE, y: (c.row + 0.5) / SIDE })))
+      .values(cells.map((c) => ({ gameId: game.id, code: `${String.fromCharCode(65 + c.row)}${c.col + 1}`, x: (c.col + 0.5) / SIDE, y: (c.row + 0.5) / SIDE, polygon: square(c) })))
       .returning();
-    const at = new Map(cells.map((c, i) => [`${c.col},${c.row}`, regions[i]]));
-    const links: { a: string; b: string }[] = [];
-    for (const c of cells) {
-      const here = at.get(`${c.col},${c.row}`)!;
-      for (const [dc, dr] of [[1, 0], [0, 1]]) {
-        const there = at.get(`${c.col + dc},${c.row + dr}`);
-        if (there) links.push(here.id < there.id ? { a: here.id, b: there.id } : { a: there.id, b: here.id });
-      }
-    }
-    const connections = await tx.insert(schema.connections).values(links.map((l) => ({ gameId: game.id, regionA: l.a, regionB: l.b }))).returning();
+    // Squares that touch (sides or corners) are neighbours.
+    const links = adjacentPairs(regions.map((r) => ({ id: r.id, polygon: r.polygon })));
+    const connections = await tx
+      .insert(schema.connections)
+      .values(links.map(([a, b]) => ({ gameId: game.id, regionA: a, regionB: b, kind: "border" })))
+      .returning();
     const neighbours = new Map<string, string[]>();
     for (const c of connections) {
       neighbours.set(c.regionA, [...(neighbours.get(c.regionA) ?? []), c.regionB]);
@@ -116,8 +119,9 @@ async function main() {
       const mine = units.filter((u) => u.ownerTeamId === t.id);
       for (let slot = 1; slot <= ruleset.settings.actionSlots; slot++) {
         const u = mine[slot % mine.length];
-        const to = pick(neighbours.get(u.regionId!) ?? [u.regionId!]);
-        orders.push({ roundId: round.id, teamId: t.id, position: slot - 1, kind: "numbered", slot, actionTypeId: "move", inputs: { "0": [u.id], "1": [to] }, status: "submitted" });
+        const to = regions.find((r) => r.id === pick(neighbours.get(u.regionId!) ?? [u.regionId!]))!;
+        // A path is a list of points on the map; this one walks to the neighbour's centre.
+        orders.push({ roundId: round.id, teamId: t.id, position: slot - 1, kind: "numbered", slot, actionTypeId: "move", inputs: { "0": [u.id], "1": [[to.x, to.y]] }, status: "submitted" });
       }
     }
     await tx.insert(schema.orders).values(orders);

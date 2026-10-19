@@ -44,7 +44,7 @@ const KIND_LABEL = { numbered: "Numbered action", free: "Free action", condition
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-4 glass rounded-xl border border-border shadow-panel p-4 sm:p-5">
+    <section id={id} className="scroll-mt-4 glass rounded-xl border border-border shadow-panel p-4 @xl:p-5">
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
@@ -190,7 +190,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
       </Section>
 
       <Section id="actions" title="Actions">
-        <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid gap-3 @2xl:grid-cols-2 [&>*]:min-w-0">
           {rules.actionTypes.map((a) => (
             <div key={a.id} className="rounded-lg border border-border p-3 text-sm">
               <div className="flex flex-wrap items-baseline gap-2">
@@ -232,7 +232,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
       </Section>
 
       <Section id="archetypes" title="Archetypes">
-        <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid gap-3 @2xl:grid-cols-2 [&>*]:min-w-0">
           {rules.archetypes.map((a) => (
             <div key={a.id} className="rounded-lg border border-border p-3 text-sm">
               <div className="flex flex-wrap items-baseline gap-2">

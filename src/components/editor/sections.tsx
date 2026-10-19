@@ -229,16 +229,17 @@ export const SECTION_CONFIG: Record<Exclude<RulesetSection, "creatures">, Sectio
   },
   terrainTypes: {
     title: "Terrain",
-    intro: "Each connection between regions has a terrain that changes how far units get.",
+    intro: "Terrain areas drawn on the map (and links between regions) have a terrain that changes how far units get. The part of a move inside an area follows its rules.",
     fields: [
       idField,
       nameField,
       { kind: "number", key: "costMultiplier", label: "Distance multiplier", help: "difficult terrain = 2", step: 0.5 },
+      { kind: "colour", key: "colour", label: "Colour on the map", help: "leave the box empty for an automatic colour" },
       { kind: "checkbox", key: "bypassedByFlying", label: "Flying units ignore the multiplier" },
       { kind: "checkbox", key: "bypassedByNaturalExplorer", label: "Groups with a Natural Explorer ignore it" },
       { kind: "multiselect", key: "requiresMovement", label: "Needs one of these speeds to cross", options: opt(["fly", "swim", "climb", "burrow"]) },
     ],
-    newItem: (id) => ({ id, name: "New terrain", costMultiplier: 1, bypassedByFlying: false, bypassedByNaturalExplorer: false, requiresMovement: [] }),
+    newItem: (id) => ({ id, name: "New terrain", costMultiplier: 1, bypassedByFlying: false, bypassedByNaturalExplorer: false, requiresMovement: [], colour: "" }),
     label: (x) => x.name,
   },
   settlementTiers: {

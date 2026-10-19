@@ -1,9 +1,6 @@
-import { PlayerMapScreen } from "@/components/play/PlayerMapScreen";
-import { loadTeamView } from "@/lib/teamView";
-import { requireViewer } from "@/lib/viewer";
+import { redirect } from "next/navigation";
 
-export default async function PlayerMap() {
-  const viewer = await requireViewer();
-  const { view, rules, mapImage } = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
-  return <PlayerMapScreen view={view} rules={rules} mapImage={mapImage} />;
+// The map is now always on screen behind every player window.
+export default function OldMapPage() {
+  redirect("/play");
 }

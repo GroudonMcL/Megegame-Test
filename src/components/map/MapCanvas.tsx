@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-// An SVG map: an optional background image with region nodes and connections
-// drawn on top. Pan by dragging the background, zoom with the wheel or a pinch.
-// Node positions are fractions (0–1) of the map's width and height.
+// An SVG map: an optional background image with regions, terrain, links and
+// borders drawn on top. Pan by dragging the background, zoom with the wheel or
+// a pinch. Positions and outlines are fractions (0–1) of the map's width and height.
+// A region with an outline is drawn as its shape, with its label at its
+// centre; one without is drawn as a dot (old maps, or not drawn yet).
+
+type Pt = [number, number];
 
 export interface MapNode {
   id: string;
   x: number;
   y: number;
+  /** The region's outline; without one the region is a dot. */
+  polygon?: Pt[];
   label: string;
   fill?: string;
   stroke?: string;
@@ -23,6 +29,10 @@ export interface MapEdge {
   id: string;
   a: string;
   b: string;
+  /** Draw along these stretches (a blocked border) instead of from centre to centre. */
+  segments?: [Pt, Pt][];
+  /** Draw as a gentle curve (a link between regions that don't touch). */
+  curved?: boolean;
   dashed?: boolean;
   colour?: string;
   /** Drawn thicker, e.g. difficult terrain. */
@@ -42,9 +52,12 @@ export interface MapCanvasProps {
   draggable?: boolean;
   snap?: number | null;
   onNodeMove?: (id: string, x: number, y: number) => void;
-  onNodeClick?: (id: string, e: { shiftKey: boolean }) => void;
+  /** badge = the data-badge value of the extra (from renderNodeExtras) that was clicked, if any. */
+  onNodeClick?: (id: string, e: { shiftKey: boolean; badge?: string }) => void;
   onEdgeClick?: (id: string) => void;
   onBackgroundClick?: (x: number, y: number) => void;
+  /** Any click (not a drag) on the map, on a region or not, as fractions of the map. */
+  onPointClick?: (p: [number, number]) => void;
   /** Draw a rubber-band line from this node to the pointer (connect mode). */
   linkFrom?: string | null;
   /** Extra SVG per node (unit badges…), given the node's pixel position and the screen scale. */
@@ -54,6 +67,23 @@ export interface MapCanvasProps {
   fitKey?: number;
   /** Start zoomed to the nodes (e.g. the regions a team knows) rather than the whole map. */
   fitToNodes?: boolean;
+  /** No frame (border and rounded corners), for a map that fills the screen. */
+  bare?: boolean;
+  /** Centre the view on this node whenever key changes. */
+  focus?: { nodeId: string; key: number } | null;
+  /** Difficult ground, hatched in its colour: pieces of outlines (outer ring, then holes). */
+  terrain?: { id: string; pieces: Pt[][][]; colour: string; title?: string }[];
+  /** Extra SVG on top of everything (unit badges, paths), given the screen scale. */
+  overlay?: (scale: number) => ReactNode;
+  /**
+   * Handles (elements with data-handle="id", e.g. shape corners in the editor):
+   * dragging one reports where it is (done = released); clicking reports which
+   * (button 2 = right-click).
+   */
+  onHandleMove?: (id: string, p: [number, number], done: boolean) => void;
+  onHandleClick?: (id: string, e: { button: number; shiftKey: boolean }) => void;
+  /** Where the pointer is over the map (fractions), for drawing previews. */
+  onHover?: (p: [number, number] | null) => void;
 }
 
 interface View {
@@ -75,7 +105,8 @@ export function MapCanvas(props: MapCanvasProps) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const gesture = useRef<
     | { kind: "pan"; startClient: { x: number; y: number }; startView: View; moved: boolean; edgeId?: string }
-    | { kind: "node"; id: string; startClient: { x: number; y: number }; moved: boolean; shift: boolean }
+    | { kind: "node"; id: string; startClient: { x: number; y: number }; moved: boolean; shift: boolean; badge?: string }
+    | { kind: "handle"; id: string; startClient: { x: number; y: number }; moved: boolean; button: number; shift: boolean }
     | { kind: "pinch"; startDist: number; startView: View; mid: { x: number; y: number } }
     | null
   >(null);
@@ -122,6 +153,14 @@ export function MapCanvas(props: MapCanvasProps) {
   if (fittedFor !== fitFor) {
     setFittedFor(fitFor);
     setView(fitView());
+  }
+
+  // Centre on a node when asked (keeping the zoom).
+  const [focusedKey, setFocusedKey] = useState<number | null>(null);
+  if (props.focus && props.focus.key !== focusedKey) {
+    setFocusedKey(props.focus.key);
+    const n = nodes.find((x) => x.id === props.focus!.nodeId);
+    if (n) setView((v) => ({ ...v, x: n.x * width - v.w / 2, y: n.y * height - v.h / 2 }));
   }
 
   /** Screen pixels → map pixels. */
@@ -176,9 +215,15 @@ export function MapCanvas(props: MapCanvasProps) {
       };
       return;
     }
+    const handle = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle");
+    if (handle) {
+      gesture.current = { kind: "handle", id: handle, startClient: { x: e.clientX, y: e.clientY }, moved: false, button: e.button, shift: e.shiftKey };
+      return;
+    }
     const nodeId = (e.target as Element).closest("[data-node-id]")?.getAttribute("data-node-id");
     if (nodeId) {
-      gesture.current = { kind: "node", id: nodeId, startClient: { x: e.clientX, y: e.clientY }, moved: false, shift: e.shiftKey };
+      const badge = (e.target as Element).closest("[data-badge]")?.getAttribute("data-badge") ?? undefined;
+      gesture.current = { kind: "node", id: nodeId, startClient: { x: e.clientX, y: e.clientY }, moved: false, shift: e.shiftKey, badge };
       return;
     }
     const edgeId = (e.target as Element).closest("[data-edge-id]")?.getAttribute("data-edge-id") ?? undefined;
@@ -188,6 +233,10 @@ export function MapCanvas(props: MapCanvasProps) {
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (props.linkFrom) setPointer(toMap(e.clientX, e.clientY));
+    if (props.onHover) {
+      const h = toMap(e.clientX, e.clientY);
+      props.onHover([h.x / width, h.y / height]);
+    }
     const g = gesture.current;
     if (!g) return;
     if (g.kind === "pinch") {
@@ -201,7 +250,10 @@ export function MapCanvas(props: MapCanvasProps) {
     const dy = e.clientY - g.startClient.y;
     if (!g.moved && Math.hypot(dx, dy) < CLICK_SLOP) return;
     g.moved = true;
-    if (g.kind === "pan") {
+    if (g.kind === "handle") {
+      const h = toMap(e.clientX, e.clientY);
+      props.onHandleMove?.(g.id, [h.x / width, h.y / height], false);
+    } else if (g.kind === "pan") {
       const k = g.startView.w / size.w;
       setView({ ...g.startView, x: g.startView.x - dx * k, y: g.startView.y - dy * k });
     } else if (g.kind === "node" && props.draggable) {
@@ -216,11 +268,21 @@ export function MapCanvas(props: MapCanvasProps) {
     if (pointers.current.size > 0) return;
     gesture.current = null;
     if (!g) return;
+    if (g.kind === "handle") {
+      const h = toMap(e.clientX, e.clientY);
+      if (g.moved) props.onHandleMove?.(g.id, [h.x / width, h.y / height], true);
+      else props.onHandleClick?.(g.id, { button: g.button, shiftKey: g.shift });
+      return;
+    }
+    if (g.kind !== "pinch" && !g.moved && props.onPointClick) {
+      const p = toMap(e.clientX, e.clientY);
+      if (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height) props.onPointClick([p.x / width, p.y / height]);
+    }
     if (g.kind === "node") {
       if (g.moved && props.draggable && dragPos) {
         props.onNodeMove?.(g.id, dragPos.x, dragPos.y);
       } else if (!g.moved) {
-        props.onNodeClick?.(g.id, { shiftKey: g.shift || e.shiftKey });
+        props.onNodeClick?.(g.id, { shiftKey: g.shift || e.shiftKey, badge: g.badge });
       }
       setDragPos(null);
     } else if (g.kind === "pan" && !g.moved && g.edgeId) {
@@ -237,7 +299,7 @@ export function MapCanvas(props: MapCanvasProps) {
   const linkFrom = props.linkFrom ? byId.get(props.linkFrom) : undefined;
 
   return (
-    <div ref={wrapRef} className={`relative overflow-hidden rounded-xl border border-border bg-background ${props.className ?? "h-[70vh]"}`}>
+    <div ref={wrapRef} className={`relative overflow-hidden ${props.bare ? "" : "rounded-xl border border-border bg-background"} ${props.className ?? "h-[70vh]"}`}>
       <svg
         ref={svgRef}
         className="h-full w-full touch-none select-none"
@@ -247,6 +309,8 @@ export function MapCanvas(props: MapCanvasProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={() => props.onHover?.(null)}
+        onContextMenu={(e) => props.onHandleClick && e.preventDefault()}
         role="application"
         aria-label="Map"
       >
@@ -262,24 +326,90 @@ export function MapCanvas(props: MapCanvasProps) {
         )}
         <rect x={0} y={0} width={width} height={height} fill="none" stroke="currentColor" strokeOpacity={0.3} strokeWidth={2 * scale} className="text-foreground" />
 
+        {/* Region shapes: fills (owner tint) and outlines. The selected one last, so its outline is on top. */}
+        {[...props.nodes]
+          .filter((n) => n.polygon && n.polygon.length >= 3)
+          .sort((a, b) => Number(a.id === props.selectedNodeId) - Number(b.id === props.selectedNodeId))
+          .map((n) => {
+            const selected = props.selectedNodeId === n.id;
+            const d = `M${n.polygon!.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`;
+            return (
+              <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.55 : 1}>
+                <path d={d} fill={n.fill ?? "transparent"} fillOpacity={n.fill ? 0.3 : 1} stroke="var(--map-outline)" strokeOpacity={0.7} strokeWidth={4.5 * scale} strokeLinejoin="round" />
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-border)")}
+                  strokeOpacity={selected ? 1 : 0.85}
+                  strokeWidth={(selected ? 3.5 : 2) * scale}
+                  strokeLinejoin="round"
+                  strokeDasharray={n.dashed ? `${6 * scale} ${4 * scale}` : undefined}
+                />
+              </g>
+            );
+          })}
+
+        {props.terrain && props.terrain.length > 0 && (
+          <g pointerEvents="none">
+            <defs>
+              {props.terrain.map((t, i) => (
+                <pattern key={t.id} id={`terrain-${i}`} width={12 * scale} height={12 * scale} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                  <line x1={0} y1={0} x2={0} y2={12 * scale} stroke={t.colour} strokeWidth={3 * scale} strokeOpacity={0.55} />
+                </pattern>
+              ))}
+            </defs>
+            {props.terrain.map((t, i) => (
+              <path
+                key={t.id}
+                d={t.pieces
+                  .flat()
+                  .map((ring) => `M${ring.map(([x, y]) => `${x * width} ${y * height}`).join("L")}Z`)
+                  .join("")}
+                fillRule="evenodd"
+                fill={`url(#terrain-${i})`}
+                stroke={t.colour}
+                strokeOpacity={0.7}
+                strokeWidth={1.5 * scale}
+              >
+                {t.title && <title>{t.title}</title>}
+              </path>
+            ))}
+          </g>
+        )}
+
         {props.edges.map((e) => {
           const a = byId.get(e.a);
           const b = byId.get(e.b);
           if (!a || !b) return null;
+          const selected = props.selectedEdgeId === e.id;
+          const stroke = selected ? "var(--accent)" : (e.colour ?? "var(--map-route)");
+          const strokeWidth = (selected ? 5 : e.heavy ? 4 : 2.5) * scale;
+          if (e.segments) {
+            // A blocked border: a heavy dashed line along the shared edge.
+            const d = e.segments.map(([[x1, y1], [x2, y2]]) => `M${x1 * width} ${y1 * height}L${x2 * width} ${y2 * height}`).join("");
+            return (
+              <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
+                <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
+                <path d={d} stroke="var(--map-outline)" strokeWidth={strokeWidth + 3 * scale} strokeOpacity={0.6} fill="none" strokeLinecap="round" />
+                <path d={d} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={`${5 * scale} ${4 * scale}`} fill="none" strokeLinecap="round" />
+              </g>
+            );
+          }
           const pa = pos(a);
           const pb = pos(b);
-          const selected = props.selectedEdgeId === e.id;
+          // Links bow out a little, so they don't hide what's under them.
+          const mx = (pa.x + pb.x) / 2 - (pb.y - pa.y) * 0.15;
+          const my = (pa.y + pb.y) / 2 + (pb.x - pa.x) * 0.15;
+          const d = e.curved ? `M${pa.x} ${pa.y}Q${mx} ${my} ${pb.x} ${pb.y}` : `M${pa.x} ${pa.y}L${pb.x} ${pb.y}`;
           return (
             <g key={e.id} data-edge-id={e.id} className="cursor-pointer">
-              <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="transparent" strokeWidth={14 * scale} />
-              <line
-                x1={pa.x}
-                y1={pa.y}
-                x2={pb.x}
-                y2={pb.y}
-                stroke={selected ? "var(--accent)" : (e.colour ?? "var(--map-route)")}
+              <path d={d} stroke="transparent" strokeWidth={14 * scale} fill="none" />
+              <path
+                d={d}
+                fill="none"
+                stroke={stroke}
                 strokeOpacity={e.dim ? 0.35 : 0.9}
-                strokeWidth={(selected ? 5 : e.heavy ? 4 : 2.5) * scale}
+                strokeWidth={strokeWidth}
                 strokeDasharray={e.dashed ? `${8 * scale} ${6 * scale}` : undefined}
                 style={{ filter: "drop-shadow(0 0 1px rgba(0,0,0,.9))" }}
               />
@@ -289,25 +419,30 @@ export function MapCanvas(props: MapCanvasProps) {
 
         {linkFrom && pointer && <line x1={pos(linkFrom).x} y1={pos(linkFrom).y} x2={pointer.x} y2={pointer.y} stroke="var(--accent)" strokeWidth={2.5 * scale} strokeDasharray={`${6 * scale} ${4 * scale}`} pointerEvents="none" />}
 
+        {/* Labels (and dots for regions without an outline), on top of every shape. */}
         {props.nodes.map((n) => {
           const p = pos(n);
           const selected = props.selectedNodeId === n.id;
+          const shaped = Boolean(n.polygon && n.polygon.length >= 3);
           return (
-            <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.5 : 1}>
-              {n.ring && <circle cx={p.x} cy={p.y} r={r * 1.6} fill="none" stroke={n.stroke ?? "var(--map-label)"} strokeWidth={2.5 * scale} />}
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={selected ? r * 1.3 : r}
-                fill={n.fill ?? "var(--map-region)"}
-                stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-outline)")}
-                strokeWidth={(selected ? 4 : 2) * scale}
-                strokeDasharray={n.dashed ? `${4 * scale} ${3 * scale}` : undefined}
-              />
+            <g key={n.id} data-node-id={n.id} className={props.draggable ? "cursor-move" : "cursor-pointer"} opacity={n.dim ? 0.5 : 1} pointerEvents={shaped ? "none" : undefined}>
+              {n.ring && <circle cx={p.x} cy={p.y} r={r * (shaped ? 0.9 : 1.6)} fill={shaped ? (n.fill ?? "var(--map-region)") : "none"} stroke={n.stroke ?? "var(--map-label)"} strokeWidth={2.5 * scale} />}
+              {!shaped && (
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={selected ? r * 1.3 : r}
+                  fill={n.fill ?? "var(--map-region)"}
+                  stroke={selected ? "var(--accent)" : (n.stroke ?? "var(--map-outline)")}
+                  strokeWidth={(selected ? 4 : 2) * scale}
+                  strokeDasharray={n.dashed ? `${4 * scale} ${3 * scale}` : undefined}
+                />
+              )}
               <text
                 x={p.x}
-                y={p.y - r * 1.9}
+                y={shaped ? p.y - r * (n.ring ? 1.3 : 0) : p.y - r * 1.9}
                 textAnchor="middle"
+                dominantBaseline={shaped && !n.ring ? "middle" : undefined}
                 fontSize={12 * scale}
                 fontWeight={600}
                 fill="var(--map-label)"
@@ -322,6 +457,7 @@ export function MapCanvas(props: MapCanvasProps) {
             </g>
           );
         })}
+        {props.overlay?.(scale)}
       </svg>
       <div className="absolute bottom-2 right-2 flex gap-1">
         <button type="button" className="glass rounded-lg border border-border px-2.5 py-1 text-sm shadow hover:border-border-strong" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 0.7)} aria-label="Zoom in">
