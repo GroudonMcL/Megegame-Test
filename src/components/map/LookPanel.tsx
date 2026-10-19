@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { removeHeightMapAction, saveMapLookAction, uploadHeightMapAction } from "@/app/dm/games/[gameId]/map/actions";
 import { DEFAULT_MAP_LOOK, type MapLook } from "@/engine/world/mapLook";
+import { shrinkHeightMap } from "./compressImage";
 
 // The map editor's "3D & light" panel: the height map, how tall it's drawn,
 // and the lighting (a sun with a colour and position, light from the sky, and
@@ -35,11 +36,21 @@ export function LookPanel({
   const set = <K extends keyof MapLook>(key: K, value: MapLook[K]) => onChange({ ...look, [key]: value });
   const dirty = JSON.stringify(look) !== JSON.stringify(saved);
 
-  const upload = (file: File) =>
+  /** Runs a step, showing a failure (the server refusing, the connection dropping…) as a message instead of breaking the page. */
+  const attempt = (step: () => Promise<void>) =>
     startTransition(async () => {
-      setMessage({ ok: true, text: "Uploading the height map…" });
+      try {
+        await step();
+      } catch (err) {
+        setMessage({ ok: false, text: err instanceof Error && err.message ? err.message : "That didn't work. Try again." });
+      }
+    });
+
+  const upload = (file: File) =>
+    attempt(async () => {
+      setMessage({ ok: true, text: "Shrinking and uploading the height map…" });
       const form = new FormData();
-      form.set("image", file, "height");
+      form.set("image", await shrinkHeightMap(file), "height.png");
       const r = await uploadHeightMapAction(gameId, form);
       if (r.ok) {
         onHeight(`/api/assets/${r.value.id}`);
@@ -68,7 +79,7 @@ export function LookPanel({
       <section className="space-y-2">
         <h3 className="font-semibold">Height map</h3>
         <p className="text-sm text-muted">
-          A greyscale picture the same shape as the map: white is the highest ground, black the lowest. Players only get the heights of regions they have seen; the rest of their map is flat.
+          A greyscale picture the same shape as the map: white is the highest ground, black the lowest. Big files are fine: it&apos;s shrunk to 1024 pixels across before uploading. Players only get the heights of regions they have seen; the rest of their map is flat.
         </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={button} onClick={() => fileRef.current?.click()} disabled={pending}>
@@ -80,7 +91,7 @@ export function LookPanel({
               className={button}
               disabled={pending}
               onClick={() =>
-                startTransition(async () => {
+                attempt(async () => {
                   const r = await removeHeightMapAction(gameId);
                   if (r.ok) onHeight(null);
                   setMessage(r.ok ? { ok: true, text: "Height map removed: the map is flat." } : { ok: false, text: r.error });
@@ -90,7 +101,7 @@ export function LookPanel({
               Remove
             </button>
           )}
-          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </div>
         {slider("relief", "How tall", 0, 0.3, 0.005, (v) => (v === 0 ? "flat" : `${Math.round(v * 100)}% of the width`))}
       </section>
@@ -120,7 +131,7 @@ export function LookPanel({
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground disabled:opacity-50"
           disabled={pending || !dirty}
           onClick={() =>
-            startTransition(async () => {
+            attempt(async () => {
               const r = await saveMapLookAction(gameId, look);
               if (r.ok) onSaved(look);
               setMessage(r.ok ? { ok: true, text: "Saved: everyone sees the map like this now." } : { ok: false, text: r.error });
