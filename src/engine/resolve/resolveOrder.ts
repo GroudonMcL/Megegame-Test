@@ -12,6 +12,7 @@ import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types
 import { defendersOf, fightChanges, fightSummary, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
 import { summariseOdds } from "../combat/simulate";
 import type { CombatOdds, CombatSideInput } from "../combat/types";
+import { passivePerception, searchCheck, stealthCheck, watchers } from "../stealth/stealth";
 import { rollOnTable, type Modifier } from "./rollTable";
 import type { Proposal, World } from "./types";
 
@@ -188,10 +189,15 @@ export function resolveOrder(input: ResolveInput): Proposal {
       if (!from || !path.length) break;
       const group = units.map((u) => ({ unit: u, used: milesPerRound(r, u) > 0 ? u.milesUsed / milesPerRound(r, u) : 1 }));
       const used = group.map((g) => g.used);
+      const wildHere = (id: string) => world.units.filter((u) => u.regionId === id && u.ownerTeamId === null && ACTIVE_STATUSES.has(u.status));
+      const sideLabel = (observer: string | null) => (observer ? (world.teams.find((t) => t.id === observer)?.name ?? "another faction") : "wild monsters");
       let at = from;
       let prev: string | null = null;
-      // Monsters attack units that walk in (unless they creep past by stealth): the move stops there.
+      // Monsters attack units that walk in, and the move stops there. Stealthy
+      // units roll Stealth against everyone watching each region they enter.
       let fightAt: string | null = null;
+      let ambush = false;
+      const spotted = new Map<string, Set<string>>();
       for (const next of path) {
         const c = findConnection(world.connections, at, next)!;
         const step = stepCost(r, c, group, mode);
@@ -199,8 +205,39 @@ export function resolveOrder(input: ResolveInput): Proposal {
         step.fractions.forEach((f, i) => (used[i] += f));
         prev = at;
         at = next;
-        if (mode !== "stealth" && wildIn(world, next).length) {
+        const code = regionById.get(next)?.code ?? "?";
+        if (mode === "stealth") {
+          let caught = false;
+          for (const w of watchers(r, world, next, teamId, name)) {
+            for (const u of units) {
+              const res = stealthCheck(r, u, w, rng, `${name(u)} sneaks past ${sideLabel(w.observer)} in ${code}`);
+              p.rolls.push(res.roll);
+              if (res.success) continue;
+              if (w.observer === null) caught = true;
+              else {
+                const set = spotted.get(w.observer) ?? new Set<string>();
+                set.add(u.id);
+                spotted.set(w.observer, set);
+              }
+            }
+          }
+          if (caught) {
+            fightAt = next;
+            break;
+          }
+        } else if (wildHere(next).length) {
           fightAt = next;
+          // Monsters that are all hidden may ambush: they roll Stealth against the movers' best passive Perception.
+          const monsters = wildHere(next);
+          if (monsters.every((m) => m.status === "hidden")) {
+            const best = Math.max(...units.map((u) => passivePerception(r, u)));
+            const watch = { observer: teamId, dc: best, source: "your units' best passive Perception", disadvantage: false };
+            ambush = monsters.every((m) => {
+              const res = stealthCheck(r, m, watch, rng, `${name(m)} lies in wait in ${code}`);
+              p.rolls.push(res.roll);
+              return res.success;
+            });
+          }
           break;
         }
       }
@@ -213,25 +250,44 @@ export function resolveOrder(input: ResolveInput): Proposal {
       const route = [from, ...walked].map((id) => regionById.get(id)?.code ?? "?").join(" → ");
       lines.push(`${unitList} ${mode === "forceMarch" ? "force-marched" : mode === "stealth" ? "crept" : "moved"} ${route}${fightAt && walked.length < path.length ? " and stopped there" : ""}.`);
       for (const id of walked) {
-        const others = world.units.filter((u) => u.regionId === id && u.ownerTeamId !== teamId && ACTIVE_STATUSES.has(u.status) && !(id === fightAt && u.ownerTeamId === null && u.status === "active"));
+        const others = world.units.filter((u) => u.regionId === id && u.ownerTeamId !== null && u.ownerTeamId !== teamId && ACTIVE_STATUSES.has(u.status));
         if (others.length) {
-          const who = [...new Set(others.map((u) => (u.ownerTeamId ? world.teams.find((t) => t.id === u.ownerTeamId)?.name : "wild monsters")))].join(", ");
-          const hidden = others.some((u) => u.status === "hidden");
-          review(`${regionName(id)} has units of ${who}${hidden ? " (some hidden)" : ""}. Teams only fight through an Attack order${hidden ? "; hidden units may ambush (stealth comes in Phase 7)" : ""}.`);
+          const who = [...new Set(others.map((u) => world.teams.find((t) => t.id === u.ownerTeamId)?.name))].join(", ");
+          review(`${regionName(id)} has units of ${who}${others.some((u) => u.status === "hidden") ? " (some hidden)" : ""}. Teams only fight through an Attack order.`);
           for (const u of others) if (u.ownerTeamId) p.targetsTeams.push(u.ownerTeamId);
         }
       }
       if (fightAt) {
         const movers = units.map((u) => ({ ...u, regionId: fightAt }));
-        fight(fightAt, [
-          sideFor(world, teamId, movers, {
-            forceMarching: mode === "forceMarch" ? units.map((u) => u.id) : [],
-            retreatTo: Object.fromEntries(units.map((u) => [u.id, retreatRegion(world, u, fightAt!, prev)])),
-          }),
-          sideFor(world, null, wildIn(world, fightAt)),
-        ]);
+        const monsters = wildHere(fightAt);
+        if (mode === "stealth") lines.push(`Monsters in ${regionName(fightAt)} spotted them.`);
+        else if (ambush) lines.push(`Monsters were lying in wait in ${regionName(fightAt)}.`);
+        fight(
+          fightAt,
+          [
+            sideFor(world, teamId, movers, {
+              forceMarching: mode === "forceMarch" ? units.map((u) => u.id) : [],
+              retreatTo: Object.fromEntries(units.map((u) => [u.id, retreatRegion(world, u, fightAt!, prev)])),
+            }),
+            sideFor(world, null, monsters, { surprising: ambush }),
+          ],
+          { reveal: [...units, ...monsters].map((u) => u.id) },
+        );
+      } else if (mode === "stealth") {
+        // Back in hiding: only the teams that spotted them on the way know where they are.
+        p.changes.push({ type: "clearDetections", unitIds: units.map((u) => u.id) });
+        for (const u of units) if (u.status !== "hidden") p.changes.push({ type: "updateUnit", unitId: u.id, patch: { status: "hidden" } });
+        for (const [observer, ids] of spotted) {
+          p.changes.push({ type: "detectUnits", teamId: observer, unitIds: [...ids], round: input.round });
+          p.targetsTeams.push(observer);
+          lines.push(`${[...ids].map((id) => name(unitById.get(id)!)).join(", ")} ${ids.size === 1 ? "was" : "were"} spotted by ${sideLabel(observer)}.`);
+        }
+        if (!spotted.size) lines.push("Nobody saw them.");
+        review();
+      } else {
+        // Marching in the open gives hidden units away.
+        for (const u of units) if (u.status === "hidden") p.changes.push({ type: "updateUnit", unitId: u.id, patch: { status: "active" } });
       }
-      if (mode === "stealth") review("Stealth checks come in Phase 7. For now, decide whether the units stay hidden.");
       if (mode === "forceMarch") p.notes.push("Force-marched units fight at disadvantage this round.");
       break;
     }
@@ -447,9 +503,44 @@ export function resolveOrder(input: ResolveInput): Proposal {
     case "rollCheck": {
       if (!action.check) break;
       const choice = str(value("choice"));
+      if (choice && choice === action.config.searchHiddenChoice) {
+        // Searching for hidden units: the searchers' best Perception against each hidden unit's passive Stealth.
+        const where = units[0]?.regionId;
+        if (!where) break;
+        const hidden = world.units.filter((u) => u.regionId === where && u.status === "hidden" && u.ownerTeamId !== teamId && !(world.detections?.[teamId] ?? []).includes(u.id));
+        const found: WorldUnit[] = [];
+        for (const h of hidden) {
+          const res = searchCheck(r, units, h, rng, `Searching ${regionName(where)}`);
+          p.rolls.push(res.roll);
+          if (res.success) found.push(h);
+        }
+        const foundTeams = found.filter((u) => u.ownerTeamId);
+        const foundWild = found.filter((u) => !u.ownerTeamId);
+        if (foundTeams.length) {
+          p.changes.push({ type: "detectUnits", teamId, unitIds: foundTeams.map((u) => u.id), round: input.round });
+          for (const u of foundTeams) p.targetsTeams.push(u.ownerTeamId!);
+        }
+        const what = (list: WorldUnit[]) => list.map((u) => `${r.creatures.find((c) => c.id === u.creatureId)?.statBlock.name ?? "a unit"}${u.ownerTeamId ? ` of ${world.teams.find((t) => t.id === u.ownerTeamId)?.name ?? "another faction"}` : ""}`).join(", ");
+        lines.push(found.length ? `${unitList} searched ${regionName(where)} and found: ${what(found)}.` : `${unitList} searched ${regionName(where)} and found nobody hiding.`);
+        if (foundWild.length) {
+          lines.push("The hidden monsters attack!");
+          fight(
+            where,
+            [
+              sideFor(world, teamId, units, { retreatTo: Object.fromEntries(units.map((u) => [u.id, retreatRegion(world, u, where)])) }),
+              sideFor(world, null, wildIn(world, where).concat(foundWild)),
+            ],
+            { reveal: [...units, ...foundWild].map((u) => u.id) },
+          );
+        }
+        review();
+        break;
+      }
       const byChoice = action.config.abilitiesByChoice as Record<string, Ability[]> | undefined;
       const abilities = (choice && byChoice?.[choice]) || action.check.abilities;
-      const table = r.rollTables.find((t) => t.id === action.check!.tableId);
+      const tablesByChoice = action.config.tablesByChoice as Record<string, string> | undefined;
+      const tableId = (choice && tablesByChoice?.[choice]) || action.check.tableId;
+      const table = r.rollTables.find((t) => t.id === tableId);
       const mods: Modifier[] = [];
       if (units.length) {
         // The best of the allowed abilities among the acting units, plus always-on check bonuses.
@@ -469,7 +560,12 @@ export function resolveOrder(input: ResolveInput): Proposal {
         const tier = Math.max(0, ...tiers);
         if (tier) mods.push({ label: r.buildings.find((b) => b.id === bb.buildingId)?.name ?? bb.buildingId, value: tier * bb.perTier });
       }
-      const result = rollOnTable(r, action.check.tableId, rng, { label: action.name, modifiers: mods });
+      if (table?.perRegionsBonus) {
+        const owned = world.regions.filter((x) => x.ownerTeamId === teamId).length;
+        const bonus = Math.floor(owned / table.perRegionsBonus);
+        if (bonus) mods.push({ label: `${owned} regions`, value: bonus });
+      }
+      const result = rollOnTable(r, tableId, rng, { label: action.name, modifiers: mods });
       p.rolls.push(...result.rolls);
       lines.push(...result.texts.filter(Boolean));
       applyTableResults(r, result.results, { p, rng, teamId, team, units, regionId, net, lines, name });
@@ -576,28 +672,45 @@ export function applyTableResults(
         const where = units[0]?.regionId ?? ctx.regionId;
         const creature = r.creatures.find((c) => c.id === res.creatureId);
         if (!creature || !where) {
-          p.notes.push(res.creatureId ? `Place a ${res.creatureId} by hand.` : "A monster appears: pick one and place it on the World map.");
+          p.notes.push(res.creatureId ? `Place ${res.count === "1" ? "a" : res.count} ${res.creatureId} by hand.` : "A monster appears: pick one and place it on the World map.");
           break;
         }
-        const unit: WorldUnit = {
-          id: globalThis.crypto.randomUUID(),
-          ownerTeamId: null,
-          creatureId: creature.id,
-          name: "",
-          raceId: null,
-          archetypeId: null,
-          academyBonus: {},
-          augmentIds: [],
-          hp: creature.statBlock.hp,
-          regionId: where,
-          milesUsed: 0,
-          status: "active",
-          isLeader: false,
-          usesSpent: {},
-        };
-        p.changes.push({ type: "createUnit", unit });
-        p.endsIn.push({ unitId: unit.id, regionId: where });
-        p.notes.push(`A ${creature.statBlock.name} appears. It fights units that move into its region; teams can also attack it with an Attack order.`);
+        const n = Math.max(0, roll(res.count, `Number of ${creature.statBlock.name}`));
+        for (let i = 0; i < n; i++) {
+          const unit: WorldUnit = {
+            id: globalThis.crypto.randomUUID(),
+            ownerTeamId: null,
+            creatureId: creature.id,
+            name: "",
+            raceId: null,
+            archetypeId: null,
+            academyBonus: {},
+            augmentIds: [],
+            hp: creature.statBlock.hp,
+            regionId: where,
+            milesUsed: 0,
+            status: "active",
+            isLeader: false,
+            usesSpent: {},
+          };
+          p.changes.push({ type: "createUnit", unit });
+          p.endsIn.push({ unitId: unit.id, regionId: where });
+        }
+        if (n) p.notes.push(`${n === 1 ? "A" : n} ${creature.statBlock.name} appear${n === 1 ? "s" : ""}. Monsters fight units that move into their region; teams can also attack them with an Attack order.`);
+        break;
+      }
+      case "gainRace": {
+        const race = r.races.find((x) => x.id === res.raceId);
+        if (!race) {
+          p.notes.push(`The table names a race (${res.raceId}) that isn't in the rules.`);
+          break;
+        }
+        if (ctx.team.baseRaceId === race.id || ctx.team.raceIds.includes(race.id)) {
+          ctx.lines.push(`They are ${race.name}, a people you already count among yours.`);
+          break;
+        }
+        p.changes.push({ type: "gainRaces", teamId, raceIds: [race.id] });
+        ctx.lines.push(`${race.name} survivors join you: you can now recruit ${race.name} units.`);
         break;
       }
       case "learnRecipes": {

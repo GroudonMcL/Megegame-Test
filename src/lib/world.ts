@@ -78,7 +78,10 @@ export async function loadGameRows(gameId: string, tx: Db = db): Promise<GameRow
 export function rowsToWorld(rows: GameRows): World {
   const inventory: World["inventory"] = {};
   for (const i of rows.inventory) if (i.qty > 0) (inventory[i.teamId] ??= {})[i.itemId] = i.qty;
+  const detections: Record<string, string[]> = {};
+  for (const d of rows.detections ?? []) (detections[d.teamId] ??= []).push(d.unitId);
   return {
+    detections,
     regions: rows.regions.map(toWorldRegion),
     connections: rows.connections as WorldConnection[],
     units: rows.units.map(toWorldUnit),

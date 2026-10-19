@@ -18,6 +18,8 @@ export interface WorldTeam {
 }
 
 export interface World {
+  /** Hidden units each team has spotted (teamId → unit IDs). Optional for tests. */
+  detections?: Record<string, string[]>;
   regions: WorldRegion[];
   connections: WorldConnection[];
   units: WorldUnit[];
@@ -33,7 +35,12 @@ export type Change =
   | { type: "createUnit"; unit: Omit<WorldUnit, "id"> & { id: string } }
   | { type: "updateRegion"; regionId: string; patch: Partial<Pick<WorldRegion, "ownerTeamId" | "settlementTierId" | "buildings">> }
   | { type: "inventory"; teamId: string; itemId: string; delta: number }
-  | { type: "learnRecipes"; teamId: string; recipeIds: string[] };
+  | { type: "learnRecipes"; teamId: string; recipeIds: string[] }
+  | { type: "gainRaces"; teamId: string; raceIds: string[] }
+  /** A team has spotted hidden units. */
+  | { type: "detectUnits"; teamId: string; unitIds: string[]; round: number }
+  /** Units slipped back into hiding: nobody has spotted them any more. */
+  | { type: "clearDetections"; unitIds: string[] };
 
 /** One roll, with everything needed to show and replay it. */
 export interface RollRecord {

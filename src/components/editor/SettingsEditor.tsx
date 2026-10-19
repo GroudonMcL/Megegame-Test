@@ -38,6 +38,15 @@ const settingsFields: FieldSpec[] = [
   { kind: "number", key: "maxAugmentsPerUnit", label: "Augments per unit (total)", min: 0 },
   { kind: "number", key: "demolishRefund", label: "Demolish refund (0–1)", step: 0.05 },
   {
+    kind: "select",
+    key: "roundEvents",
+    label: "Random events at the end of each round",
+    options: [
+      { value: "off", label: "only for teams the DM picks" },
+      { value: "all", label: "for every team (the DM can untick teams)" },
+    ],
+  },
+  {
     kind: "object",
     key: "movement",
     label: "Movement (D&D overland travel)",

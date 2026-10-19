@@ -44,6 +44,7 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           { href: "/play/units", label: "Units" },
           { href: "/play/regions", label: "Regions" },
           { href: "/play/inventory", label: "Inventory" },
+          { href: "/play/trades", label: "Trades" },
           { href: "/play/rules", label: "Rules" },
         ]}
       />

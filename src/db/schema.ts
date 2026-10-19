@@ -24,6 +24,8 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   },
 });
 
+import type { TradeBundle } from "../engine/trades";
+
 const created = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
 export const games = pgTable("games", {
@@ -34,6 +36,8 @@ export const games = pgTable("games", {
   currentRound: integer("current_round").notNull().default(0),
   // The map background image (an asset), if one has been uploaded.
   mapAssetId: uuid("map_asset_id"),
+  // The public channel's Discord webhook (round opened, reminders, published). Secret: DM only.
+  discordWebhookUrl: text("discord_webhook_url").notNull().default(""),
   createdAt: created(),
 });
 
@@ -307,6 +311,8 @@ export const rounds = pgTable(
     deadline: timestamp("deadline", { withTimezone: true }),
     openedAt: timestamp("opened_at", { withTimezone: true }),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    // When the "deadline in 24 hours" reminder went to Discord.
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     // Full game state at publish time, for history and rollback.
     snapshot: jsonb("snapshot"),
@@ -316,6 +322,40 @@ export const rounds = pgTable(
     endOfRound: jsonb("end_of_round"),
   },
   (t) => [uniqueIndex("rounds_game_number_idx").on(t.gameId, t.number)],
+);
+
+/**
+ * A trade between two teams that have met. The proposer offers `give` for
+ * `get`; the other team accepts or declines. Accepted trades execute at the end
+ * of the round, if both sides can still pay.
+ */
+export const trades = pgTable(
+  "trades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    fromTeamId: uuid("from_team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    toTeamId: uuid("to_team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    // The round it was proposed in.
+    round: integer("round").notNull(),
+    give: jsonb("give").$type<TradeBundle>().notNull(),
+    get: jsonb("get").$type<TradeBundle>().notNull(),
+    message: text("message").notNull().default(""),
+    // proposed | accepted | declined | cancelled | executed | failed
+    status: text("status").notNull().default("proposed"),
+    // Why it failed, or a summary once executed.
+    result: text("result").notNull().default(""),
+    executedRound: integer("executed_round"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [index("trades_game_idx").on(t.gameId)],
 );
 
 export const orders = pgTable(

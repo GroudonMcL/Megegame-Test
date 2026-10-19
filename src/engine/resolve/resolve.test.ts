@@ -8,6 +8,7 @@ import { endOfRound } from "./endOfRound";
 import { buildQueue, interactionFlags, scenes } from "./queue";
 import { resolveOrder } from "./resolveOrder";
 import { rollOnTable } from "./rollTable";
+import { watchers } from "../stealth/stealth";
 import type { World } from "./types";
 
 const r = buildPreset("utterdark");
@@ -163,12 +164,58 @@ describe("resolving orders", () => {
   });
 });
 
+describe("stealth", () => {
+  const scout = () => unit({ creatureId: "scout", archetypeId: "scout", hp: 16 });
+  it("a stealthy move rolls against each side watching, ends hidden, and records who spotted it", () => {
+    const sc = scout();
+    const watcher = unit({ ownerTeamId: THEM, regionId: "b" });
+    const w = world([sc, watcher]);
+    const p = resolve(w, order("move-stealth", { "0": [sc.id], "1": ["b"] }));
+    expect(p.problems).toEqual([]);
+    expect(p.rolls).toHaveLength(1);
+    expect(p.rolls[0].breakdown).toMatch(/vs DC \d+ \(Guard's passive Perception\)/);
+    const after = applyChanges(w, p.changes);
+    expect(after.units.find((u) => u.id === sc.id)!.status).toBe("hidden");
+    const spotted = p.rolls[0].outcome === "spotted";
+    expect(after.detections?.[THEM]?.includes(sc.id) ?? false).toBe(spotted);
+  });
+
+  it("a watchtower sets the DC and gives disadvantage", () => {
+    const w = world([]);
+    w.regions[2].buildings = [{ buildingId: "watchtower", tier: 1 }];
+    const list = watchers(r, w, "c", ME, () => "unit");
+    expect(list).toEqual([{ observer: THEM, dc: 13, source: "a watchtower", disadvantage: true }]);
+  });
+
+  it("hidden monsters fight units that walk in, and are revealed", () => {
+    const g = unit({ creatureId: "knight", hp: 52 });
+    const lurker = unit({ ownerTeamId: null, creatureId: "giant-spider", hp: 26, regionId: "b", status: "hidden" });
+    const w = world([g, lurker]);
+    const p = resolve(w, order("move", { "0": [g.id], "1": ["b"] }));
+    expect(p.combats).toHaveLength(1);
+    expect(p.rolls.some((x) => /lies in wait/.test(x.label))).toBe(true);
+    const after = applyChanges(w, p.changes);
+    expect(after.units.find((u) => u.id === lurker.id)!.status).not.toBe("hidden");
+  });
+
+  it("searching for hidden units can find them", () => {
+    const searchers = [unit({ regionId: "c" }), unit({ regionId: "c" })];
+    const spy = unit({ ownerTeamId: THEM, creatureId: "scout", regionId: "c", status: "hidden" });
+    const w = world([...searchers, spy]);
+    const p = resolve(w, order("explore", { "0": searchers.map((u) => u.id), "1": "Hidden units" }));
+    expect(p.problems).toEqual([]);
+    expect(p.rolls).toHaveLength(1);
+    const found = p.rolls[0].outcome === "found";
+    expect(p.changes.some((c) => c.type === "detectUnits" && c.unitIds.includes(spy.id))).toBe(found);
+  });
+});
+
 describe("roll tables", () => {
   it("chains into other tables", () => {
-    // Explore 15+ adds a deposit; 10-14 rolls loot. Force a high roll with a big modifier.
-    const res = rollOnTable(r, "extract", createRng("x"), { modifiers: [{ label: "test", value: 30 }] });
-    expect(res.rolls.length).toBe(3);
-    expect(res.results.every((x) => x.type === "gainItem")).toBe(true);
+    // Search Ruin 21+ rolls on the Rare Treasure table, which gives an item.
+    const res = rollOnTable(r, "search-ruin", createRng("x"), { modifiers: [{ label: "test", value: 30 }] });
+    expect(res.rolls.map((x) => x.tableId)).toEqual(["search-ruin", "treasure-rare", ...res.rolls.slice(2).map((x) => x.tableId)]);
+    expect(res.results.some((x) => x.type === "gainItem")).toBe(true);
   });
 });
 
@@ -204,7 +251,9 @@ describe("end of round", () => {
     const me = end.teams.find((t) => t.teamId === ME)!;
     // Outpost +1 gold, three guards × 2 gold upkeep.
     expect(me.economy.end.gold).toBe(1 + 1 - 6);
-    expect(me.rolls.some((x) => x.tableId === "economy-deficit")).toBe(true);
+    // Gold has its own deficit table, with +1 per Gold short.
+    const deficit = me.rolls.find((x) => x.tableId === "deficit-gold")!;
+    expect(deficit.breakdown).toContain("4 Gold short 4");
     const after = applyChanges(w, me.changes);
     expect(after.teams[0].resources.gold).toBe(-4);
   });

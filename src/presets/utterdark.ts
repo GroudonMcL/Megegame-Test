@@ -3,6 +3,7 @@ import type { Effect } from "@/engine/ruleset/effects";
 import { Ruleset, TableResult as TableResultSchema, type RulesetInput } from "@/engine/ruleset/ruleset";
 import type { ActionProfile } from "@/engine/ruleset/statblock";
 import { SRD_ATTRIBUTION, srdByName } from "@/engine/srd/library";
+import { ENCOUNTER_MONSTERS, ENCOUNTER_TABLES, harvestFor, SHEET_ITEMS, SHEET_RACES, SHEET_RECIPES, SHEET_TABLES } from "./utterdarkData";
 
 // "Descent into the Utterdark", built from reference/utterdark-rules.md and the
 // DM sheet (reference/utterdark-dm-sheet.csv). Anything marked PLACEHOLDER isn't
@@ -22,7 +23,7 @@ function slug(s: string) {
 /** An SRD 5.2 creature, under its own SRD name. */
 function srd(srdName: string, extra: Omit<Partial<CreatureInput>, "statBlock" | "source"> & Pick<CreatureInput, "category">): CreatureInput {
   const m = srdByName(srdName);
-  return { id: slug(srdName), source: { kind: "srd-2024", ref: m.index }, statBlock: m.statBlock, ...extra };
+  return { id: slug(srdName), source: { kind: "srd-2024", ref: m.index }, statBlock: m.statBlock, harvest: harvestFor(srdName), ...extra };
 }
 
 type Modifier = Extract<Effect, { type: "modifier" }>;
@@ -145,7 +146,21 @@ const SPELLS: SpellInput[] = [
 ];
 
 function archetype(a: Omit<ArchetypeInput, "id"> & { id?: string }): ArchetypeInput {
-  return { id: a.id ?? slug(a.name), ...a };
+  // Hero archetypes carry a "Hero" tag, which some augments require.
+  const tags = a.categories?.includes("hero") ? [...(a.tags ?? []), "Hero"] : a.tags;
+  return { id: a.id ?? slug(a.name), ...a, tags };
+}
+
+const LISTED = ["Zombie", "Skeleton", "Iron Golem", "Shield Guardian", "Giant Lizard", "Giant Spider", "Giant Bat", "Drider", "Ghoul", "Gelatinous Cube", "Ochre Jelly", "Gray Ooze", "Otyugh", "Rust Monster", "Basilisk", "Grick", "Roper", "Darkmantle", "Violet Fungus", "Purple Worm"];
+
+function encounterMonsters(): CreatureInput[] {
+  return [...ENCOUNTER_MONSTERS]
+    .filter((n) => !LISTED.includes(n))
+    .sort()
+    .map((n) => {
+      const type = srdByName(n).statBlock.creatureType;
+      return srd(n, { category: "monster", tags: [type[0].toUpperCase() + type.slice(1)] });
+    });
 }
 
 const ARCHETYPES: ArchetypeInput[] = [
@@ -347,6 +362,8 @@ export function utterdarkPreset() {
       movement: { milesPerDayAt30ft: 24, travelDaysPerRound: 1, defaultConnectionMiles: 12, forceMarchMultiplier: 2, stealthMultiplier: 0.5 },
       combat: { maxRounds: 10, usesReset: "round", retreatBelow: 0.25 },
       demolishRefund: 0.5,
+      // "Each faction can have 1 event per turn."
+      roundEvents: "all",
       // PLACEHOLDER costs by Challenge Rating, calibrated against the DM sheet's old unit prices.
       crCosts: [
         { category: "hero", maxCr: 30, cost: { gold: 20 }, upkeep: { gold: 8 } },
@@ -361,9 +378,10 @@ export function utterdarkPreset() {
     },
 
     resources: [
-      { id: "gold", name: "Gold", icon: "🪙", colour: "#d4a017", kind: "stockpile", startingAmount: 10 },
-      { id: "food", name: "Food", icon: "🍖", colour: "#16a34a", kind: "stockpile", startingAmount: 5 },
-      { id: "growth", name: "Growth", icon: "🌱", colour: "#65a30d", kind: "stockpile", startingAmount: 50 },
+      // Starting amounts from the Master Tracker (ECO tab).
+      { id: "gold", name: "Gold", icon: "🪙", colour: "#d4a017", kind: "stockpile", startingAmount: 30 },
+      { id: "food", name: "Food", icon: "🍖", colour: "#16a34a", kind: "stockpile", startingAmount: 10 },
+      { id: "growth", name: "Growth", icon: "🌱", colour: "#65a30d", kind: "stockpile", startingAmount: 25 },
       { id: "population", name: "Population", icon: "👥", colour: "#0ea5e9", kind: "stockpile", startingAmount: 5 },
     ],
 
@@ -580,16 +598,8 @@ export function utterdarkPreset() {
       },
     ],
 
-    races: [
-      { id: "human", name: "Human", description: P, abilityBonuses: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 } },
-      { id: "dwarf", name: "Dwarf", description: P, abilityBonuses: { con: 2, str: 1 } },
-      { id: "elf", name: "Elf", description: P, abilityBonuses: { dex: 2, wis: 1 } },
-      { id: "drow", name: "Drow", description: P, abilityBonuses: { dex: 2, cha: 1 } },
-      { id: "duergar", name: "Duergar", description: P, abilityBonuses: { con: 2, str: 1 } },
-      { id: "deep-gnome", name: "Deep Gnome", description: P, abilityBonuses: { int: 2, dex: 1 } },
-      { id: "orc", name: "Orc", description: P, abilityBonuses: { str: 2, con: 1 } },
-      { id: "halfling", name: "Halfling", description: P, abilityBonuses: { dex: 2, cha: 1 } },
-    ],
+    // Races and their ability bonuses from the DM sheet (VALIDATION tab).
+    races: SHEET_RACES,
 
     creatures: [
       // Recruitable units: plain SRD 5.2 stat blocks. The archetype chosen when
@@ -616,9 +626,9 @@ export function utterdarkPreset() {
       srd("Iron Golem", { category: "monster", tags: ["Construct"], costOverride: { gold: 110 }, upkeepOverride: { gold: 20 }, effects: construct(), description: "Can be created by an Artificer." }),
       srd("Shield Guardian", { category: "monster", tags: ["Construct"], costOverride: { gold: 60 }, upkeepOverride: { gold: 10 }, effects: [...construct(), text("Magically bound to an amulet.")], description: "Can be created by an Artificer." }),
       srd("Giant Lizard", { category: "monster", tags: ["Beast"] }),
-      srd("Giant Spider", { category: "monster", tags: ["Beast"], harvest: [{ itemId: "spider-silk", qty: 2 }] }),
+      srd("Giant Spider", { category: "monster", tags: ["Beast"] }),
       srd("Giant Bat", { category: "monster", tags: ["Beast"] }),
-      srd("Drider", { category: "monster", tags: ["Monstrosity"], harvest: [{ itemId: "spider-silk", qty: 3 }] }),
+      srd("Drider", { category: "monster", tags: ["Monstrosity"] }),
       srd("Ghoul", { category: "monster", tags: ["Undead"] }),
       srd("Gelatinous Cube", { category: "monster", tags: ["Ooze"] }),
       srd("Ochre Jelly", { category: "monster", tags: ["Ooze"] }),
@@ -631,6 +641,8 @@ export function utterdarkPreset() {
       srd("Darkmantle", { category: "monster", tags: ["Monstrosity"] }),
       srd("Violet Fungus", { category: "monster", tags: ["Plant"] }),
       srd("Purple Worm", { category: "monster", tags: ["Monstrosity"] }),
+      // Everything else the encounter tables can spawn.
+      ...encounterMonsters(),
     ],
 
     archetypes: ARCHETYPES,
@@ -639,77 +651,21 @@ export function utterdarkPreset() {
     itemCategories: [
       { id: "basic-material", name: "Basic Material" },
       { id: "material", name: "Material" },
+      { id: "augment", name: "Augment", equippable: true },
       { id: "item", name: "Item" },
       { id: "trinket", name: "Trinket" },
-      { id: "augment", name: "Augment", equippable: true },
+      { id: "structure", name: "Structure or Trap", equippable: false },
     ],
     augmentSlots: [
       { id: "armour", name: "Armour" },
-      { id: "consumable", name: "Consumable" },
-      { id: "equipment", name: "Equipment" },
+      { id: "consumable", name: "Consumable", maxPerUnit: 3 },
+      { id: "equipment", name: "Equipment", maxPerUnit: 2 },
       { id: "shield", name: "Shield" },
       { id: "weapon-tool", name: "Weapon or Tool" },
     ],
-    items: [
-      { id: "metal", name: "Metal", categoryId: "basic-material", description: P },
-      { id: "wood", name: "Wood", categoryId: "basic-material", description: P },
-      { id: "gemstone", name: "Gemstone", categoryId: "basic-material", description: P },
-      { id: "spider-silk", name: "Spider Silk", categoryId: "material", description: P },
-      { id: "pristine-bones", name: "Pristine Bones", categoryId: "material", description: "Used by a Necromancer to raise a Skeleton." },
-      {
-        id: "pickaxes",
-        name: "Pickaxes",
-        categoryId: "augment",
-        slotId: "weapon-tool",
-        description: P,
-        requiresUnitTags: ["Miner"],
-        effects: [modifier("check:excavate", 1), modifier("check:extract", 1)],
-      },
-      { id: "chain-shirt", name: "Chain Shirt", categoryId: "augment", slotId: "armour", description: P, effects: [modifier("ac", 1)] },
-      {
-        id: "tower-shield",
-        name: "Tower Shield",
-        categoryId: "augment",
-        slotId: "shield",
-        description: P,
-        requiresUnitTags: ["Martial"],
-        effects: [modifier("ac", 2)],
-      },
-      {
-        id: "silk-cloak",
-        name: "Silk Cloak",
-        categoryId: "augment",
-        slotId: "equipment",
-        description: P,
-        effects: [{ type: "advantage", mode: "advantage", on: "check:stealth", when: [] }],
-      },
-      {
-        id: "healing-draught",
-        name: "Healing Draught",
-        categoryId: "augment",
-        slotId: "consumable",
-        description: P,
-        consumable: true,
-        effects: [
-          {
-            type: "grantAction",
-            action: {
-              name: "Drink Healing Draught",
-              text: "The unit regains 2d4 + 2 hit points.",
-              uses: { type: "perCombat", times: 1 },
-              profile: { kind: "heal", dice: "2d4", ability: null, flat: 2, targets: 1, revive: false },
-              review: "auto",
-            },
-          },
-        ],
-      },
-    ],
-    recipes: [
-      { id: "pickaxes", inputs: [{ itemId: "metal", qty: 2 }, { itemId: "wood", qty: 1 }], outputs: [{ itemId: "pickaxes", qty: 1 }], knownAtStart: true },
-      { id: "chain-shirt", inputs: [{ itemId: "metal", qty: 3 }], outputs: [{ itemId: "chain-shirt", qty: 1 }], knownAtStart: true },
-      { id: "tower-shield", inputs: [{ itemId: "metal", qty: 2 }, { itemId: "wood", qty: 2 }], outputs: [{ itemId: "tower-shield", qty: 1 }] },
-      { id: "silk-cloak", inputs: [{ itemId: "spider-silk", qty: 2 }], outputs: [{ itemId: "silk-cloak", qty: 1 }] },
-    ],
+    // Items, augments and recipes from the Master Tracker (AUG) and DM sheet (AUGMENTS).
+    items: SHEET_ITEMS,
+    recipes: SHEET_RECIPES,
 
     actionTypes: [
       // Numbered actions
@@ -785,22 +741,28 @@ export function utterdarkPreset() {
       {
         id: "explore",
         name: "Explore",
-        description: "Explore a region, ruin or dungeon. A region and a ruin can only be explored once.",
+        description:
+          "Search a region for resources, a ruin or dungeon for treasure, or the region for hidden units. Units make an Intelligence or Wisdom check. A region and a ruin can only be searched once; searching for hidden units can find stealthed units and hidden monsters, which may start a fight.",
         kind: "numbered",
         handler: "rollCheck",
-        inputs: [{ type: "unit", multiple: true }, { type: "choice", label: "Explore", options: ["Region", "Ruin", "Dungeon"] }],
-        check: { abilities: ["wis", "int", "cha"], tableId: "explore" },
+        config: {
+          tablesByChoice: { Region: "search-region", Ruin: "search-ruin", Dungeon: "dungeon" },
+          abilitiesByChoice: { Region: ["int", "wis"], Ruin: ["int", "wis"], Dungeon: ["int", "wis"], "Hidden units": ["wis"] },
+          searchHiddenChoice: "Hidden units",
+        },
+        inputs: [{ type: "unit", multiple: true }, { type: "choice", label: "Search", options: ["Region", "Ruin", "Dungeon", "Hidden units"] }],
+        check: { abilities: ["int", "wis"], tableId: "search-region" },
       },
       {
         id: "extract",
         name: "Extract",
-        description: "A miner may extract a deposit with a STR or CON check. Alternatively, any unit may extract resources from a slain enemy with an INT or WIS check. Free once per unit each turn.",
+        description: "A miner may extract a deposit with a STR or CON check. Alternatively, any unit may extract materials from a slain creature with a DEX or WIS check. Free once per unit each turn.",
         kind: "numberedAndFree",
         limit: { times: 1, per: "unit" },
         handler: "rollCheck",
-        config: { extraNumberedUses: 1, abilitiesByChoice: { Deposit: ["str", "con"], Corpse: ["int", "wis"] } },
+        config: { extraNumberedUses: 1, abilitiesByChoice: { Deposit: ["str", "con"], Corpse: ["dex", "wis"] } },
         inputs: [{ type: "unit", multiple: true }, { type: "choice", label: "Extract from", options: ["Deposit", "Corpse"] }, { type: "text", label: "Which deposit or corpse" }],
-        check: { abilities: ["str", "con", "int", "wis"], tableId: "extract" },
+        check: { abilities: ["str", "con", "dex", "wis"], tableId: "extract" },
       },
       {
         id: "heal-unit",
@@ -908,7 +870,7 @@ export function utterdarkPreset() {
         config: { extraNumberedUses: 1 },
         requirements: [{ type: "unitWithTag", tag: "Stealthy" }, { type: "unitStealthed" }],
         inputs: [{ type: "unit", tag: "Stealthy" }],
-        check: { abilities: ["wis"], tableId: "spy" },
+        check: { abilities: ["int", "wis", "cha"], tableId: "spy" },
       },
       {
         id: "train-academy",
@@ -975,163 +937,24 @@ export function utterdarkPreset() {
         inputs: [{ type: "unit", tag: "Beastmaster" }, { type: "text", label: "Beast" }],
       },
       { id: "tavern-gossip", name: "Tavern Gossip", description: "A chance to learn interesting gossip from your own people or far-travellers. Uses come from Taverns.", kind: "free", handler: "rollCheck", inputs: [], check: { abilities: ["cha"], tableId: "tavern" } },
-      { id: "trade", name: "Trade", description: "Trade resources, research, map information, units or even regions with a faction you've met.", kind: "free", handler: "trade", inputs: [{ type: "team" }, { type: "text", label: "Offer and request" }] },
       { id: "use-market", name: "Use Market", description: "Exchange 4 Gold for 1 Food, or 1 Food for 2 Gold. Requires a Market.", kind: "free", handler: "market", requirements: [{ type: "text", text: "You own a Market" }], inputs: [{ type: "resources", label: "Exchange" }] },
       { id: "use-portal", name: "Use Portal", description: "Move units through a portal to a connected portal, your own Portal elsewhere, or a portal you've been given access to.", kind: "free", handler: "portal", requirements: [{ type: "buildingInRegion", buildingId: "portal" }], inputs: [{ type: "unit", multiple: true }, { type: "region", label: "Destination" }] },
       { id: "use-resource", name: "Use Resource", description: "Use an item outside combat, or convert items into materials or income.", kind: "free", handler: "useItem", inputs: [{ type: "item" }, { type: "text", label: "How" }] },
     ],
 
     rollTables: [
-      {
-        id: "excavate",
-        name: "Excavate",
-        category: "check",
-        modifierNote: "+ the miner's STR or CON modifier, whichever is higher, + item bonuses",
-        bands: [
-          band(1, 7, `Cave-in! The miner takes damage. (${P})`, [{ type: "damageActor", dice: "1d6" }]),
-          band(8, 10, `Nothing but rock. (${P})`),
-          band(11, 15, `You find a basic material. (${P})`, [{ type: "rollTable", tableId: "loot-common" }]),
-          band(16, 18, `The tunnel breaks into a passage. (${P})`, [{ type: "revealConnection" }]),
-          band(19, null, `You break through into a new region! (${P})`, [{ type: "revealRegion" }, { type: "rollTable", tableId: "new-region" }]),
-        ],
-      },
-      {
-        id: "extract",
-        name: "Extract",
-        category: "check",
-        modifierNote: "+ the relevant ability modifier",
-        bands: [
-          band(1, 7, `The attempt fails and the material is damaged. (${P})`),
-          band(8, 12, `You extract a little. (${P})`, [{ type: "rollTable", tableId: "loot-common" }]),
-          band(13, null, `A good haul. (${P})`, [{ type: "rollTable", tableId: "loot-common", times: 2 }]),
-        ],
-      },
-      {
-        id: "new-region",
-        name: "New Region",
-        category: "other",
-        die: "1d6",
-        bands: [
-          band(1, 2, `An empty cavern. (${P})`),
-          band(3, 4, `A cavern with a deposit. (${P})`, [{ type: "addDeposit" }]),
-          band(5, 5, `Ancient ruins. (${P})`, [{ type: "findStructure", kind: "ruin" }]),
-          band(6, 6, `Something lives here… (${P})`, [{ type: "spawnMonster", creatureId: null }]),
-        ],
-      },
-      {
-        id: "hunters-post",
-        name: "Hunter's Post",
-        category: "building",
-        modifierNote: "+1 per Hunter's Post tier",
-        buildingBonus: { buildingId: "hunters-post", perTier: 1 },
-        bands: [
-          band(1, 10, `The hunters return with nothing extra. (${P})`),
-          band(11, 17, `Extra game. (${P})`, [{ type: "gainResource", resourceId: "food", amount: "1" }]),
-          band(18, null, `The hunters bring back a material. (${P})`, [{ type: "rollTable", tableId: "loot-common" }]),
-        ],
-      },
-      {
-        id: "divine-intervention",
-        name: "Divine Intervention",
-        category: "check",
-        die: "1d100",
-        modifierNote: "War Priests roll with advantage",
-        bands: [
-          band(1, 70, `Your prayers go unanswered. (${P})`),
-          band(71, 95, `Guidance: the DM gives a vision or hint. (${P})`),
-          band(96, null, `A direct boon from your god. (${P})`),
-        ],
-      },
-      {
-        id: "race",
-        name: "Race",
-        category: "other",
-        die: "1d8",
-        bands: [
-          band(1, 1, "Human"),
-          band(2, 2, "Dwarf"),
-          band(3, 3, "Elf"),
-          band(4, 4, "Drow"),
-          band(5, 5, "Duergar"),
-          band(6, 6, "Deep Gnome"),
-          band(7, 7, "Orc"),
-          band(8, 8, `Halfling (${P})`),
-        ],
-      },
-      {
-        id: "loot-common",
-        name: "Loot (common material)",
-        category: "loot",
-        die: "1d10",
-        bands: [
-          band(1, 4, "Metal", [{ type: "gainItem", itemId: "metal", qty: "1" }]),
-          band(5, 8, "Wood", [{ type: "gainItem", itemId: "wood", qty: "1" }]),
-          band(9, 10, `Gemstone (${P})`, [{ type: "gainItem", itemId: "gemstone", qty: "1" }]),
-        ],
-      },
-      {
-        id: "encounter",
-        name: "Encounter",
-        category: "encounter",
-        die: "1d6",
-        bands: [
-          band(1, 2, "Giant Lizard", [{ type: "spawnMonster", creatureId: "giant-lizard" }]),
-          band(3, 4, "Giant Spider", [{ type: "spawnMonster", creatureId: "giant-spider" }]),
-          band(5, 5, "Ghoul", [{ type: "spawnMonster", creatureId: "ghoul" }]),
-          band(6, 6, `Drider (${P})`, [{ type: "spawnMonster", creatureId: "drider" }]),
-        ],
-      },
+      // From the Master Tracker's DM REFERENCE tab, plus the encounter tables from the DM sheet.
+      ...SHEET_TABLES,
+      ...ENCOUNTER_TABLES,
       {
         id: "dungeon",
         name: "Dungeon",
         category: "check",
+        modifierNote: "+ the best INT or WIS modifier among the exploring units",
         bands: [
           band(1, 7, `A trap springs. (${P})`, [{ type: "damageActor", dice: "2d6" }]),
-          band(8, 14, `Guardians attack! (${P})`, [{ type: "rollTable", tableId: "encounter" }]),
-          band(15, null, `Treasure. (${P})`, [{ type: "rollTable", tableId: "loot-common", times: 2 }]),
-        ],
-      },
-      {
-        id: "explore",
-        name: "Explore",
-        category: "check",
-        modifierNote: "+ the best Wisdom, Intelligence or Charisma modifier among the exploring units",
-        bands: [
-          band(1, 9, `You find nothing. (${P})`),
-          band(10, 14, `You find something minor. (${P})`, [{ type: "rollTable", tableId: "loot-common" }]),
-          band(15, null, `You find a deposit or a hidden structure. (${P})`, [{ type: "addDeposit" }]),
-        ],
-      },
-      {
-        id: "spy",
-        name: "Spy",
-        category: "check",
-        bands: [
-          band(1, 9, `You learn little, and may have been noticed. (${P})`),
-          band(10, 14, `You learn the units and buildings in the region. (${P})`),
-          band(15, null, `You learn their plans for next round. (${P})`),
-        ],
-      },
-      {
-        id: "tavern",
-        name: "Tavern",
-        category: "building",
-        bands: [band(1, 10, `Only idle gossip. (${P})`), band(11, null, `A useful rumour about a nearby region. (${P})`)],
-      },
-      {
-        id: "turn-event",
-        name: "Turn Event",
-        category: "event",
-        bands: [band(1, 5, `Trouble strikes. (${P})`), band(6, 15, `A quiet round. (${P})`), band(16, null, `Good fortune. (${P})`)],
-      },
-      {
-        id: "economy-deficit",
-        name: "Economy Deficit",
-        category: "deficit",
-        bands: [
-          band(1, 5, `Unrest: a unit disbands. (${P})`),
-          band(6, 12, `Your people grumble. Some actions may not resolve. (${P})`),
-          band(13, null, `You scrape by this time. (${P})`),
+          band(8, 14, `Guardians attack! (${P})`, [{ type: "rollTable", tableId: "encounter-low" }]),
+          band(15, null, `Treasure. (${P})`, [{ type: "rollTable", tableId: "treasure-uncommon" }]),
         ],
       },
     ],

@@ -284,7 +284,9 @@ export const TableResult = z.discriminatedUnion("type", [
   z.object({ type: z.literal("gainItem"), itemId: Id, qty: DiceExpr.default("1") }),
   z.object({ type: z.literal("rollTable"), tableId: Id, times: z.number().int().positive().default(1), ignore: z.array(z.number().int()).default([]) }),
   z.object({ type: z.literal("damageActor"), dice: DiceExpr }),
-  z.object({ type: z.literal("spawnMonster"), creatureId: Id.nullable().default(null) }),
+  z.object({ type: z.literal("spawnMonster"), creatureId: Id.nullable().default(null), count: DiceExpr.default("1") }),
+  /** Survivors join: the team can recruit units of this race from now on. */
+  z.object({ type: z.literal("gainRace"), raceId: Id }),
   z.object({ type: z.literal("revealConnection") }),
   z.object({ type: z.literal("revealRegion") }),
   z.object({ type: z.literal("addDeposit"), note: z.string().default("") }),
@@ -302,6 +304,11 @@ export const RollTable = z.object({
   modifierNote: z.string().default(""),
   /** Flat bonus per tier of a building in the region (e.g. +1 per Hunter Post tier). */
   buildingBonus: z.object({ buildingId: Id, perTier: z.number() }).nullable().default(null),
+  /** Deficit tables: the resource this table is for (null = any), and the bonus per unit of deficit. */
+  deficitResourceId: Id.nullable().default(null),
+  deficitPerUnit: z.number().default(0),
+  /** +1 for every this many regions the team owns (e.g. a turn-event table: +1 per 6 regions). */
+  perRegionsBonus: z.number().int().positive().nullable().default(null),
   bands: z
     .array(
       z.object({
@@ -368,6 +375,8 @@ export const Settings = z.object({
   demolishRefund: z.number().min(0).max(1).default(0.5),
   /** Free actions each unit may take per round (null = no limit). */
   freeActionsPerUnit: z.number().int().min(0).nullable().default(null),
+  /** Roll the event table at the end of each round: for nobody (the DM picks) or every team. */
+  roundEvents: z.enum(["off", "all"]).default("off"),
   fog: z
     .object({
       /** Regions seen before stay on a team's map, dimmed, with what the team last saw. */

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { LogEntry } from "@/engine/combat/types";
 import type { ResourceAmounts } from "@/engine/ruleset/common";
@@ -26,6 +26,8 @@ export interface TeamResults {
   }[];
   /** What happened to this team because of other teams' orders (e.g. being attacked). */
   reports: { text: string; fights: LogEntry[][] }[];
+  /** Trades that went through (or failed) at the end of this round. */
+  trades: { text: string; ok: boolean }[];
   endOfRound: { lines: string[]; change: ResourceAmounts; adjust: ResourceAmounts; rolls: { label: string; breakdown: string }[] } | null;
 }
 
@@ -58,6 +60,10 @@ export async function loadTeamResults(gameId: string, teamId: string, opts: { li
     .orderBy(asc(schema.orders.position));
   const sharedFights = (out: Partial<OrderOutcome> | null) =>
     out?.combat?.shareLog === false || out?.combat?.byHand ? [] : (out?.proposal?.combats ?? []).filter((c) => c.endReason !== "noFight").map((c) => c.log);
+  const trades = await db
+    .select()
+    .from(schema.trades)
+    .where(and(eq(schema.trades.gameId, gameId), inArray(schema.trades.status, ["executed", "failed"]), or(eq(schema.trades.fromTeamId, teamId), eq(schema.trades.toTeamId, teamId))));
   const breakdown = (r: typeof schema.rollLog.$inferSelect) => ({ label: r.label, breakdown: (r.result as { breakdown?: string })?.breakdown ?? String(r.total) });
 
   return rounds.map((round) => {
@@ -89,6 +95,9 @@ export async function loadTeamResults(gameId: string, teamId: string, opts: { li
           const out = o.outcome as Partial<OrderOutcome> | null;
           return (out?.proposal?.reports ?? []).filter((x) => x.teamId === teamId).map((x) => ({ text: x.text, fights: sharedFights(out) }));
         }),
+      trades: trades
+        .filter((t) => t.executedRound === round.number)
+        .map((t) => ({ ok: t.status === "executed", text: t.status === "executed" ? `Trade done: ${t.result}` : `A trade failed: ${t.result}` })),
       endOfRound: mine
         ? { lines: mine.lines, change: mine.economy.change, adjust: eor?.adjust[teamId] ?? {}, rolls: mine.rolls.map((r) => ({ label: r.label, breakdown: r.breakdown })) }
         : null,

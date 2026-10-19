@@ -49,6 +49,12 @@ export function RoundResults({ result, rules }: { result: TeamResults; rules: Ru
           </li>
         ))}
         {result.orders.length === 0 && <li className="text-sm text-muted">You gave no orders this round.</li>}
+        {result.trades.map((t, i) => (
+          <li key={`trade-${i}`} className={`rounded-lg border p-3 text-sm ${t.ok ? "border-border" : "border-danger/50"}`}>
+            <strong>⇄ Trade</strong>
+            <p className="mt-1">{t.text}</p>
+          </li>
+        ))}
       </ol>
       {result.endOfRound && (
         <div className="rounded-lg border border-border p-3 text-sm">

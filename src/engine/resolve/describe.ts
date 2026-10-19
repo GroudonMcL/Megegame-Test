@@ -126,6 +126,12 @@ export function describeChange(r: Ruleset, world: World, c: Change): string {
     }
     case "inventory":
       return `${team(c.teamId)}: ${c.delta > 0 ? "+" : ""}${c.delta} ${r.items.find((x) => x.id === c.itemId)?.name ?? c.itemId}`;
+    case "detectUnits":
+      return `${team(c.teamId)} spots ${c.unitIds.map(unit).join(", ")}`;
+    case "clearDetections":
+      return `${c.unitIds.map(unit).join(", ")} slip${c.unitIds.length === 1 ? "s" : ""} out of sight`;
+    case "gainRaces":
+      return `${team(c.teamId)} gains the ${c.raceIds.map((id) => r.races.find((x) => x.id === id)?.name ?? id).join(", ")} race`;
     case "learnRecipes":
       return `${team(c.teamId)} learns ${c.recipeIds.length} recipe${c.recipeIds.length === 1 ? "" : "s"}`;
   }

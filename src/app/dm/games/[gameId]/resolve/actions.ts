@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { ResourceAmounts } from "@/engine/ruleset/common";
 import {
@@ -18,6 +19,7 @@ import {
   startResolving,
   undoLast,
 } from "@/lib/resolution";
+import { appOrigin, notifyPublished } from "@/lib/discord";
 import { requireDm } from "@/lib/session";
 
 // The DM's resolution controls. Each re-checks the DM session and works only
@@ -82,8 +84,20 @@ export const undoAction = async (gameId: string) =>
     return what ? { ok: true, message: `Undone: ${what}` } : { ok: false, error: "Nothing to undo." };
   });
 
-export const computeEndAction = async (gameId: string, reroll: boolean) => run(gameId, (id) => computeEndOfRound(id, reroll));
+export const computeEndAction = async (gameId: string, reroll: boolean, events?: { tableId: string; teamIds: string[] } | null) =>
+  run(gameId, (id) =>
+    computeEndOfRound(
+      id,
+      reroll,
+      events === undefined ? undefined : events === null ? null : z.object({ tableId: z.string().max(64), teamIds: z.array(z.uuid()).max(200) }).parse(events),
+    ),
+  );
 export const backToQueueAction = async (gameId: string) => run(gameId, (id) => backToQueue(id));
 export const applyEndAction = async (gameId: string, adjust: Record<string, Record<string, number>>) =>
   run(gameId, (id) => applyEndOfRound(id, z.record(z.uuid(), ResourceAmounts).parse(adjust)));
-export const publishAction = async (gameId: string) => run(gameId, (id) => publishRound(id));
+export const publishAction = async (gameId: string) =>
+  run(gameId, async (id) => {
+    const number = await publishRound(id);
+    const origin = await appOrigin();
+    after(() => notifyPublished(id, number, origin));
+  });

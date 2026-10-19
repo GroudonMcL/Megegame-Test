@@ -84,6 +84,9 @@ interface Props {
     adjust: Record<string, Record<string, number>>;
     teams: { teamId: string; teamName: string; economy: Economy; rolls: { label: string; breakdown: string }[]; lines: string[]; notes: string[] }[];
     wild: string[];
+    events: { tableId: string; teamIds: string[] } | null;
+    eventTables: { id: string; name: string }[];
+    trades: { summary: string; ok: boolean; problems: string[] }[];
   } | null;
 }
 
@@ -549,6 +552,22 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
           </button>
         )}
       </div>
+      {!eor.applied && eor.eventTables.length > 0 && <EventPicker props={props} act={act} busy={busy} />}
+      {eor.trades.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4 text-sm">
+          <h3 className="font-medium">Trades</h3>
+          <p className="text-xs text-muted">Accepted trades go through last, if both sides still have what they offered.</p>
+          <ul className="mt-2 space-y-1">
+            {eor.trades.map((t, i) => (
+              <li key={i} className={t.ok ? "" : "text-danger"}>
+                {t.ok ? "⇄ " : "✕ "}
+                {t.summary}
+                {!t.ok && ` Fails: ${t.problems.join(" ")}`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {eor.teams.map((t) => (
         <section key={t.teamId} className="rounded-xl border border-border bg-card p-4">
           <h3 className="font-medium">{t.teamName}</h3>
@@ -600,5 +619,45 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
         </section>
       )}
     </div>
+  );
+}
+
+/** Which teams roll on the random-event table this round. */
+function EventPicker({ props, act, busy }: { props: Props; act: (fn: () => Promise<Result>) => void; busy: boolean }) {
+  const eor = props.endOfRound!;
+  const [tableId, setTableId] = useState(eor.events?.tableId ?? eor.eventTables[0].id);
+  const [teamIds, setTeamIds] = useState<string[]>(eor.events?.teamIds ?? []);
+  const all = eor.teams.map((t) => t.teamId);
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 text-sm">
+      <h3 className="font-medium">Random events</h3>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-1">
+          Table
+          <select className="rounded-md border border-border bg-background px-2 py-1" value={tableId} onChange={(e) => setTableId(e.target.value)}>
+            {eor.eventTables.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {eor.teams.map((t) => (
+          <label key={t.teamId} className="flex items-center gap-1">
+            <input type="checkbox" checked={teamIds.includes(t.teamId)} onChange={(e) => setTeamIds(e.target.checked ? [...teamIds, t.teamId] : teamIds.filter((x) => x !== t.teamId))} />
+            {t.teamName}
+          </label>
+        ))}
+        <button type="button" className={btn} onClick={() => setTeamIds(teamIds.length === all.length ? [] : all)}>
+          {teamIds.length === all.length ? "None" : "All"}
+        </button>
+        <button type="button" className={primary} disabled={busy} onClick={() => act(() => computeEndAction(props.gameId, false, teamIds.length ? { tableId, teamIds } : null))}>
+          {teamIds.length ? `Roll events for ${teamIds.length} team${teamIds.length === 1 ? "" : "s"}` : "No events this round"}
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        {eor.events?.teamIds.length ? `Rolled this round for ${eor.events.teamIds.length} team${eor.events.teamIds.length === 1 ? "" : "s"}: see each team below.` : "No events rolled yet this round."}
+      </p>
+    </section>
   );
 }

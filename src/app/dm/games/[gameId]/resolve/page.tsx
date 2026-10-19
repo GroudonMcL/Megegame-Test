@@ -94,6 +94,9 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                 notes: t.notes,
               })),
               wild: eor.result.wild.lines,
+              events: eor.events ?? null,
+              eventTables: ruleset.rollTables.filter((t) => t.category === "event").map((t) => ({ id: t.id, name: t.name })),
+              trades: (eor.result.trades ?? []).map((t) => ({ summary: t.summary, ok: t.ok, problems: t.problems })),
             }
           : null
       }

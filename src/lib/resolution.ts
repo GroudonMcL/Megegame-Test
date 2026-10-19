@@ -6,10 +6,12 @@ import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { OrderDraft } from "@/engine/orders/validate";
 import { addTo } from "@/engine/orders/economy";
 import { endOfRound, type RoundEnd } from "@/engine/resolve/endOfRound";
+import type { TradeInput } from "@/engine/trades";
 import { buildQueue, interactionFlags, scenes, type Flag } from "@/engine/resolve/queue";
 import { orderCombatOdds, resolveOrder, type CombatOptions } from "@/engine/resolve/resolveOrder";
 import type { CombatOdds } from "@/engine/combat/types";
 import type { Change, Proposal, RollRecord, World } from "@/engine/resolve/types";
+import { recordMeetings } from "./contacts";
 import { loadRuleset } from "./rulesets";
 import { loadGameRows, rowsToWorld } from "./world";
 
@@ -51,6 +53,8 @@ export interface EndOfRoundState {
   /** teamId → extra resource changes the DM adds. */
   adjust: Record<string, ResourceAmounts>;
   applied: boolean;
+  /** The random-event table rolled for which teams, if any. */
+  events?: { tableId: string; teamIds: string[] } | null;
 }
 
 export const PENDING = new Set(["draft", "submitted", "prepared"]);
@@ -80,9 +84,17 @@ function toDraft(o: OrderRow): OrderDraft {
 interface Before {
   units: (typeof schema.units.$inferSelect)[];
   regions: (typeof schema.regions.$inferSelect)[];
-  teams: { id: string; resources: ResourceAmounts; knownRecipeIds: string[] }[];
+  teams: { id: string; resources: ResourceAmounts; knownRecipeIds: string[]; raceIds?: string[] }[];
   inventory: { teamId: string; itemId: string; qty: number | null }[];
   createdUnitIds: string[];
+  /** Detections of the units a change touched, as they were. */
+  detections?: { teamId: string; unitId: string; round: number }[];
+  /** Units whose detections a change touched (so new ones can be removed on undo). */
+  detectionUnitIds?: string[];
+  /** Trades the end of round executed or failed, as they were. */
+  trades?: { id: string; status: string; result: string; executedRound: number | null }[];
+  /** Map knowledge of teams that received a map in a trade, as it was. */
+  knowledge?: { teamId: string; regions: (typeof schema.teamRegionKnowledge.$inferSelect)[]; connections: (typeof schema.teamConnectionKnowledge.$inferSelect)[] }[];
   /** Units whose movement and ability uses were reset (end of round). */
   resetUnits?: { id: string; milesUsed: number; usesSpent: Record<string, number> }[];
 }
@@ -90,14 +102,14 @@ interface Before {
 async function captureBefore(tx: Tx, gameId: string, changes: Change[]): Promise<Before> {
   const unitIds = [...new Set(changes.flatMap((c) => (c.type === "moveUnit" || c.type === "updateUnit" ? [c.unitId] : [])))];
   const regionIds = [...new Set(changes.flatMap((c) => (c.type === "updateRegion" ? [c.regionId] : [])))];
-  const teamIds = [...new Set(changes.flatMap((c) => (c.type === "resources" || c.type === "learnRecipes" ? [c.teamId] : [])))];
+  const teamIds = [...new Set(changes.flatMap((c) => (c.type === "resources" || c.type === "learnRecipes" || c.type === "gainRaces" ? [c.teamId] : [])))];
   const invKeys = [...new Map(changes.flatMap((c) => (c.type === "inventory" ? [[`${c.teamId}:${c.itemId}`, c] as const] : []))).values()];
   const [units, regions, teams] = await Promise.all([
     unitIds.length ? tx.select().from(schema.units).where(and(eq(schema.units.gameId, gameId), inArray(schema.units.id, unitIds))) : [],
     regionIds.length ? tx.select().from(schema.regions).where(and(eq(schema.regions.gameId, gameId), inArray(schema.regions.id, regionIds))) : [],
     teamIds.length
       ? tx
-          .select({ id: schema.teams.id, resources: schema.teams.resources, knownRecipeIds: schema.teams.knownRecipeIds })
+          .select({ id: schema.teams.id, resources: schema.teams.resources, knownRecipeIds: schema.teams.knownRecipeIds, raceIds: schema.teams.raceIds })
           .from(schema.teams)
           .where(and(eq(schema.teams.gameId, gameId), inArray(schema.teams.id, teamIds)))
       : [],
@@ -110,7 +122,9 @@ async function captureBefore(tx: Tx, gameId: string, changes: Change[]): Promise
       .where(and(eq(schema.inventory.teamId, c.teamId), eq(schema.inventory.itemId, c.itemId)));
     inventory.push({ teamId: c.teamId, itemId: c.itemId, qty: row?.qty ?? null });
   }
-  return { units, regions, teams, inventory, createdUnitIds: changes.flatMap((c) => (c.type === "createUnit" ? [c.unit.id] : [])) };
+  const detectionUnitIds = [...new Set(changes.flatMap((c) => (c.type === "detectUnits" || c.type === "clearDetections" ? c.unitIds : [])))];
+  const detections = detectionUnitIds.length ? await tx.select().from(schema.teamUnitDetections).where(inArray(schema.teamUnitDetections.unitId, detectionUnitIds)) : [];
+  return { units, regions, teams, inventory, detections, detectionUnitIds, createdUnitIds: changes.flatMap((c) => (c.type === "createUnit" ? [c.unit.id] : [])) };
 }
 
 /** Writes changes to the database. Every row is scoped to the game. */
@@ -135,6 +149,30 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
           .update(schema.teams)
           .set({ knownRecipeIds: [...new Set([...t.knownRecipeIds, ...c.recipeIds])] })
           .where(eq(schema.teams.id, t.id));
+        break;
+      }
+      case "gainRaces": {
+        const t = await teamRow(c.teamId);
+        await tx
+          .update(schema.teams)
+          .set({ raceIds: [...new Set([...t.raceIds, ...c.raceIds])] })
+          .where(eq(schema.teams.id, t.id));
+        break;
+      }
+      case "detectUnits": {
+        await teamRow(c.teamId);
+        const own = await tx.select({ id: schema.units.id }).from(schema.units).where(and(eq(schema.units.gameId, gameId), inArray(schema.units.id, c.unitIds)));
+        if (own.length) {
+          await tx
+            .insert(schema.teamUnitDetections)
+            .values(own.map((u) => ({ teamId: c.teamId, unitId: u.id, round: c.round })))
+            .onConflictDoNothing();
+        }
+        break;
+      }
+      case "clearDetections": {
+        const own = await tx.select({ id: schema.units.id }).from(schema.units).where(and(eq(schema.units.gameId, gameId), inArray(schema.units.id, c.unitIds)));
+        if (own.length) await tx.delete(schema.teamUnitDetections).where(inArray(schema.teamUnitDetections.unitId, own.map((u) => u.id)));
         break;
       }
       case "moveUnit":
@@ -171,6 +209,20 @@ async function restore(tx: Tx, gameId: string, before: Before) {
     const { id, regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
     await tx.update(schema.units).set({ regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   }
+  if (before.detections) {
+    const ids = [...new Set([...before.detections.map((d) => d.unitId), ...(before.detectionUnitIds ?? [])])];
+    if (ids.length) await tx.delete(schema.teamUnitDetections).where(inArray(schema.teamUnitDetections.unitId, ids));
+    if (before.detections.length) await tx.insert(schema.teamUnitDetections).values(before.detections).onConflictDoNothing();
+  }
+  for (const t of before.trades ?? []) {
+    await tx.update(schema.trades).set({ status: t.status, result: t.result, executedRound: t.executedRound }).where(and(eq(schema.trades.id, t.id), eq(schema.trades.gameId, gameId)));
+  }
+  for (const k of before.knowledge ?? []) {
+    await tx.delete(schema.teamRegionKnowledge).where(eq(schema.teamRegionKnowledge.teamId, k.teamId));
+    await tx.delete(schema.teamConnectionKnowledge).where(eq(schema.teamConnectionKnowledge.teamId, k.teamId));
+    if (k.regions.length) await tx.insert(schema.teamRegionKnowledge).values(k.regions);
+    if (k.connections.length) await tx.insert(schema.teamConnectionKnowledge).values(k.connections);
+  }
   for (const u of before.resetUnits ?? []) {
     await tx.update(schema.units).set({ milesUsed: u.milesUsed, usesSpent: u.usesSpent }).where(and(eq(schema.units.id, u.id), eq(schema.units.gameId, gameId)));
   }
@@ -179,11 +231,46 @@ async function restore(tx: Tx, gameId: string, before: Before) {
     await tx.update(schema.regions).set({ ownerTeamId, settlementTierId, buildings }).where(and(eq(schema.regions.id, id), eq(schema.regions.gameId, gameId)));
   }
   for (const t of before.teams) {
-    await tx.update(schema.teams).set({ resources: t.resources, knownRecipeIds: t.knownRecipeIds }).where(and(eq(schema.teams.id, t.id), eq(schema.teams.gameId, gameId)));
+    await tx.update(schema.teams).set({ resources: t.resources, knownRecipeIds: t.knownRecipeIds, ...(t.raceIds ? { raceIds: t.raceIds } : {}) }).where(and(eq(schema.teams.id, t.id), eq(schema.teams.gameId, gameId)));
   }
   for (const i of before.inventory) {
     await tx.delete(schema.inventory).where(and(eq(schema.inventory.teamId, i.teamId), eq(schema.inventory.itemId, i.itemId)));
     if (i.qty !== null) await tx.insert(schema.inventory).values({ teamId: i.teamId, itemId: i.itemId, qty: i.qty });
+  }
+}
+
+/** Gives one team everything another knows of the map: regions it has found or seen, and hidden passages. */
+async function shareMap(tx: Tx, gameId: string, fromTeamId: string, toTeamId: string, roundNumber: number) {
+  const teams = await tx.select({ id: schema.teams.id }).from(schema.teams).where(and(eq(schema.teams.gameId, gameId), inArray(schema.teams.id, [fromTeamId, toTeamId])));
+  if (teams.length !== 2) return;
+  const [theirs, mine, theirConnections] = await Promise.all([
+    tx.select().from(schema.teamRegionKnowledge).where(eq(schema.teamRegionKnowledge.teamId, fromTeamId)),
+    tx.select().from(schema.teamRegionKnowledge).where(eq(schema.teamRegionKnowledge.teamId, toTeamId)),
+    tx.select().from(schema.teamConnectionKnowledge).where(eq(schema.teamConnectionKnowledge.teamId, fromTeamId)),
+  ]);
+  for (const k of theirs) {
+    if (!k.discovered && !k.lastSeen) continue;
+    const own = mine.find((x) => x.regionId === k.regionId);
+    const newer = k.lastSeen && (own?.lastSeenRound ?? -1) < (k.lastSeenRound ?? roundNumber);
+    const values = {
+      teamId: toTeamId,
+      regionId: k.regionId,
+      discovered: true,
+      searched: own?.searched ?? false,
+      permanentVision: own?.permanentVision ?? false,
+      lastSeen: newer ? k.lastSeen : (own?.lastSeen ?? null),
+      lastSeenRound: newer ? k.lastSeenRound : (own?.lastSeenRound ?? null),
+    };
+    await tx
+      .insert(schema.teamRegionKnowledge)
+      .values(values)
+      .onConflictDoUpdate({ target: [schema.teamRegionKnowledge.teamId, schema.teamRegionKnowledge.regionId], set: values });
+  }
+  if (theirConnections.length) {
+    await tx
+      .insert(schema.teamConnectionKnowledge)
+      .values(theirConnections.map((c) => ({ teamId: toTeamId, connectionId: c.connectionId })))
+      .onConflictDoNothing();
   }
 }
 
@@ -473,16 +560,36 @@ export async function undoLast(gameId: string): Promise<string | null> {
 
 // ——— End of round and publishing ———
 
-/** Works out production, upkeep, per-round rolls, hazards and deficits, for the DM to review. */
-export async function computeEndOfRound(gameId: string, reroll = false) {
+/** Accepted trades waiting for the end of the round, oldest first. */
+async function acceptedTrades(gameId: string, tx: Pick<typeof db, "select"> = db): Promise<TradeInput[]> {
+  const rows = await tx
+    .select()
+    .from(schema.trades)
+    .where(and(eq(schema.trades.gameId, gameId), eq(schema.trades.status, "accepted")))
+    .orderBy(asc(schema.trades.respondedAt));
+  return rows.map((t) => ({ id: t.id, fromTeamId: t.fromTeamId, toTeamId: t.toTeamId, give: t.give, get: t.get }));
+}
+
+/** Works out production, upkeep, per-round rolls, events, hazards, deficits and trades, for the DM to review. */
+export async function computeEndOfRound(gameId: string, reroll = false, events?: { tableId: string; teamIds: string[] } | null) {
   const { round } = await currentRound(gameId);
   if (!round || (round.status !== "resolving" && round.status !== "review")) return;
   const previous = round.endOfRound as EndOfRoundState | null;
   if (previous?.applied) return;
-  const [{ ruleset }, rows] = await Promise.all([loadRuleset(gameId), loadGameRows(gameId)]);
+  const [{ ruleset }, rows, trades] = await Promise.all([loadRuleset(gameId), loadGameRows(gameId), acceptedTrades(gameId)]);
   const n = reroll ? Number(previous?.seed.split(":").pop() ?? 0) + 1 : 0;
   const seed = `${round.id}:end:${n}`;
-  const state: EndOfRoundState = { seed, result: endOfRound(ruleset, rowsToWorld(rows), seed), adjust: previous?.adjust ?? {}, applied: false };
+  const eventTable = ruleset.rollTables.find((t) => t.category === "event");
+  const chosen =
+    events !== undefined
+      ? events
+      : previous?.events !== undefined
+        ? previous.events
+        : ruleset.settings.roundEvents === "all" && eventTable
+          ? { tableId: eventTable.id, teamIds: rows.teams.filter((t) => !t.isNpc).map((t) => t.id) }
+          : null;
+  const result = endOfRound(ruleset, rowsToWorld(rows), seed, { events: chosen, trades });
+  const state: EndOfRoundState = { seed, result, adjust: previous?.adjust ?? {}, applied: false, events: chosen };
   await db.update(schema.rounds).set({ status: "review", endOfRound: state }).where(eq(schema.rounds.id, round.id));
 }
 
@@ -499,13 +606,42 @@ export async function applyEndOfRound(gameId: string, adjust: Record<string, Res
       const extra = adjust[t.teamId];
       if (extra && Object.values(extra).some((v) => v)) changes.push({ type: "resources", teamId: t.teamId, delta: extra });
     }
+    // Trades go last. Only trades that are still accepted (not cancelled since) are applied.
+    const tradeResults = eor.result.trades ?? [];
+    const tradeRows = tradeResults.length
+      ? await tx.select().from(schema.trades).where(and(eq(schema.trades.gameId, gameId), inArray(schema.trades.id, tradeResults.map((t) => t.tradeId))))
+      : [];
+    const live = tradeResults.filter((t) => tradeRows.find((x) => x.id === t.tradeId)?.status === "accepted");
+    const maps: { fromTeamId: string; toTeamId: string }[] = [];
+    for (const t of live.filter((x) => x.ok)) {
+      for (const c of t.changes) {
+        if (c.type === "shareMap") maps.push(c);
+        else changes.push(c);
+      }
+    }
     const before = await captureBefore(tx, gameId, changes);
+    before.trades = tradeRows.map((t) => ({ id: t.id, status: t.status, result: t.result, executedRound: t.executedRound }));
+    before.knowledge = [];
+    for (const toTeamId of [...new Set(maps.map((m) => m.toTeamId))]) {
+      before.knowledge.push({
+        teamId: toTeamId,
+        regions: await tx.select().from(schema.teamRegionKnowledge).where(eq(schema.teamRegionKnowledge.teamId, toTeamId)),
+        connections: await tx.select().from(schema.teamConnectionKnowledge).where(eq(schema.teamConnectionKnowledge.teamId, toTeamId)),
+      });
+    }
     const units = await tx
       .select({ id: schema.units.id, milesUsed: schema.units.milesUsed, usesSpent: schema.units.usesSpent })
       .from(schema.units)
       .where(eq(schema.units.gameId, gameId));
     before.resetUnits = units;
     await applyChanges(tx, gameId, changes);
+    for (const m of maps) await shareMap(tx, gameId, m.fromTeamId, m.toTeamId, round.number);
+    for (const t of live) {
+      await tx
+        .update(schema.trades)
+        .set(t.ok ? { status: "executed", result: t.summary, executedRound: round.number } : { status: "failed", result: t.problems.join(" "), executedRound: round.number })
+        .where(eq(schema.trades.id, t.tradeId));
+    }
     // A new round: movement and per-round ability uses reset.
     await tx.update(schema.units).set({ milesUsed: 0, usesSpent: {} }).where(eq(schema.units.gameId, gameId));
     const rolls = [...eor.result.wild.rolls, ...eor.result.teams.flatMap((t) => t.rolls)];
@@ -524,7 +660,7 @@ export async function applyEndOfRound(gameId: string, adjust: Record<string, Res
 }
 
 /** Releases the results to the teams and keeps a snapshot of the game for history. */
-export async function publishRound(gameId: string) {
+export async function publishRound(gameId: string): Promise<number> {
   const { round } = await currentRound(gameId);
   if (!round || round.status !== "review") throw new Error("Finish resolving first.");
   const eor = round.endOfRound as EndOfRoundState | null;
@@ -538,10 +674,13 @@ export async function publishRound(gameId: string) {
     for (const o of pending) {
       await tx.update(schema.orders).set({ status: "skipped" }).where(eq(schema.orders.id, o.id));
     }
+    // Teams whose units saw each other this round have now met, and can trade.
+    await recordMeetings(tx, gameId, round.number);
     const snapshot = await loadGameRows(gameId, tx);
     await tx.update(schema.rounds).set({ status: "published", publishedAt: new Date(), snapshot }).where(eq(schema.rounds.id, round.id));
     await tx.insert(schema.auditLog).values({ gameId, roundId: round.id, actor: "dm", kind: "round.publish", description: `Published round ${round.number}` });
   });
+  return round.number;
 }
 
 export async function lastAuditEntry(gameId: string, roundId: string) {

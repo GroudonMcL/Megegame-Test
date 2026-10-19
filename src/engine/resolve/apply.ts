@@ -37,6 +37,19 @@ export function applyChanges(world: World, changes: Change[]): World {
         if (inv[c.itemId] <= 0) delete inv[c.itemId];
         break;
       }
+      case "detectUnits": {
+        const d = (w.detections ??= {});
+        d[c.teamId] = [...new Set([...(d[c.teamId] ?? []), ...c.unitIds])];
+        break;
+      }
+      case "clearDetections":
+        for (const k of Object.keys(w.detections ?? {})) w.detections![k] = w.detections![k].filter((id) => !c.unitIds.includes(id));
+        break;
+      case "gainRaces": {
+        const t = w.teams.find((x) => x.id === c.teamId);
+        if (t) t.raceIds = [...new Set([...t.raceIds, ...c.raceIds])];
+        break;
+      }
       case "learnRecipes": {
         const t = w.teams.find((x) => x.id === c.teamId);
         if (t) t.knownRecipeIds = [...new Set([...t.knownRecipeIds, ...c.recipeIds])];

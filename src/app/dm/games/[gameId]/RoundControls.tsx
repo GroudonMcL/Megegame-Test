@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui";
-import { lockRoundAction, openRoundAction, reopenRoundAction, setDeadlineAction } from "./rounds";
+import { lockRoundAction, openRoundAction, remindTeamsAction, reopenRoundAction, setDeadlineAction } from "./rounds";
 
 /** A deadline picker in the DM's local time, sent to the server as an exact moment. */
 function DeadlineInput({ initial }: { initial: string | null }) {
@@ -62,6 +62,7 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
           </a>
         </form>
       )}
+      {round.status === "open" && <RemindButton gameId={gameId} />}
       {round.status === "locked" && (
         <form action={reopenRoundAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="gameId" value={gameId} />
@@ -74,5 +75,22 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
         </form>
       )}
     </div>
+  );
+}
+
+function RemindButton({ gameId }: { gameId: string }) {
+  const [state, action, pending] = useActionState(remindTeamsAction, null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="gameId" value={gameId} />
+      <Button type="submit" variant="secondary" disabled={pending} title="Posts to the game's Discord channel, naming the teams that haven't submitted">
+        Remind teams on Discord
+      </Button>
+      {state && (
+        <span role="status" className={`text-sm ${state.ok ? "text-ok" : "text-danger"}`}>
+          {state.message}
+        </span>
+      )}
+    </form>
   );
 }

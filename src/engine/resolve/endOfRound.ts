@@ -5,6 +5,8 @@ import type { Effect } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
 import { addTo, buildingTier, projectEconomy, type Economy } from "../orders/economy";
 import { ACTIVE_STATUSES, type WorldUnit } from "../world/types";
+import { executeTrade, type TradeInput, type TradeOutcome } from "../trades";
+import { applyChanges } from "./apply";
 import { applyTableResults } from "./resolveOrder";
 import { rollOnTable } from "./rollTable";
 import type { Change, Proposal, RollRecord, World } from "./types";
@@ -27,20 +29,30 @@ export interface RoundEnd {
   teams: TeamRoundEnd[];
   /** Hazard damage to wild monsters (not owned by any team). */
   wild: { rolls: RollRecord[]; changes: Change[]; lines: string[] };
+  /** Accepted trades, checked against the state after everything above. */
+  trades: TradeOutcome[];
+}
+
+export interface EndOfRoundOptions {
+  /** Roll this event table for these teams. */
+  events?: { tableId: string; teamIds: string[] } | null;
+  /** Accepted trades, in the order they were accepted. */
+  trades?: TradeInput[];
 }
 
 function blank(): Proposal {
   return { status: "ready", problems: [], notes: [], rolls: [], changes: [], text: "", regions: [], targetsTeams: [], endsIn: [] };
 }
 
-export function endOfRound(r: Ruleset, world: World, seed: string): RoundEnd {
+export function endOfRound(r: Ruleset, world: World, seed: string, opts: EndOfRoundOptions = {}): RoundEnd {
   const rng = createRng(seed);
   const regionName = (id: string) => {
     const reg = world.regions.find((x) => x.id === id);
     return reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "?";
   };
   const unitName = (u: WorldUnit) => u.name || r.creatures.find((c) => c.id === u.creatureId)?.statBlock.name || "a unit";
-  const out: RoundEnd = { teams: [], wild: { rolls: [], changes: [], lines: [] } };
+  const out: RoundEnd = { teams: [], wild: { rolls: [], changes: [], lines: [] }, trades: [] };
+  const eventTable = opts.events ? r.rollTables.find((x) => x.id === opts.events!.tableId) : undefined;
 
   for (const team of world.teams) {
     const economy = projectEconomy(r, { teamId: team.id, resources: team.resources, regions: world.regions, units: world.units });
@@ -67,19 +79,41 @@ export function endOfRound(r: Ruleset, world: World, seed: string): RoundEnd {
       }
     }
 
-    // Going negative triggers a roll on the economy-deficit table.
+    // A random event for this team, if the DM rolls them this round.
+    if (eventTable && opts.events!.teamIds.includes(team.id)) {
+      const owned = world.regions.filter((x) => x.ownerTeamId === team.id).length;
+      const bonus = eventTable.perRegionsBonus ? Math.floor(owned / eventTable.perRegionsBonus) : 0;
+      const res = rollOnTable(r, eventTable.id, rng, { label: `${eventTable.name}`, modifiers: bonus ? [{ label: `${owned} regions`, value: bonus }] : [] });
+      t.rolls.push(...res.rolls);
+      const p = blank();
+      const lines: string[] = [];
+      const home = world.regions.find((x) => x.ownerTeamId === team.id)?.id ?? null;
+      applyTableResults(r, res.results, { p, rng, teamId: team.id, team, units: [], regionId: home, net, lines, name: unitName });
+      t.changes.push(...p.changes);
+      t.rolls.push(...p.rolls);
+      t.notes.push(...p.notes);
+      t.lines.push(`Event: ${[...res.texts, ...lines].filter(Boolean).join(" ")}`);
+      if (eventTable.modifierNote) t.notes.push(`The event roll also adds: ${eventTable.modifierNote}`);
+    }
+
+    // Going negative triggers a roll on that resource's deficit table (or a general one).
     const end: ResourceAmounts = { ...team.resources };
     addTo(end, net);
     const negative = r.resources.filter((x) => x.kind === "stockpile" && (end[x.id] ?? 0) < 0);
-    const deficitTable = r.rollTables.find((x) => x.category === "deficit");
-    if (negative.length) {
-      t.notes.push(`Ends the round with negative ${negative.map((x) => x.name).join(" and ")}.`);
-      if (deficitTable) {
-        const res = rollOnTable(r, deficitTable.id, rng, { label: `${deficitTable.name} (${negative.map((x) => x.name).join(", ")})` });
-        t.rolls.push(...res.rolls);
-        t.lines.push(`Deficit: ${res.texts.filter(Boolean).join(" ")}`);
-        t.notes.push("Apply the deficit event by hand if it needs more than resources.");
-      }
+    if (negative.length) t.notes.push(`Ends the round with negative ${negative.map((x) => x.name).join(" and ")}.`);
+    const deficits = r.rollTables.filter((x) => x.category === "deficit");
+    const general = deficits.find((x) => !x.deficitResourceId);
+    let rolledGeneral = false;
+    for (const res of negative) {
+      const table = deficits.find((x) => x.deficitResourceId === res.id) ?? (rolledGeneral ? undefined : general);
+      if (!table) continue;
+      if (table === general) rolledGeneral = true;
+      const short = -(end[res.id] ?? 0);
+      const mods = table.deficitPerUnit ? [{ label: `${short} ${res.name} short`, value: Math.ceil(short * table.deficitPerUnit) }] : [];
+      const rolled = rollOnTable(r, table.id, rng, { label: `${table.name} (${res.name})`, modifiers: mods });
+      t.rolls.push(...rolled.rolls);
+      t.lines.push(`${res.name} deficit: ${rolled.texts.filter(Boolean).join(" ")}`);
+      t.notes.push(`Apply the ${res.name} deficit event by hand if it needs more than resources${table.modifierNote ? ` (the table also adds: ${table.modifierNote})` : ""}.`);
     }
     if (Object.values(net).some((v) => v !== 0)) t.changes.unshift({ type: "resources", teamId: team.id, delta: Object.fromEntries(Object.entries(net).filter(([, v]) => v !== 0)) });
     out.teams.push(t);
@@ -102,6 +136,15 @@ export function endOfRound(r: Ruleset, world: World, seed: string): RoundEnd {
         bucket.changes.push(change);
         bucket.lines.push(line);
       }
+    }
+  }
+  // Accepted trades execute last, against the state after everything above.
+  if (opts.trades?.length) {
+    let after = applyChanges(world, [...out.teams.flatMap((t) => t.changes), ...out.wild.changes]);
+    for (const trade of opts.trades) {
+      const res = executeTrade(r, after, trade);
+      out.trades.push(res);
+      if (res.ok) after = applyChanges(after, res.changes.filter((c): c is Change => c.type !== "shareMap"));
     }
   }
   return out;
