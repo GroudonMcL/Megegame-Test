@@ -36,6 +36,11 @@ export const games = pgTable("games", {
   currentRound: integer("current_round").notNull().default(0),
   // The map background image (an asset), if one has been uploaded.
   mapAssetId: uuid("map_asset_id"),
+  // Map scale: how many miles the map's full width covers. Movement is measured with it.
+  mapMilesAcross: real("map_miles_across").notNull().default(200),
+  // "regions" = regions are drawn shapes. "nodes" = an old map of dots and
+  // connections, converted to shapes once by scripts/convert-maps.ts.
+  mapKind: text("map_kind").notNull().default("regions"),
   // The public channel's Discord webhook (round opened, reminders, published). Secret: DM only.
   discordWebhookUrl: text("discord_webhook_url").notNull().default(""),
   createdAt: created(),
@@ -149,9 +154,13 @@ export const regions = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull().default(""),
     description: text("description").notNull().default(""),
-    // Position on the map image, as fractions of its width and height (0–1).
+    // The region's centre: where its name is shown and new units appear.
+    // Fractions of the map image's width and height (0–1).
     x: real("x").notNull(),
     y: real("y").notNull(),
+    // Its outline, as [x, y] corners in the same fractions. Regions that share
+    // an edge or a corner are neighbours (see syncBorders in src/lib/borders.ts).
+    polygon: jsonb("polygon").$type<[number, number][]>().notNull().default([]),
     settleable: boolean("settleable").notNull().default(true),
     hidden: boolean("hidden").notNull().default(false),
     ownerTeamId: uuid("owner_team_id").references(() => teams.id, { onDelete: "set null" }),
@@ -180,13 +189,39 @@ export const connections = pgTable(
     regionB: uuid("region_b")
       .notNull()
       .references(() => regions.id, { onDelete: "cascade" }),
-    // Null = the ruleset's default connection length.
+    // "border": the two regions touch; kept up to date from their shapes.
+    // "link": a way between regions that don't touch (tunnel, sea lane…), added by the GM.
+    kind: text("kind").notNull().default("link"),
+    // A border nobody can cross (a wall, a cliff).
+    blocked: boolean("blocked").notNull().default(false),
+    // Links only: the length in miles; null = the straight-line distance on the map.
     miles: real("miles"),
+    // Links only: what travelling it is like (a sea lane might need swimming).
     terrainId: text("terrain_id").notNull().default("normal"),
+    // Unknown to teams until discovered.
     hidden: boolean("hidden").notNull().default(false),
   },
   // region_a is always the smaller ID, so each pair can only be connected once.
   (t) => [index("connections_game_idx").on(t.gameId), uniqueIndex("connections_pair_idx").on(t.regionA, t.regionB)],
+);
+
+/**
+ * Difficult ground (forest, swamp, water…) drawn over the regions. The part of
+ * a move inside one follows its terrain type's rules from the ruleset.
+ */
+export const terrainAreas = pgTable(
+  "terrain_areas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    terrainId: text("terrain_id").notNull(),
+    name: text("name").notNull().default(""),
+    polygon: jsonb("polygon").$type<[number, number][]>().notNull(),
+    createdAt: created(),
+  },
+  (t) => [index("terrain_areas_game_idx").on(t.gameId)],
 );
 
 export const units = pgTable(
@@ -207,6 +242,9 @@ export const units = pgTable(
     augmentIds: jsonb("augment_ids").$type<string[]>().notNull().default([]),
     hp: integer("hp").notNull(),
     regionId: uuid("region_id").references(() => regions.id, { onDelete: "set null" }),
+    // Where in the region it stands (fractions of the map); null = the region's centre.
+    x: real("x"),
+    y: real("y"),
     milesUsed: real("miles_used").notNull().default(0),
     // active | hidden | dead | captured | tamed | stored | disbanded
     status: text("status").notNull().default("active"),

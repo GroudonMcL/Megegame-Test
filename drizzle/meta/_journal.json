@@ -64,6 +64,13 @@
       "when": 1792339559150,
       "tag": "0008_phase7",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792422589645,
+      "tag": "0009_regions",
+      "breakpoints": true
     }
   ]
 }

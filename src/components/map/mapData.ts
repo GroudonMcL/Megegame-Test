@@ -60,7 +60,7 @@ export interface MapImageData {
 }
 
 /** Without an image the map is a plain grid of this size. */
-export const DEFAULT_MAP_SIZE = { width: 2000, height: 1400 };
+export { DEFAULT_MAP_SIZE } from "@/engine/geo/mapSize";
 
 /** Picks the fields of a region the editor can change. */
 export function regionPatch(r: RegionData) {
