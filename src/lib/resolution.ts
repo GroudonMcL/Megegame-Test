@@ -178,7 +178,7 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
       case "moveUnit":
         await tx
           .update(schema.units)
-          .set({ regionId: c.regionId, milesUsed: c.milesUsed })
+          .set({ regionId: c.regionId, milesUsed: c.milesUsed, x: c.x ?? null, y: c.y ?? null })
           .where(and(eq(schema.units.id, c.unitId), eq(schema.units.gameId, gameId)));
         break;
       case "updateUnit":
@@ -206,8 +206,8 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
 async function restore(tx: Tx, gameId: string, before: Before) {
   for (const id of before.createdUnitIds) await tx.delete(schema.units).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   for (const u of before.units) {
-    const { id, regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
-    await tx.update(schema.units).set({ regionId, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
+    const { id, regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
+    await tx.update(schema.units).set({ regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   }
   if (before.detections) {
     const ids = [...new Set([...before.detections.map((d) => d.unitId), ...(before.detectionUnitIds ?? [])])];

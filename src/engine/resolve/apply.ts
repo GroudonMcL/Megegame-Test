@@ -15,7 +15,7 @@ export function applyChanges(world: World, changes: Change[]): World {
       }
       case "moveUnit": {
         const u = w.units.find((x) => x.id === c.unitId);
-        if (u) Object.assign(u, { regionId: c.regionId, milesUsed: c.milesUsed });
+        if (u) Object.assign(u, { regionId: c.regionId, milesUsed: c.milesUsed, x: c.x ?? null, y: c.y ?? null });
         break;
       }
       case "updateUnit": {

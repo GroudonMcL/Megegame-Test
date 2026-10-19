@@ -20,6 +20,8 @@ function unit(creatureId: string, extra: Partial<WorldUnit> = {}): WorldUnit {
     augmentIds: [],
     hp: c.statBlock.hp,
     regionId: "a",
+    x: null,
+    y: null,
     milesUsed: 0,
     status: "active",
     isLeader: false,

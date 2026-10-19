@@ -4,10 +4,11 @@ import { db, schema } from "@/db";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { OrderDraft } from "@/engine/orders/validate";
 import { buildTeamView, memoriesToRecord, playerRuleset, type TeamView } from "@/engine/world/teamView";
-import type { RegionMemory, TeamKnowledge, WorldConnection } from "@/engine/world/types";
+import type { RegionMemory, TeamKnowledge } from "@/engine/world/types";
 import { fogHoles, fogKey } from "./fogImage";
 import { loadMapImage } from "./map";
-import { loadGameRows, rowsFromSnapshot, toWorldRegion, toWorldUnit } from "./world";
+import { loadGameRows, rowsFromSnapshot, toWorldConnection, toWorldRegion, toWorldTerrain, toWorldUnit } from "./world";
+import { mapAspect } from "@/engine/geo/mapSize";
 
 /** Round statuses during which players see the start-of-resolution snapshot. */
 export const FROZEN_STATUSES = new Set(["resolving", "review"]);
@@ -79,7 +80,7 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
   const view = buildTeamView({
     ruleset,
     regions,
-    connections: state.connections as WorldConnection[],
+    connections: state.connections.map(toWorldConnection),
     units,
     teams: state.teams,
     team: {
@@ -95,6 +96,8 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
       secretObjectives: team.secretObjectives,
     },
     knowledge,
+    terrain: (rows.terrainAreas ?? []).map(toWorldTerrain),
+    map: { aspect: mapAspect(image), milesAcross: game.mapMilesAcross },
     inventory: Object.fromEntries(inventoryRows.filter((i) => i.qty > 0).map((i) => [i.itemId, i.qty])),
     round: game.currentRound,
   });

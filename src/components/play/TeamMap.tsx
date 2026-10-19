@@ -1,16 +1,18 @@
 "use client";
 
-import { MapCanvas, type MapEdge, type MapNode } from "@/components/map/MapCanvas";
+import { MapCanvas, type MapNode } from "@/components/map/MapCanvas";
 import { DEFAULT_MAP_SIZE } from "@/components/map/mapData";
-import { emblemFor, WILD_EMBLEM, type Glyph } from "@/components/icons/emblems";
-import { EmblemGlyph, emblemInk } from "@/components/icons/TeamEmblem";
+import { connectionEdges, terrainLayer } from "@/components/map/mapLayers";
+import { groupBadges, SpotBadges, type BadgeTeam } from "@/components/map/UnitBadges";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES } from "@/engine/world/types";
-import { WILD_COLOUR } from "./format";
 
 // A team's fogged map. Shows only what's in its view: regions it sees now,
-// regions it remembers (dimmed) and unexplored neighbours (dashed "?").
+// regions it remembers (dimmed), unexplored neighbours (dashed outline, "?"),
+// terrain where it can see, and units where they stand.
+
+type Pt = [number, number];
 
 export interface TeamMapProps {
   view: TeamView;
@@ -18,10 +20,12 @@ export interface TeamMapProps {
   mapImage: { width: number; height: number; url: string } | null;
   selectedId?: string | null;
   onRegionClick?: (id: string) => void;
-  /** Regions to highlight (e.g. reachable by a move). */
+  /** Regions to highlight (e.g. where a move can go next). */
   highlight?: Set<string>;
-  /** A path to draw, as region IDs, starting with where it begins. */
-  path?: string[];
+  /** A route to draw: points on the map (fractions), starting where it begins. */
+  path?: Pt[];
+  /** Any click on the map (not a drag), as a point: for picking a route. */
+  onPointClick?: (p: Pt) => void;
   onBackgroundClick?: () => void;
   /** A unit badge was clicked: the region, and the owner (a team ID, or "wild"). */
   onBadgeClick?: (regionId: string, owner: string) => void;
@@ -31,55 +35,38 @@ export interface TeamMapProps {
   focus?: { nodeId: string; key: number } | null;
 }
 
-export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onBackgroundClick, onBadgeClick, className, bare, focus }: TeamMapProps) {
+export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, highlight, path, onPointClick, onBackgroundClick, onBadgeClick, className, bare, focus }: TeamMapProps) {
   const size = mapImage ?? DEFAULT_MAP_SIZE;
-  const allTeams = new Map([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
-  const colour = new Map([...allTeams].map(([id, t]) => [id, t.colour]));
+  const allTeams = new Map<string, BadgeTeam>([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
+  const byId = new Map(view.regions.map((r) => [r.id, r]));
   const nodes: MapNode[] = view.regions.map((r) => ({
     id: r.id,
     x: r.x,
     y: r.y,
+    polygon: r.polygon,
     label: r.state === "frontier" ? "?" : r.code,
-    fill: r.state === "frontier" ? "var(--map-frontier)" : r.ownerTeamId ? colour.get(r.ownerTeamId) ?? "var(--map-unknown-owner)" : "var(--map-region)",
+    fill: r.state === "frontier" ? undefined : r.ownerTeamId ? (allTeams.get(r.ownerTeamId)?.colour ?? "var(--map-unknown-owner)") : undefined,
     stroke: highlight?.has(r.id) ? "var(--map-path)" : undefined,
     ring: Boolean(r.settlementTierId),
     dashed: r.state === "frontier",
     dim: r.state === "remembered",
   }));
-  const state = new Map(view.regions.map((r) => [r.id, r.state]));
-  const pathEdges = new Set<string>();
-  if (path) for (let i = 1; i < path.length; i++) pathEdges.add([path[i - 1], path[i]].sort().join("|"));
-  const edges: MapEdge[] = view.connections.map((c) => {
-    const terrain = rules.terrainTypes.find((t) => t.id === c.terrainId);
-    const onPath = pathEdges.has([c.regionA, c.regionB].sort().join("|"));
-    return {
-      id: c.id,
-      a: c.regionA,
-      b: c.regionB,
-      heavy: onPath || (terrain ? terrain.costMultiplier > 1 || terrain.requiresMovement.length > 0 : false),
-      colour: onPath ? "var(--map-path)" : terrain && terrain.requiresMovement.length ? "var(--map-water)" : undefined,
-      dashed: state.get(c.regionA) === "frontier" || state.get(c.regionB) === "frontier",
-      dim: state.get(c.regionA) === "remembered" || state.get(c.regionB) === "remembered",
-    };
-  });
+  const state = (id: string) => byId.get(id)?.state;
+  const edges = connectionEdges(view.connections, (id) => byId.get(id)?.polygon, rules, (c) => ({
+    dim: state(c.regionA) === "remembered" || state(c.regionB) === "remembered",
+  }));
 
-  // One badge per owner in each region: the owner's emblem and how many units.
-  const badges = new Map<string, { owner: string; colour: string; ink: string; glyph: Glyph; count: number; own: boolean; dead: number }[]>();
-  const add = (regionId: string, ownerId: string | null, own: boolean, dead: boolean) => {
-    const list = badges.get(regionId) ?? [];
-    const owner = ownerId ?? "wild";
-    let b = list.find((x) => x.owner === owner);
-    if (!b) {
-      const t = ownerId ? allTeams.get(ownerId) : undefined;
-      const c = t ? t.colour : ownerId ? "var(--map-unknown-owner)" : WILD_COLOUR;
-      list.push((b = { owner, colour: c, ink: t ? emblemInk(t.colour) : "#ffffff", glyph: t ? emblemFor(t) : WILD_EMBLEM, count: 0, own, dead: 0 }));
-    }
-    b.count++;
-    if (dead) b.dead++;
-    badges.set(regionId, list);
-  };
-  for (const u of view.ownUnits) if (u.regionId && ON_MAP_STATUSES.has(u.status)) add(u.regionId, view.team.id, true, u.status === "dead");
-  for (const u of view.otherUnits) add(u.regionId, u.ownerTeamId, false, u.dead);
+  const spots = groupBadges(
+    [
+      ...view.ownUnits.filter((u) => u.regionId && ON_MAP_STATUSES.has(u.status)).map((u) => ({ regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: view.team.id, dead: u.status === "dead" })),
+      ...view.otherUnits.map((u) => ({ regionId: u.regionId, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId, dead: u.dead })),
+    ],
+    (id) => {
+      const r = byId.get(id);
+      return r ? [r.x, r.y] : undefined;
+    },
+    (id) => allTeams.get(id),
+  );
 
   return (
     <MapCanvas
@@ -88,43 +75,42 @@ export function TeamMap({ view, rules, mapImage, selectedId, onRegionClick, high
       imageUrl={mapImage?.url}
       nodes={nodes}
       edges={edges}
+      terrain={terrainLayer(view.terrain, rules)}
       selectedNodeId={selectedId}
       onNodeClick={(id, e) => (e.badge && onBadgeClick ? onBadgeClick(id, e.badge) : onRegionClick?.(id))}
       onBackgroundClick={onBackgroundClick && (() => onBackgroundClick())}
+      onPointClick={onPointClick}
       className={className}
       bare={bare}
       focus={focus}
       fitToNodes
-      renderNodeExtras={(n, p, scale) => {
-        const list = badges.get(n.id) ?? [];
-        const stepIndex = path ? path.indexOf(n.id) : -1;
-        return (
-          <g>
-            {list.map((b, i) => {
-              // A pill: emblem on the left, count on the right. Own units get square corners.
-              const h = 18 * scale;
-              const w = h * 1.9;
-              const x = p.x + 12 * scale + i * (w + 3 * scale);
-              const y = p.y - h / 2;
-              return (
-                <g key={b.owner} data-badge={onBadgeClick ? b.owner : undefined} pointerEvents={onBadgeClick ? undefined : "none"}>
-                  <title>{`${b.count} ${b.own ? "of your units" : b.owner === "wild" ? "wild monster" + (b.count === 1 ? "" : "s") : `unit${b.count === 1 ? "" : "s"} of ${allTeams.get(b.owner)?.name ?? "another side"}`}`}</title>
-                  <rect x={x} y={y} width={w} height={h} rx={b.own ? 4 * scale : h / 2} fill={b.colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} />
-                  <EmblemGlyph glyph={b.glyph} x={x + h * 0.55} y={p.y} size={h * 0.68} fill={b.ink} />
-                  <text x={x + w - h * 0.5} y={y + h * 0.7} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-label)" stroke="var(--map-label-outline)" strokeWidth={2 * scale} paintOrder="stroke">
-                    {b.dead === b.count ? "✝" : b.count}
-                  </text>
-                </g>
-              );
-            })}
-            {stepIndex > 0 && (
-              <text pointerEvents="none" x={p.x} y={p.y + 4 * scale} textAnchor="middle" fontSize={11 * scale} fontWeight={700} fill="var(--map-outline)">
-                {stepIndex}
-              </text>
-            )}
-          </g>
-        );
-      }}
+      overlay={(scale) => (
+        <>
+          {spots.map((groups) => (
+            <SpotBadges key={groups[0].key} groups={groups} width={size.width} height={size.height} scale={scale} ownTeamId={view.team.id} clickable={Boolean(onBadgeClick)} />
+          ))}
+          {path && path.length > 1 && <RouteLine path={path} width={size.width} height={size.height} scale={scale} />}
+        </>
+      )}
     />
+  );
+}
+
+/** A planned route: a line through its points, with the stops numbered. */
+export function RouteLine({ path, width, height, scale, colour = "var(--map-path)" }: { path: Pt[]; width: number; height: number; scale: number; colour?: string }) {
+  const pts = path.map(([x, y]) => `${x * width},${y * height}`).join(" ");
+  return (
+    <g pointerEvents="none">
+      <polyline points={pts} fill="none" stroke="var(--map-outline)" strokeOpacity={0.6} strokeWidth={6 * scale} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke={colour} strokeWidth={3 * scale} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={`${8 * scale} ${5 * scale}`} />
+      {path.slice(1).map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x * width} cy={y * height} r={7 * scale} fill={colour} stroke="var(--map-outline)" strokeWidth={1.5 * scale} />
+          <text x={x * width} y={y * height} textAnchor="middle" dominantBaseline="central" fontSize={9 * scale} fontWeight={700} fill="var(--map-outline)">
+            {i + 1}
+          </text>
+        </g>
+      ))}
+    </g>
   );
 }

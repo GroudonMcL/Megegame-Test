@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveOrdersAction } from "@/app/play/actions";
-import { reachable, type MoveMode } from "@/engine/orders/movement";
-import { allowedKinds, validateOrders, type OrderCheck, type OrderDraft, type OrderKind } from "@/engine/orders/validate";
+import { milesPerRound, modeMultiplier, type MoveMode } from "@/engine/orders/movement";
+import { parsePath, traceRoute, type PathStep } from "@/engine/orders/route";
+import { routeMapFromView } from "@/engine/orders/routeMap";
+import { allowedKinds, UNKNOWN_REGION, validateOrders, type OrderCheck, type OrderDraft, type OrderKind } from "@/engine/orders/validate";
 import { ABILITIES, ABILITY_NAMES } from "@/engine/ruleset/common";
 import { creatureCosts, unitTags } from "@/engine/ruleset/derive";
 import { fmtRes } from "@/engine/ruleset/effects";
@@ -629,47 +631,69 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
 function PathField({ index, p }: { index: number; p: Parameters<typeof OrderCard>[0] }) {
   const { view, rules, mapImage } = p.props;
   const action = p.action!;
-  const path = Array.isArray(p.order.inputs[String(index)]) ? (p.order.inputs[String(index)] as string[]) : [];
+  const steps = parsePath(p.order.inputs[String(index)]);
   const unitIndex = action.inputs.findIndex((x) => x.type === "unit");
   const unitIds = unitIndex < 0 ? [] : ([] as string[]).concat((p.order.inputs[String(unitIndex)] as string[] | string | undefined) ?? []);
   const mode = (["normal", "forceMarch", "stealth"].includes(action.config.mode as string) ? action.config.mode : "normal") as MoveMode;
+  const routeMap = useMemo(() => routeMapFromView(view), [view]);
 
-  // Where the units are, and how much movement they've used, before this order and along the path so far.
+  // Where the units stand and how much movement they've used before this order.
   const position = p.orders.findIndex((o) => o.id === p.order.id);
   const before = useMemo(() => validateOrders(rules, view, p.orders.slice(0, position)).units, [rules, view, p.orders, position]);
-  const withPath = useMemo(() => validateOrders(rules, view, p.orders.slice(0, position + 1)).units, [rules, view, p.orders, position]);
+  const first = unitIds.length ? before[unitIds[0]] : undefined;
+  const startAt = first?.at ?? null;
+  const startRegion = first?.regionId && first.regionId !== UNKNOWN_REGION ? first.regionId : null;
   const group = unitIds
     .map((id) => view.ownUnits.find((u) => u.id === id))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
-    .map((u) => ({ unit: u, used: withPath[u.id]?.used ?? 1 }));
-  const start = unitIds.length ? before[unitIds[0]]?.regionId ?? null : null;
-  const end = path.length ? path[path.length - 1] : start;
-  const reach =
-    end && group.length && p.check.problems.every((x) => !x.includes("miles of movement")) ? reachable(rules, view.connections, end, group, mode) : new Map<string, unknown>();
+    .map((u) => ({ unit: u, used: before[u.id]?.used ?? 1 }));
+  const route = startAt && startRegion && group.length ? traceRoute(rules, routeMap, startAt, startRegion, steps, group, mode) : null;
 
-  const next = new Set<string>();
-  if (end) for (const c of view.connections) {
-    const other = c.regionA === end ? c.regionB : c.regionB === end ? c.regionA : null;
-    if (other && reach.has(other)) next.add(other);
+  // The line to draw: from the start through each stop (a link jumps to the far region's centre).
+  const line: [number, number][] = startAt ? [startAt] : [];
+  let region = startRegion;
+  for (const st of steps) {
+    if (Array.isArray(st)) line.push(st);
+    else {
+      const c = view.connections.find((x) => x.id === st.link);
+      const to = c && region ? (c.regionA === region ? c.regionB : c.regionA) : null;
+      const dest = to ? view.regions.find((r) => r.id === to) : undefined;
+      if (dest) {
+        line.push([dest.x, dest.y]);
+        region = dest.id;
+      }
+    }
   }
-  const code = (id: string) => view.regions.find((r) => r.id === id)?.code ?? "?";
+  const endRegion = route?.endRegion ?? null;
+  const links = endRegion ? view.connections.filter((c) => c.kind === "link" && !c.blocked && (c.regionA === endRegion || c.regionB === endRegion)) : [];
+  const code = (id: string | null) => (id ? (view.regions.find((r) => r.id === id)?.code ?? "?") : "?");
+  const left = route
+    ? Math.min(...group.map((g, i) => Math.max(0, (1 - route.used[i]) * milesPerRound(rules, g.unit) * modeMultiplier(rules, mode))))
+    : 0;
+  const set = (next: PathStep[]) => p.onInput(index, next);
 
   return (
     <div className="@xl:col-span-2">
       <span className="text-xs text-muted">{p.action!.inputs[index].label}</span>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium">{start ? [start, ...path].map(code).join(" → ") : "Choose the units first"}</span>
-        {p.editable && start && (
+        <span className="font-medium">
+          {!startAt || !startRegion
+            ? "Choose the units first"
+            : steps.length === 0
+              ? `From ${code(startRegion)}: no stops yet`
+              : `${code(startRegion)} → ${route?.unknown ? "unknown ground" : code(endRegion)} · ${steps.length} stop${steps.length === 1 ? "" : "s"} · ${Math.round(Math.max(0, ...(route?.miles ?? [0])))} mi, ${Math.floor(left)} left`}
+        </span>
+        {p.editable && startAt && startRegion && (
           <>
             <button type="button" className="rounded border border-border px-2 py-0.5" onClick={() => p.onPick(!p.picking)}>
-              {p.picking ? "Done" : path.length ? "Change path on map" : "Pick path on map"}
+              {p.picking ? "Done" : steps.length ? "Change route on map" : "Draw route on map"}
             </button>
-            {path.length > 0 && (
+            {steps.length > 0 && (
               <>
-                <button type="button" className="rounded border border-border px-2 py-0.5" onClick={() => p.onInput(index, path.slice(0, -1))}>
-                  Undo step
+                <button type="button" className="rounded border border-border px-2 py-0.5" onClick={() => set(steps.slice(0, -1))}>
+                  Undo stop
                 </button>
-                <button type="button" className="rounded border border-border px-2 py-0.5" onClick={() => p.onInput(index, [])}>
+                <button type="button" className="rounded border border-border px-2 py-0.5" onClick={() => set([])}>
                   Clear
                 </button>
               </>
@@ -677,22 +701,27 @@ function PathField({ index, p }: { index: number; p: Parameters<typeof OrderCard
           </>
         )}
       </div>
-      {p.picking && start && (
+      {p.picking && startAt && startRegion && (
         <div className="mt-2">
           <p className="mb-1 text-xs text-muted">
-            Tap a green-ringed region next to {code(end!)} to add it to the path. {next.size === 0 ? "No more movement for this group." : ""}
+            Tap the map to add a stop; your units walk in straight lines from stop to stop. You can go into ground you can&apos;t see: they go as far as they can.
           </p>
+          {links.length > 0 && (
+            <div className="mb-1 flex flex-wrap gap-1.5 text-xs">
+              {links.map((c) => (
+                <button key={c.id} type="button" className="rounded border border-border px-2 py-0.5" onClick={() => set([...steps, { link: c.id }])}>
+                  Take the way to {code(c.regionA === endRegion ? c.regionB : c.regionA)}
+                </button>
+              ))}
+            </div>
+          )}
           <TeamMap
             view={view}
             rules={rules}
             mapImage={mapImage}
-            selectedId={end}
-            highlight={next}
-            path={[start, ...path]}
-            onRegionClick={(id) => {
-              if (path.length && id === path[path.length - 1]) p.onInput(index, path.slice(0, -1));
-              else if (next.has(id)) p.onInput(index, [...path, id]);
-            }}
+            selectedId={endRegion}
+            path={line}
+            onPointClick={([x, y]) => set([...steps, [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4]])}
             className="h-[50vh]"
           />
         </div>

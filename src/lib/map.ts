@@ -26,9 +26,10 @@ export async function loadMapImage(gameId: string): Promise<MapImage | null> {
 /** Everything the DM's map screens need for one game. */
 export async function loadMapState(gameId: string) {
   const [game] = await db.select().from(schema.games).where(eq(schema.games.id, gameId)).limit(1);
-  const [regions, connections, units, teams, image] = await Promise.all([
+  const [regions, connections, terrainAreas, units, teams, image] = await Promise.all([
     db.select().from(schema.regions).where(eq(schema.regions.gameId, gameId)).orderBy(asc(schema.regions.code)),
     db.select().from(schema.connections).where(eq(schema.connections.gameId, gameId)),
+    db.select().from(schema.terrainAreas).where(eq(schema.terrainAreas.gameId, gameId)).orderBy(asc(schema.terrainAreas.createdAt)),
     db.select().from(schema.units).where(eq(schema.units.gameId, gameId)).orderBy(asc(schema.units.createdAt)),
     db
       .select({ id: schema.teams.id, name: schema.teams.name, colour: schema.teams.colour, isNpc: schema.teams.isNpc, emblem: schema.teams.emblem })
@@ -45,7 +46,7 @@ export async function loadMapState(gameId: string) {
       : Promise.resolve(undefined),
   ]);
   const mapImage: MapImage | null = image?.width && image.height ? { id: image.id, width: image.width, height: image.height } : null;
-  return { regions, connections, units, teams, mapImage };
+  return { regions, connections, terrainAreas, units, teams, mapImage, milesAcross: game?.mapMilesAcross ?? 200 };
 }
 
 export type MapState = Awaited<ReturnType<typeof loadMapState>>;

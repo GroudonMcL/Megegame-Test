@@ -18,6 +18,8 @@ function unit(creatureId: string): WorldUnit {
     augmentIds: [],
     hp: 10,
     regionId: "r1",
+    x: null,
+    y: null,
     milesUsed: 0,
     status: "active",
     isLeader: false,
@@ -46,7 +48,7 @@ describe("quick actions", () => {
   });
 
   it("offers monster-only attacks against wild monsters but not against teams", () => {
-    const other = { id: "o1", creatureId: "x", creatureName: "X", regionId: "r1", dead: false };
+    const other = { id: "o1", creatureId: "x", creatureName: "X", regionId: "r1", x: null, y: null, dead: false };
     const vsWild = quickActions(rules, { kind: "other", unit: { ...other, ownerTeamId: null } });
     const vsTeam = quickActions(rules, { kind: "other", unit: { ...other, ownerTeamId: "t2" } });
     const monsterOnly = rules.actionTypes.filter((a) => a.inputs.some((i) => i.type === "targetUnit" && i.monstersOnly)).map((a) => a.id);
@@ -58,7 +60,7 @@ describe("quick actions", () => {
   });
 
   it("offers actions that take a region for a region", () => {
-    const region = { id: "r1", code: "A1", x: 0, y: 0, state: "visible" as const, name: "", description: "", settleable: true, ownerTeamId: "t1", settlementTierId: null, buildings: [], structures: [], deposits: [], features: [], lastSeenRound: null };
+    const region = { id: "r1", code: "A1", x: 0, y: 0, polygon: [], state: "visible" as const, name: "", description: "", settleable: true, ownerTeamId: "t1", settlementTierId: null, buildings: [], structures: [], deposits: [], features: [], lastSeenRound: null };
     const list = quickActions(rules, { kind: "region", region });
     expect(list.length).toBeGreaterThan(0);
     expect(list.every((a) => a.inputs.some((i) => i.type === "region"))).toBe(true);

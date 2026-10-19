@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { DmShell } from "@/components/dm/DmShell";
 import { WorldMap } from "@/components/map/WorldMap";
-import type { ConnectionData, RegionData, UnitData } from "@/components/map/mapData";
+import type { ConnectionData, RegionData, TerrainAreaData, UnitData } from "@/components/map/mapData";
 import { db, schema } from "@/db";
 import { loadMapState } from "@/lib/map";
 import { loadRuleset } from "@/lib/rulesets";
@@ -35,6 +35,7 @@ export default async function DmShellLayout({ children, params }: LayoutProps<"/
           connections={state.connections as ConnectionData[]}
           units={state.units as UnitData[]}
           teams={state.teams}
+          terrainAreas={state.terrainAreas as TerrainAreaData[]}
           mapImage={state.mapImage}
         />
       }

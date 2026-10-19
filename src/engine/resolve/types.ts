@@ -1,6 +1,6 @@
 import type { CombatResult } from "../combat/types";
 import type { ResourceAmounts } from "../ruleset/common";
-import type { WorldConnection, WorldRegion, WorldUnit } from "../world/types";
+import type { MapScale, WorldConnection, WorldRegion, WorldTerrainArea, WorldUnit } from "../world/types";
 
 // The whole game state as the resolution engine sees it, and the small set of
 // changes a resolved order can make to it. The server turns each change into
@@ -27,11 +27,18 @@ export interface World {
   teams: WorldTeam[];
   /** teamId → itemId → quantity. */
   inventory: Record<string, Record<string, number>>;
+  /** Hidden connections each team has discovered (teamId → connection IDs). Optional for tests. */
+  knownConnections?: Record<string, string[]>;
+  /** Difficult ground drawn over the map. Optional for tests. */
+  terrain?: WorldTerrainArea[];
+  /** For measuring moves. Optional for tests (then the default map size and 200 miles across). */
+  map?: MapScale;
 }
 
 export type Change =
   | { type: "resources"; teamId: string; delta: ResourceAmounts }
-  | { type: "moveUnit"; unitId: string; regionId: string; milesUsed: number }
+  /** x, y: where in the region it stops (fractions of the map); missing = the region's centre. */
+  | { type: "moveUnit"; unitId: string; regionId: string; milesUsed: number; x?: number; y?: number }
   | { type: "updateUnit"; unitId: string; patch: Partial<Pick<WorldUnit, "hp" | "status" | "augmentIds" | "academyBonus" | "milesUsed" | "usesSpent" | "ownerTeamId">> }
   | { type: "createUnit"; unit: Omit<WorldUnit, "id"> & { id: string } }
   | { type: "updateRegion"; regionId: string; patch: Partial<Pick<WorldRegion, "ownerTeamId" | "settlementTierId" | "buildings">> }

@@ -286,7 +286,8 @@ export async function updateUnitAction(gameId: string, unitId: string, fields: u
   if (!before) return fail("That unit no longer exists.");
   const [after] = await db
     .update(schema.units)
-    .set({ ...parsed.data, hp: z.number().int().min(0).parse(hp) })
+    // A unit moved to another region stands at that region's centre.
+    .set({ ...parsed.data, hp: z.number().int().min(0).parse(hp), ...(parsed.data.regionId !== before.regionId ? { x: null, y: null } : {}) })
     .where(eq(schema.units.id, uid))
     .returning();
   await audit(db, { gameId: id, actor: "dm", kind: "unit.update", description: `Edited ${after.name}`, before, after });
@@ -304,7 +305,8 @@ export async function moveUnitAction(gameId: string, unitId: string, regionId: s
   }
   const [before] = await db.select().from(schema.units).where(and(eq(schema.units.id, uid), eq(schema.units.gameId, id)));
   if (!before) return fail("That unit no longer exists.");
-  const [after] = await db.update(schema.units).set({ regionId: target }).where(eq(schema.units.id, uid)).returning();
+  // It stands at the new region's centre.
+  const [after] = await db.update(schema.units).set({ regionId: target, x: null, y: null }).where(eq(schema.units.id, uid)).returning();
   await audit(db, { gameId: id, actor: "dm", kind: "unit.move", description: `Moved ${after.name}`, before: { regionId: before.regionId }, after: { regionId: target } });
   done(id);
   return { ok: true, value: after };

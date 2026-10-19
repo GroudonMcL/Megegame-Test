@@ -1,7 +1,9 @@
+import { clipToAreas, type Piece } from "../geo/clip";
+import type { Polygon } from "../geo/polygon";
 import type { Ruleset } from "../ruleset/ruleset";
 import type { Effect } from "../ruleset/effects";
 import { computeVisibility, regionMemory, type RegionState } from "./visibility";
-import type { RegionMemory, TeamKnowledge, WorldConnection, WorldRegion, WorldUnit } from "./types";
+import type { MapScale, RegionMemory, TeamKnowledge, WorldConnection, WorldRegion, WorldTerrainArea, WorldUnit } from "./types";
 
 // The one object a team's browser receives: its own state in full, plus only
 // what fog of war lets it see of everything else. Built on the server.
@@ -13,6 +15,8 @@ export interface ViewRegion {
   y: number;
   /** visible = seen now; remembered = last-known info; frontier = known to exist, never seen. */
   state: RegionState;
+  /** The outline (unexplored regions too: their shape, but nothing about them). */
+  polygon: Polygon;
   name: string;
   description: string;
   settleable: boolean | null;
@@ -34,7 +38,17 @@ export interface ViewOtherUnit {
   /** Null = wild monster. */
   ownerTeamId: string | null;
   regionId: string;
+  /** Where it stands; null = the region's centre. */
+  x: number | null;
+  y: number | null;
   dead: boolean;
+}
+
+/** Difficult ground, cut down to the parts inside regions the team sees or remembers. */
+export interface ViewTerrain {
+  id: string;
+  terrainId: string;
+  pieces: Piece[];
 }
 
 export interface ViewTeam {
@@ -62,6 +76,8 @@ export interface TeamView {
   connections: WorldConnection[];
   ownUnits: WorldUnit[];
   otherUnits: ViewOtherUnit[];
+  terrain: ViewTerrain[];
+  map: MapScale;
   inventory: Record<string, number>;
   round: number;
 }
@@ -74,6 +90,8 @@ export interface TeamViewInput {
   teams: (ViewTeam & Partial<OwnTeam>)[];
   team: OwnTeam;
   knowledge: TeamKnowledge;
+  terrain: WorldTerrainArea[];
+  map: MapScale;
   inventory: Record<string, number>;
   round: number;
 }
@@ -87,7 +105,7 @@ export function buildTeamView(input: TeamViewInput): TeamView {
   for (const reg of input.regions) {
     const state = vis.regions.get(reg.id);
     if (!state) continue;
-    const base = { id: reg.id, code: reg.code, x: reg.x, y: reg.y, state, lastSeenRound: null };
+    const base = { id: reg.id, code: reg.code, x: reg.x, y: reg.y, polygon: reg.polygon, state, lastSeenRound: null };
     if (state === "visible") {
       regions.push({ ...base, ...regionMemory(reg), settleable: reg.settleable, features: reg.features });
     } else if (state === "remembered") {
@@ -118,8 +136,14 @@ export function buildTeamView(input: TeamViewInput): TeamView {
       creatureName: creatureName(u.creatureId),
       ownerTeamId: u.ownerTeamId,
       regionId: u.regionId!,
+      x: u.x,
+      y: u.y,
       dead: u.status === "dead",
     }));
+
+  // Terrain only where the team can see (or remembers seeing), so nothing about unseen ground leaks.
+  const seen = regions.filter((r) => r.state !== "frontier" && r.polygon.length >= 3).map((r) => r.polygon);
+  const terrain = input.terrain.map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: clipToAreas(a.polygon, seen) })).filter((a) => a.pieces.length);
 
   const teamIds = new Set<string>();
   for (const reg of regions) if (reg.ownerTeamId) teamIds.add(reg.ownerTeamId);
@@ -131,9 +155,13 @@ export function buildTeamView(input: TeamViewInput): TeamView {
     team,
     teams,
     regions,
-    connections: input.connections.filter((c) => vis.connections.has(c.id)).map(({ id, regionA, regionB, miles, terrainId, hidden }) => ({ id, regionA, regionB, miles, terrainId, hidden })),
+    connections: input.connections
+      .filter((c) => vis.connections.has(c.id))
+      .map(({ id, regionA, regionB, kind, blocked, miles, terrainId, hidden }) => ({ id, regionA, regionB, kind, blocked, miles, terrainId, hidden })),
     ownUnits,
     otherUnits,
+    terrain,
+    map: input.map,
     inventory: input.inventory,
     round: input.round,
   };

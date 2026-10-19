@@ -7,7 +7,10 @@ import type { Ruleset } from "../ruleset/ruleset";
 import type { TeamView, ViewRegion } from "../world/teamView";
 import { ACTIVE_STATUSES, type WorldUnit } from "../world/types";
 import { addTo, buildingTier, projectEconomy, unitEffects, type Economy, type EconomyLine } from "./economy";
-import { findConnection, milesPerRound, MOVE_EPSILON, stepCost, type MoveMode } from "./movement";
+import type { Pt } from "../geo/polygon";
+import { milesPerRound, modeMultiplier, MOVE_EPSILON, type MoveMode } from "./movement";
+import { parsePath, traceRoute, type RouteMap } from "./route";
+import { routeMapFromView } from "./routeMap";
 
 // Checks a team's order list as they build it, against what that team can
 // see, and projects the round's economy. The same code runs in the browser
@@ -70,7 +73,7 @@ export interface OrdersCheck {
   movement: MovementLine[];
   freeUses: FreeUseLine[];
   /** Where each of the team's units ends up and how much movement it has used, after all the orders. */
-  units: Record<string, { regionId: string | null; used: number }>;
+  units: Record<string, { regionId: string | null; at: Pt | null; used: number }>;
   ok: boolean;
 }
 
@@ -99,9 +102,15 @@ interface SimRegion {
   builtThisRound: string[];
 }
 
+/** Where a unit is after a move into ground the team can't see. */
+export const UNKNOWN_REGION = "?unknown";
+
 interface Sim {
   res: ResourceAmounts;
+  /** Region each unit is in after the orders so far (UNKNOWN_REGION after a move into the unknown). */
   unitRegion: Record<string, string | null>;
+  /** Where each unit stands (fractions of the map). */
+  unitPos: Record<string, Pt>;
   /** Fraction of each unit's movement used. */
   unitUsed: Record<string, number>;
   regions: Record<string, SimRegion>;
@@ -178,6 +187,8 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
   const teamId = view.team.id;
   const resName = (id: string) => r.resources.find((x) => x.id === id)?.name ?? id;
   const regionById = new Map(view.regions.map((x) => [x.id, x]));
+  // Built the first time a move needs it.
+  let routeMap: RouteMap | undefined;
   const unitById = new Map(view.ownUnits.map((u) => [u.id, u]));
   const unitName = (id: string) => {
     const u = unitById.get(id);
@@ -198,6 +209,13 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
   const start: Sim = {
     res: { ...view.team.resources },
     unitRegion: Object.fromEntries(view.ownUnits.map((u) => [u.id, u.regionId])),
+    unitPos: Object.fromEntries(
+      view.ownUnits.flatMap((u): [string, Pt][] => {
+        if (u.x !== null && u.y !== null) return [[u.id, [u.x, u.y]]];
+        const reg = view.regions.find((x) => x.id === u.regionId);
+        return reg ? [[u.id, [reg.x, reg.y]]] : [];
+      }),
+    ),
     unitUsed: Object.fromEntries(
       view.ownUnits.map((u) => {
         const per = milesPerRound(r, u);
@@ -427,7 +445,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     switch (action.handler) {
       case "move": {
         const mode = (["normal", "forceMarch", "stealth"].includes(action.config.mode as string) ? action.config.mode : "normal") as MoveMode;
-        const path = asStrings(value("path"));
+        const path = parsePath(value("path"));
         if (!units.length) break;
         const from = s.unitRegion[units[0].id];
         if (units.some((u) => s.unitRegion[u.id] !== from)) {
@@ -435,44 +453,31 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           break;
         }
         if (!path.length) break;
+        const startAt = s.unitPos[units[0].id];
+        if (!startAt || from === UNKNOWN_REGION) {
+          note("These units are somewhere you can't see after an earlier move; the DM works out this one.");
+          break;
+        }
         const group = units.map((u) => ({ unit: u, used: s.unitUsed[u.id] ?? 1 }));
-        let at = from!;
-        const used = group.map((g) => g.used);
-        const miles = group.map(() => 0);
-        let ok = true;
-        for (const next of path) {
-          const c = findConnection(view.connections, at, next);
-          if (!c) {
-            problem(`There's no known way from ${regionLabel(regionById.get(at))} to ${regionLabel(regionById.get(next))}.`);
-            ok = false;
-            break;
-          }
-          const step = stepCost(r, c, group, mode);
-          if ("blocked" in step) {
-            problem(step.blocked);
-            ok = false;
-            break;
-          }
-          step.fractions.forEach((f, i) => (used[i] += f));
-          step.miles.forEach((m, i) => (miles[i] += m));
-          at = next;
-        }
-        if (ok) {
+        const route = traceRoute(r, routeMap ??= routeMapFromView(view), startAt, from, path, group, mode);
+        if (route.blocked) problem(route.blocked);
+        if (route.outOfMovement) {
           group.forEach((g, i) => {
-            if (used[i] > 1 + MOVE_EPSILON) {
-              const per = milesPerRound(r, g.unit);
-              const left = Math.max(0, (1 - g.used) * per * (mode === "normal" ? 1 : mode === "forceMarch" ? r.settings.movement.forceMarchMultiplier : r.settings.movement.stealthMultiplier));
-              problem(`${unitName(g.unit.id)} has only ${Math.floor(left)} miles of movement left; this path needs ${Math.ceil(miles[i])}.`);
-            }
+            const per = milesPerRound(r, g.unit) * modeMultiplier(r, mode);
+            const left = Math.max(0, (1 - g.used) * per);
+            if (route.used[i] >= 1 - MOVE_EPSILON) problem(`${unitName(g.unit.id)} has only ${Math.floor(left)} miles of movement left; this path needs more.`);
           });
-          for (const [i, u] of units.entries()) {
-            s.unitUsed[u.id] = used[i];
-            s.unitRegion[u.id] = at;
-          }
-          const pathCodes = [from, ...path].map((id) => regionById.get(id!)?.code ?? "?").join(" → ");
-          check.summary = `${action.name} · ${unitList} · ${pathCodes}`;
-          if (path.some((id) => hostilesIn(id))) note("You're moving into a region with units you don't control. Say in the notes how you avoid combat, or it may start one.");
         }
+        for (const [i, u] of units.entries()) {
+          s.unitUsed[u.id] = route.used[i];
+          s.unitRegion[u.id] = route.endRegion ?? UNKNOWN_REGION;
+          s.unitPos[u.id] = route.end;
+        }
+        const codes = [from, ...route.entered.map((e) => e.regionId)].map((id) => (id ? (regionById.get(id)?.code ?? "?") : "?"));
+        const milesText = route.miles.length ? ` (${Math.round(Math.max(...route.miles))} mi)` : "";
+        check.summary = `${action.name} · ${unitList} · ${codes.filter((c, k) => k === 0 || c !== codes[k - 1]).join(" → ")}${milesText}`;
+        if (route.unknown) note("Part of this route goes through ground you can't see. Your units go as far as they can; the DM checks the rest.");
+        if (route.entered.some((e) => e.regionId && hostilesIn(e.regionId))) note("You're moving into a region with units you don't control. Say in the notes how you avoid combat, or it may start one.");
         break;
       }
 
@@ -519,6 +524,8 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           augmentIds: [],
           hp: 1,
           regionId: regionId ?? null,
+          x: null,
+          y: null,
           milesUsed: 0,
           status: "active",
           isLeader: false,
@@ -843,7 +850,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     economy,
     movement,
     freeUses,
-    units: Object.fromEntries(view.ownUnits.map((u) => [u.id, { regionId: sim.unitRegion[u.id] ?? null, used: sim.unitUsed[u.id] ?? 1 }])),
+    units: Object.fromEntries(view.ownUnits.map((u) => [u.id, { regionId: sim.unitRegion[u.id] ?? null, at: sim.unitPos[u.id] ?? null, used: sim.unitUsed[u.id] ?? 1 }])),
     ok: checks.every((c) => c.problems.length === 0),
   };
 }
