@@ -29,9 +29,13 @@ export default function DmGuide() {
                 doesn&apos;t exist) are listed on the Teams page and the Ruleset page. <B>Import / export</B> saves or loads the whole ruleset as a file.
               </li>
               <li>
-                <B>Map editor</B>: <B>Upload map image</B>, then <B>Add region</B> and click the image to place regions, and <B>Connect</B> to link neighbours (click one region, then the
-                other). In <B>Select / move</B>, click a region to name it, set its owner, settlement, buildings, deposits, ruins and hazards, or mark it hidden until found. You can also
-                import regions from a spreadsheet.
+                <B>Map editor</B>: <B>Upload map image</B>, set the <B>Scale</B> (type the miles across the map, or use <B>Measure scale</B> on a scale bar), then <B>Draw region</B>: click
+                its corners on the image; they snap to nearby corners and edges and follow a neighbour&apos;s border, so regions fit together. Regions that touch (along an edge or at a corner)
+                are neighbours automatically. <B>Edit shapes</B> drags corners (a shared corner moves in every region) and adds or removes them; press <B>Save shapes</B> when done.{" "}
+                <B>Draw terrain</B> adds forest, swamp or water areas over the regions: the part of a move inside one follows its terrain type&apos;s rules. <B>Link</B> joins regions that
+                don&apos;t touch (tunnels, sea lanes). In <B>Select</B>, click a region to name it, set its owner, settlement, buildings, deposits, ruins and hazards, mark it hidden, move
+                its centre (where its name and new units go), and block or hide its border with each neighbour. You can also import regions from a spreadsheet, then use{" "}
+                <B>Fill in starting shapes</B>.
               </li>
               <li>
                 <B>Teams</B>: add each team. Open <B>Edit team</B> to set its colour, emblem, base race, other races, starting resources and secret objectives. Each new team gets an unused emblem; teams are shown by emblem as well as colour so colour-blind players can tell them apart. Tick <B>DM-run (NPC)</B> for factions you play

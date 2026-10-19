@@ -22,11 +22,24 @@ In the app, **/help/player** and **/help/dm** are short guides for players and t
 | 7 | Stealth, trades, Discord, history, export | ✅ done |
 | 8 | Polish: phone layout, DM keyboard shortcuts, performance, in-app guides | ✅ done |
 
+UI overhaul ([plan](docs/proposals/ui-overhaul.md)):
+
+| Phase | What | Status |
+|---|---|---|
+| 1 | Theme and design system: dark blue, frosted glass, team colours as accents, team emblems | ✅ done |
+| 2 | Map-first layout: the map always on screen, tools as windows over it | ✅ done |
+| 3 | Click a region or unit on the map to see it and give it orders | ✅ done |
+| 4 | Regions as shapes, measured movement, terrain areas, GM map editor | ✅ done |
+| 5 | Drag-and-drop movement | planned |
+| 6 | Toggleable 3D map | planned |
+| 7 | Simplified phone and tablet view | planned |
+
 ## Tech
 
 - **Next.js 16** (App Router) + **TypeScript** + **Tailwind CSS 4**, hosted on **Vercel**
 - **Postgres on Supabase**, accessed only from the server through **Drizzle ORM**
 - **Vitest** for tests
+- **polygon-clipping** for cutting map shapes against each other
 - **jose** for signed session cookies
 
 ## Project layout
@@ -35,7 +48,8 @@ In the app, **/help/player** and **/help/dm** are short guides for players and t
 src/
   engine/      Pure game-rules code: dice, seeded RNG, the ruleset format,
                stat blocks, effects, derived stats, SRD converter,
-               fog of war (world/), order checks, movement and economy (orders/),
+               map geometry: regions, borders, clipping, editing (geo/),
+               fog of war (world/), order checks, routes, movement and economy (orders/),
                round resolution: proposals, roll tables, queue, end of round (resolve/),
                the combat simulation and area effects (combat/).
                No database or web code in here, so it can be tested on its own.
@@ -59,7 +73,8 @@ src/
     help/          The player guide and DM guide
     api/health     JSON setup check
 drizzle/       SQL migrations (generated from schema.ts, applied on every deploy)
-scripts/       migrate.ts, the Utterdark sheet importer, the load-test game
+scripts/       migrate.ts (then convert-maps.ts, which turns old node maps into regions once),
+               the Utterdark sheet importer, the load-test game
 docs/          Setup guide, data model, fog of war, resolving a round, Utterdark preset notes, proposals
 ```
 

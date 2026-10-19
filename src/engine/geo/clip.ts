@@ -30,3 +30,21 @@ export function piecesToPath(pieces: Piece[], width: number, height: number): st
     .map((ring) => `M${ring.map(([x, y]) => `${(x * width).toFixed(1)} ${(y * height).toFixed(1)}`).join("L")}Z`)
     .join("");
 }
+
+/** What's left of `area` after cutting away `masks`: its largest piece's outline, or null if nothing is left. */
+export function subtractAreas(area: Polygon, masks: Polygon[]): Polygon | null {
+  const valid = masks.filter((m) => m.length >= 3);
+  const closed = (p: Polygon): Pt[] => [...p, p[0]];
+  if (area.length < 3) return null;
+  if (!valid.length) return area;
+  let result: MultiPolygon;
+  try {
+    result = polygonClipping.difference([closed(area)], ...valid.map((m) => [closed(m)] as [Pt[]]));
+  } catch {
+    return null;
+  }
+  const rings = result.map((piece) => piece[0].slice(0, -1) as Polygon).filter((r) => r.length >= 3);
+  if (!rings.length) return null;
+  const size = (r: Polygon) => Math.abs(r.reduce((s, [x1, y1], i) => s + x1 * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * y1, 0));
+  return rings.sort((a, b) => size(b) - size(a))[0];
+}

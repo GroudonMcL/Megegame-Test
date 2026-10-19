@@ -112,7 +112,10 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
               </ul>
               <h3>Moving</h3>
               <p>
-                Pick the units, then <B>Pick path on map</B> and tap regions next to the last one, ringed in green, to build the path. Units that move together go at the speed of the slowest.
+                Pick the units, then <B>Draw route on map</B> and tap the map to add stops: your units walk in straight lines from stop to stop. The miles come from the map&apos;s scale; the
+                part of the route through difficult terrain costs more, and water needs swimming or flying. A route can only cross into a neighbouring region (not through a blocked border), but
+                it can go on into ground you can&apos;t see: your units go as far as they can, and the DM checks the rest. Units that move together go at the speed of the slowest, and each
+                unit&apos;s miles for the round are shared between all its moves.
                 Moving into a region with other factions&apos; units or monsters can start a fight, so say in the notes how you avoid it if you want to. Stealthy moves try to slip past unseen.
               </p>
               <h3>Notes and the projection</h3>

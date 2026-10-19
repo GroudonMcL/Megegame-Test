@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 
 export type RegionRow = typeof schema.regions.$inferSelect;
@@ -47,6 +47,17 @@ export async function loadMapState(gameId: string) {
   ]);
   const mapImage: MapImage | null = image?.width && image.height ? { id: image.id, width: image.width, height: image.height } : null;
   return { regions, connections, terrainAreas, units, teams, mapImage, milesAcross: game?.mapMilesAcross ?? 200 };
+}
+
+/** What the conversion from an old node map left for the DM to check, if it ran for this game. */
+export async function loadConversionReport(gameId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ description: schema.auditLog.description })
+    .from(schema.auditLog)
+    .where(and(eq(schema.auditLog.gameId, gameId), eq(schema.auditLog.kind, "map.convert")))
+    .orderBy(desc(schema.auditLog.createdAt))
+    .limit(1);
+  return row?.description ?? null;
 }
 
 export type MapState = Awaited<ReturnType<typeof loadMapState>>;

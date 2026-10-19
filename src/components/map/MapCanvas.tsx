@@ -75,6 +75,15 @@ export interface MapCanvasProps {
   terrain?: { id: string; pieces: Pt[][][]; colour: string; title?: string }[];
   /** Extra SVG on top of everything (unit badges, paths), given the screen scale. */
   overlay?: (scale: number) => ReactNode;
+  /**
+   * Handles (elements with data-handle="id", e.g. shape corners in the editor):
+   * dragging one reports where it is (done = released); clicking reports which
+   * (button 2 = right-click).
+   */
+  onHandleMove?: (id: string, p: [number, number], done: boolean) => void;
+  onHandleClick?: (id: string, e: { button: number; shiftKey: boolean }) => void;
+  /** Where the pointer is over the map (fractions), for drawing previews. */
+  onHover?: (p: [number, number] | null) => void;
 }
 
 interface View {
@@ -97,6 +106,7 @@ export function MapCanvas(props: MapCanvasProps) {
   const gesture = useRef<
     | { kind: "pan"; startClient: { x: number; y: number }; startView: View; moved: boolean; edgeId?: string }
     | { kind: "node"; id: string; startClient: { x: number; y: number }; moved: boolean; shift: boolean; badge?: string }
+    | { kind: "handle"; id: string; startClient: { x: number; y: number }; moved: boolean; button: number; shift: boolean }
     | { kind: "pinch"; startDist: number; startView: View; mid: { x: number; y: number } }
     | null
   >(null);
@@ -205,6 +215,11 @@ export function MapCanvas(props: MapCanvasProps) {
       };
       return;
     }
+    const handle = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle");
+    if (handle) {
+      gesture.current = { kind: "handle", id: handle, startClient: { x: e.clientX, y: e.clientY }, moved: false, button: e.button, shift: e.shiftKey };
+      return;
+    }
     const nodeId = (e.target as Element).closest("[data-node-id]")?.getAttribute("data-node-id");
     if (nodeId) {
       const badge = (e.target as Element).closest("[data-badge]")?.getAttribute("data-badge") ?? undefined;
@@ -218,6 +233,10 @@ export function MapCanvas(props: MapCanvasProps) {
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (props.linkFrom) setPointer(toMap(e.clientX, e.clientY));
+    if (props.onHover) {
+      const h = toMap(e.clientX, e.clientY);
+      props.onHover([h.x / width, h.y / height]);
+    }
     const g = gesture.current;
     if (!g) return;
     if (g.kind === "pinch") {
@@ -231,7 +250,10 @@ export function MapCanvas(props: MapCanvasProps) {
     const dy = e.clientY - g.startClient.y;
     if (!g.moved && Math.hypot(dx, dy) < CLICK_SLOP) return;
     g.moved = true;
-    if (g.kind === "pan") {
+    if (g.kind === "handle") {
+      const h = toMap(e.clientX, e.clientY);
+      props.onHandleMove?.(g.id, [h.x / width, h.y / height], false);
+    } else if (g.kind === "pan") {
       const k = g.startView.w / size.w;
       setView({ ...g.startView, x: g.startView.x - dx * k, y: g.startView.y - dy * k });
     } else if (g.kind === "node" && props.draggable) {
@@ -246,6 +268,12 @@ export function MapCanvas(props: MapCanvasProps) {
     if (pointers.current.size > 0) return;
     gesture.current = null;
     if (!g) return;
+    if (g.kind === "handle") {
+      const h = toMap(e.clientX, e.clientY);
+      if (g.moved) props.onHandleMove?.(g.id, [h.x / width, h.y / height], true);
+      else props.onHandleClick?.(g.id, { button: g.button, shiftKey: g.shift });
+      return;
+    }
     if (g.kind !== "pinch" && !g.moved && props.onPointClick) {
       const p = toMap(e.clientX, e.clientY);
       if (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height) props.onPointClick([p.x / width, p.y / height]);
@@ -281,6 +309,8 @@ export function MapCanvas(props: MapCanvasProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={() => props.onHover?.(null)}
+        onContextMenu={(e) => props.onHandleClick && e.preventDefault()}
         role="application"
         aria-label="Map"
       >

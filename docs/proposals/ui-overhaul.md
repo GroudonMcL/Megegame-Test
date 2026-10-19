@@ -1,6 +1,6 @@
 # Proposal: UI overhaul
 
-Status: **approved**. Phase 1 (theme), Phase 2 (layout shell) and Phase 3 (click-to-inspect) are built.
+Status: **approved**. Phases 1–4 are built: theme, layout shell, click-to-inspect, and regions (shapes, measured movement, map editor).
 
 The app becomes map-first: the map is always on screen and everything else opens on top of it. Later phases replace map nodes with drawn regions, add drag-to-move with drawn paths, an optional 3D map, and a simpler phone view.
 
@@ -15,6 +15,10 @@ The app becomes map-first: the map is always on screen and everything else opens
 | D5 | Terrain | Difficult terrain becomes **overlay areas** drawn on top of regions. Only the part of a line **inside** an overlay uses its rule (×2 miles, needs a swim or fly speed, and so on). Flyers and Natural Explorer groups ignore difficult terrain, as now. |
 | D6 | Special links | Shared borders connect automatically. The GM can add **extra links** (tunnels, sea lanes, secret passes), which can be hidden until discovered, and can **block** a shared border (a wall). |
 | D7 | Existing data | Test data only. The migration still runs and reports what it couldn't convert. |
+| D8 | "?" regions | Players see their outline, nothing else. |
+| D9 | Gaps between shapes | Open ground: impassable. |
+| D10 | Corners | Regions touching only at a corner are neighbours too. |
+| D11 | Converted maps | Regions that touch but weren't connected before start with a **blocked** border, so movement (and sight: a blocked border counts as none) stays as it was until the GM unblocks them. |
 
 ## What stays the same
 

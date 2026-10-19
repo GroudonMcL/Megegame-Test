@@ -7,9 +7,16 @@ import { db, schema } from "@/db";
 import { ABILITIES } from "@/engine/ruleset/common";
 import { deriveStats, unitBonuses } from "@/engine/ruleset/derive";
 import { Effect } from "@/engine/ruleset/effects";
+import { subtractAreas } from "@/engine/geo/clip";
+import { labelPoint } from "@/engine/geo/edit";
+import { mapAspect } from "@/engine/geo/mapSize";
+import { cleanPolygon, type Polygon } from "@/engine/geo/polygon";
+import { touches } from "@/engine/geo/regions";
+import { voronoiCells } from "@/engine/geo/voronoi";
 import { gridPositions, nextRegionCode } from "@/engine/map/codes";
 import { parseRegionCsv } from "@/engine/map/csv";
 import { audit } from "@/lib/audit";
+import { syncBorders } from "@/lib/borders";
 import { loadRuleset } from "@/lib/rulesets";
 import { requireDm } from "@/lib/session";
 
@@ -18,6 +25,11 @@ import { requireDm } from "@/lib/session";
 const GameId = z.uuid();
 const RowId = z.uuid();
 const Fraction = z.number().min(0).max(1);
+// An outline: corners as fractions of the map (a little over the edge is fine).
+const Outline = z
+  .array(z.tuple([z.number().min(-0.05).max(1.05), z.number().min(-0.05).max(1.05)]))
+  .min(3, "A shape needs at least 3 corners.")
+  .max(2000);
 
 export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -37,21 +49,185 @@ function fail(error: string): { ok: false; error: string } {
 
 // ——— Regions ———
 
-export async function createRegionAction(gameId: string, x: number, y: number) {
+type ConnectionRow = typeof schema.connections.$inferSelect;
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+function outline(raw: unknown): Polygon | { error: string } {
+  const parsed = Outline.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  return cleanPolygon(parsed.data) ?? { error: "That shape has no area." };
+}
+
+async function connectionsOf(tx: Tx | typeof db, gameId: string): Promise<ConnectionRow[]> {
+  return tx.select().from(schema.connections).where(eq(schema.connections.gameId, gameId));
+}
+
+/** A new region with this outline; its centre (where its name and new units go) is placed inside it. */
+export async function createRegionAction(gameId: string, polygon: unknown): Promise<ActionResult<{ region: typeof schema.regions.$inferSelect; connections: ConnectionRow[] }>> {
   const id = await guard(gameId);
-  const codes = await db.select({ code: schema.regions.code }).from(schema.regions).where(eq(schema.regions.gameId, id));
-  const [row] = await db
-    .insert(schema.regions)
-    .values({ gameId: id, code: nextRegionCode(codes.map((c) => c.code)), x: Fraction.parse(x), y: Fraction.parse(y) })
-    .returning();
-  await audit(db, { gameId: id, actor: "dm", kind: "region.create", description: `Added region ${row.code}`, after: row });
+  const shape = outline(polygon);
+  if ("error" in shape) return fail(shape.error);
+  const [cx, cy] = labelPoint(shape);
+  return db.transaction(async (tx) => {
+    const codes = await tx.select({ code: schema.regions.code }).from(schema.regions).where(eq(schema.regions.gameId, id));
+    const [row] = await tx
+      .insert(schema.regions)
+      .values({ gameId: id, code: nextRegionCode(codes.map((c) => c.code)), x: Math.min(1, Math.max(0, cx)), y: Math.min(1, Math.max(0, cy)), polygon: shape })
+      .returning();
+    await syncBorders(tx, id);
+    await audit(tx, { gameId: id, actor: "dm", kind: "region.create", description: `Added region ${row.code}`, after: row });
+    done(id);
+    return { ok: true as const, value: { region: row, connections: await connectionsOf(tx, id) } };
+  });
+}
+
+/**
+ * Saves edited outlines (regions and terrain areas) in one go, then brings the
+ * borders up to date. A region whose centre ends up outside its new shape gets
+ * a new centre inside it.
+ */
+export async function saveShapesAction(
+  gameId: string,
+  edits: { regions: { id: string; polygon: unknown }[]; terrain: { id: string; polygon: unknown }[] },
+): Promise<ActionResult<{ regions: (typeof schema.regions.$inferSelect)[]; connections: ConnectionRow[]; added: number; removed: number }>> {
+  const id = await guard(gameId);
+  const regionShapes: [string, Polygon][] = [];
+  for (const r of edits.regions) {
+    const shape = outline(r.polygon);
+    if ("error" in shape) return fail(shape.error);
+    regionShapes.push([RowId.parse(r.id), shape]);
+  }
+  const terrainShapes: [string, Polygon][] = [];
+  for (const t of edits.terrain) {
+    const shape = outline(t.polygon);
+    if ("error" in shape) return fail(shape.error);
+    terrainShapes.push([RowId.parse(t.id), shape]);
+  }
+  return db.transaction(async (tx) => {
+    const updated: (typeof schema.regions.$inferSelect)[] = [];
+    for (const [rid, polygon] of regionShapes) {
+      const [before] = await tx.select().from(schema.regions).where(and(eq(schema.regions.id, rid), eq(schema.regions.gameId, id)));
+      if (!before) continue;
+      const centreInside = cleanPolygon(polygon) && insidePolygon([before.x, before.y], polygon);
+      const [cx, cy] = centreInside ? [before.x, before.y] : labelPoint(polygon);
+      const [after] = await tx.update(schema.regions).set({ polygon, x: cx, y: cy }).where(eq(schema.regions.id, rid)).returning();
+      updated.push(after);
+    }
+    for (const [tid, polygon] of terrainShapes) {
+      await tx.update(schema.terrainAreas).set({ polygon }).where(and(eq(schema.terrainAreas.id, tid), eq(schema.terrainAreas.gameId, id)));
+    }
+    const sync = await syncBorders(tx, id);
+    await audit(tx, {
+      gameId: id,
+      actor: "dm",
+      kind: "map.shapes",
+      description: `Edited ${regionShapes.length} region shape${regionShapes.length === 1 ? "" : "s"} and ${terrainShapes.length} terrain area${terrainShapes.length === 1 ? "" : "s"}`,
+    });
+    done(id);
+    return { ok: true as const, value: { regions: updated, connections: await connectionsOf(tx, id), ...sync } };
+  });
+}
+
+function insidePolygon([px, py]: [number, number], poly: Polygon): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Gives every region without a shape a starting one: the area nearer its centre
+ * than any other region's, minus any shapes already drawn.
+ */
+export async function fillShapesAction(gameId: string): Promise<ActionResult<{ filled: number }>> {
+  const id = await guard(gameId);
+  return db.transaction(async (tx) => {
+    const regions = await tx.select().from(schema.regions).where(eq(schema.regions.gameId, id));
+    const [game] = await tx.select({ assetId: schema.games.mapAssetId }).from(schema.games).where(eq(schema.games.id, id));
+    const [image] = game?.assetId ? await tx.select({ width: schema.assets.width, height: schema.assets.height }).from(schema.assets).where(eq(schema.assets.id, game.assetId)) : [];
+    const drawn = regions.map((r) => cleanPolygon(r.polygon)).filter((p): p is Polygon => p !== null);
+    const cells = voronoiCells(
+      regions.map((r) => [r.x, r.y] as [number, number]),
+      mapAspect(image),
+    );
+    let filled = 0;
+    for (const [i, r] of regions.entries()) {
+      if (cleanPolygon(r.polygon)) continue;
+      const shape = subtractAreas(cells[i], drawn);
+      if (!shape) continue;
+      await tx.update(schema.regions).set({ polygon: shape }).where(eq(schema.regions.id, r.id));
+      filled++;
+    }
+    await syncBorders(tx, id);
+    await audit(tx, { gameId: id, actor: "dm", kind: "map.fill", description: `Gave ${filled} region${filled === 1 ? "" : "s"} a starting shape` });
+    done(id);
+    return { ok: true as const, value: { filled } };
+  });
+}
+
+/** The map's scale: miles across its full width. */
+export async function setScaleAction(gameId: string, milesAcross: number): Promise<ActionResult<number>> {
+  const id = await guard(gameId);
+  const parsed = z.number().positive("The scale must be more than 0 miles.").max(1_000_000).safeParse(milesAcross);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const value = Math.round(parsed.data * 100) / 100;
+  await db.update(schema.games).set({ mapMilesAcross: value }).where(eq(schema.games.id, id));
+  await audit(db, { gameId: id, actor: "dm", kind: "map.scale", description: `Set the map scale to ${value} miles across` });
   done(id);
-  return row;
+  return { ok: true, value };
+}
+
+// ——— Terrain areas ———
+
+const TerrainPatch = z.object({ terrainId: z.string().min(1), name: z.string().max(120) });
+
+async function checkTerrainType(gameId: string, terrainId: string) {
+  const { ruleset } = await loadRuleset(gameId);
+  return ruleset.terrainTypes.some((t) => t.id === terrainId);
+}
+
+export async function createTerrainAction(gameId: string, terrainId: string, polygon: unknown): Promise<ActionResult<typeof schema.terrainAreas.$inferSelect>> {
+  const id = await guard(gameId);
+  const shape = outline(polygon);
+  if ("error" in shape) return fail(shape.error);
+  if (!(await checkTerrainType(id, terrainId))) return fail("Pick a terrain type from the ruleset.");
+  const [row] = await db.insert(schema.terrainAreas).values({ gameId: id, terrainId, polygon: shape }).returning();
+  await audit(db, { gameId: id, actor: "dm", kind: "terrain.create", description: "Added a terrain area", after: row });
+  done(id);
+  return { ok: true, value: row };
+}
+
+export async function updateTerrainAction(gameId: string, areaId: string, patch: unknown): Promise<ActionResult<typeof schema.terrainAreas.$inferSelect>> {
+  const id = await guard(gameId);
+  const parsed = TerrainPatch.safeParse(patch);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  if (!(await checkTerrainType(id, parsed.data.terrainId))) return fail("Pick a terrain type from the ruleset.");
+  const [row] = await db
+    .update(schema.terrainAreas)
+    .set(parsed.data)
+    .where(and(eq(schema.terrainAreas.id, RowId.parse(areaId)), eq(schema.terrainAreas.gameId, id)))
+    .returning();
+  if (!row) return fail("That terrain area no longer exists.");
+  done(id);
+  return { ok: true, value: row };
+}
+
+export async function deleteTerrainAction(gameId: string, areaId: string) {
+  const id = await guard(gameId);
+  const [before] = await db
+    .delete(schema.terrainAreas)
+    .where(and(eq(schema.terrainAreas.id, RowId.parse(areaId)), eq(schema.terrainAreas.gameId, id)))
+    .returning();
+  if (before) await audit(db, { gameId: id, actor: "dm", kind: "terrain.delete", description: "Deleted a terrain area", before });
+  done(id);
 }
 
 export async function moveRegionAction(gameId: string, regionId: string, x: number, y: number) {
   const id = await guard(gameId);
-  // Moving a node only changes the picture, so it isn't written to the audit log.
+  // Moving a region's centre only changes where its name and new units go, so it isn't written to the audit log.
   await db
     .update(schema.regions)
     .set({ x: Fraction.parse(x), y: Fraction.parse(y) })
@@ -112,24 +288,29 @@ export async function deleteRegionAction(gameId: string, regionId: string) {
 
 // ——— Connections ———
 
-export async function createConnectionAction(gameId: string, a: string, b: string): Promise<ActionResult<typeof schema.connections.$inferSelect>> {
+/** A link between two regions that don't touch (a tunnel, a sea lane). Regions that touch already share a border. */
+export async function createLinkAction(gameId: string, a: string, b: string): Promise<ActionResult<ConnectionRow>> {
   const id = await guard(gameId);
   const [x, y] = [RowId.parse(a), RowId.parse(b)].sort();
-  if (x === y) return fail("A region can't connect to itself.");
-  const ends = await db.select({ id: schema.regions.id }).from(schema.regions).where(and(eq(schema.regions.gameId, id), inArray(schema.regions.id, [x, y])));
+  if (x === y) return fail("A region can't link to itself.");
+  const ends = await db.select().from(schema.regions).where(and(eq(schema.regions.gameId, id), inArray(schema.regions.id, [x, y])));
   if (ends.length !== 2) return fail("Both regions must be in this game.");
+  const [p, q] = ends.map((r) => cleanPolygon(r.polygon));
+  if (p && q && touches(p, q)) return fail("Those regions touch, so they already share a border. Select one of them to block or hide it.");
   const existing = await db.select().from(schema.connections).where(and(eq(schema.connections.regionA, x), eq(schema.connections.regionB, y)));
-  if (existing.length) return fail("Those regions are already connected.");
-  const [row] = await db.insert(schema.connections).values({ gameId: id, regionA: x, regionB: y }).returning();
-  await audit(db, { gameId: id, actor: "dm", kind: "connection.create", description: "Added a connection", after: row });
+  if (existing.length) return fail("Those regions are already linked.");
+  const [row] = await db.insert(schema.connections).values({ gameId: id, regionA: x, regionB: y, kind: "link" }).returning();
+  await audit(db, { gameId: id, actor: "dm", kind: "connection.create", description: "Added a link", after: row });
   done(id);
   return { ok: true, value: row };
 }
 
+// Borders: blocked and hidden. Links: also their length and terrain.
 const ConnectionPatch = z.object({
   miles: z.number().positive().nullable(),
   terrainId: z.string().min(1),
   hidden: z.boolean(),
+  blocked: z.boolean(),
 });
 
 export async function updateConnectionAction(gameId: string, connectionId: string, patch: unknown): Promise<ActionResult<typeof schema.connections.$inferSelect>> {
@@ -139,20 +320,24 @@ export async function updateConnectionAction(gameId: string, connectionId: strin
   const cid = RowId.parse(connectionId);
   const [before] = await db.select().from(schema.connections).where(and(eq(schema.connections.id, cid), eq(schema.connections.gameId, id)));
   if (!before) return fail("That connection no longer exists.");
-  const [after] = await db.update(schema.connections).set(parsed.data).where(eq(schema.connections.id, cid)).returning();
+  const changes = before.kind === "border" ? { hidden: parsed.data.hidden, blocked: parsed.data.blocked } : parsed.data;
+  const [after] = await db.update(schema.connections).set(changes).where(eq(schema.connections.id, cid)).returning();
   await audit(db, { gameId: id, actor: "dm", kind: "connection.update", description: "Edited a connection", before, after });
   done(id);
   return { ok: true, value: after };
 }
 
-export async function deleteConnectionAction(gameId: string, connectionId: string) {
+/** Deletes a link. (Borders come from the shapes: block them instead.) */
+export async function deleteConnectionAction(gameId: string, connectionId: string): Promise<ActionResult<null>> {
   const id = await guard(gameId);
-  const [before] = await db
-    .delete(schema.connections)
-    .where(and(eq(schema.connections.id, RowId.parse(connectionId)), eq(schema.connections.gameId, id)))
-    .returning();
-  if (before) await audit(db, { gameId: id, actor: "dm", kind: "connection.delete", description: "Deleted a connection", before });
+  const cid = RowId.parse(connectionId);
+  const [row] = await db.select().from(schema.connections).where(and(eq(schema.connections.id, cid), eq(schema.connections.gameId, id)));
+  if (!row) return { ok: true, value: null };
+  if (row.kind === "border") return fail("Borders come from the region shapes. Block it instead, or change the shapes.");
+  const [before] = await db.delete(schema.connections).where(eq(schema.connections.id, cid)).returning();
+  if (before) await audit(db, { gameId: id, actor: "dm", kind: "connection.delete", description: "Deleted a link", before });
   done(id);
+  return { ok: true, value: null };
 }
 
 // ——— Region CSV import ———

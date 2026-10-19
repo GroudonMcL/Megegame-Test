@@ -12,7 +12,7 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | `meta` | name, description, terminology map (rename "region" → "Province"…), theme colour, credits |
 | `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat (round limit, unit width by size, retreat threshold, odds runs), CR → cost table |
 | `resources` | e.g. Gold, Food, Growth |
-| `terrainTypes` | what a connection between regions can be (Normal, Difficult…) |
+| `terrainTypes` | what terrain areas (and links) can be (Normal, Difficult, Flooded…): cost, speeds needed, colour on the map |
 | `settlementTiers` | Outpost → Settlement → City → Capital |
 | `buildings` | with tiers; each tier has cost, upkeep, production and effects |
 | `races` | ability score bonuses and effects |
@@ -44,13 +44,14 @@ Building effects apply to the owning team's units in that region.
 
 | Table | Holds |
 |---|---|
-| `games` | name, status, preset, current round, map image, the public Discord webhook |
+| `games` | name, status, preset, current round, map image, map scale (miles across the map), map kind (old node maps are converted to regions once by `scripts/convert-maps.ts`), the public Discord webhook |
 | `teams` | name, colour, emblem (an ID from `src/components/icons/emblems.ts`), join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
 | `assets` | uploaded files (the map image), stored in the database and served only through the app |
-| `regions` | map nodes: position (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
-| `connections` | links between regions: miles, terrain, hidden (each pair at most once) |
-| `units` | instances of a creature: owner (none = wild), race, archetype, academy bonus, augments, HP, location, miles used this round, status, per-round ability uses |
+| `regions` | shapes on the map: outline and centre (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
+| `connections` | ways between regions (each pair at most once): **borders** between regions that touch (kept up to date from the shapes; can be blocked or hidden) and **links** between regions that don't (miles, terrain, hidden, blocked) |
+| `terrain_areas` | difficult ground drawn over the regions: outline and terrain type |
+| `units` | instances of a creature: owner (none = wild), race, archetype, academy bonus, augments, HP, region and position in it (empty = the region's centre), miles used this round, status, per-round ability uses |
 | `inventory` | items per team |
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `trades` | trades between teams: what each side gives, status (proposed, accepted, declined, cancelled, executed, failed), and the result |

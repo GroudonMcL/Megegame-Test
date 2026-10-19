@@ -36,11 +36,12 @@ export function fogSvg(width: number, height: number, holes: FogHole[], radiusFr
     })
     .join("");
   // Clear holes drawn after dimmed ones, so a border shared by both stays clear.
+  // Only the holes are softened: blurring the whole layer would thin the fog along the image's edges.
   const blur = Math.max(1, Math.round(width * 0.003));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
 <defs>
-<filter id="soft" x="0" y="0" width="100%" height="100%"><feGaussianBlur stdDeviation="${blur}"/></filter>
-<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><g filter="url(#soft)"><rect width="${width}" height="${height}" fill="#fff"/>${shapes}</g></mask>
+<filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${blur}"/></filter>
+<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#fff"/><g filter="url(#soft)">${shapes}</g></mask>
 </defs>
 <rect width="${width}" height="${height}" fill="${FOG}" mask="url(#m)"/>
 </svg>`;
@@ -48,7 +49,7 @@ export function fogSvg(width: number, height: number, holes: FogHole[], radiusFr
 
 export function fogKey(assetId: string, holes: FogHole[], radiusFraction: number): string {
   const h = createHash("sha256");
-  h.update(`v2|${assetId}|${radiusFraction}|`);
+  h.update(`v3|${assetId}|${radiusFraction}|`);
   for (const x of [...holes].sort((a, b) => a.x - b.x || a.y - b.y)) {
     h.update(`${x.x.toFixed(4)},${x.y.toFixed(4)},${x.dim ? 1 : 0}:${x.polygon.map(([px, py]) => `${px.toFixed(4)},${py.toFixed(4)}`).join(" ")};`);
   }
