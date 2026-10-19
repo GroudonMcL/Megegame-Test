@@ -81,7 +81,7 @@ Each phase leaves the app working. I stop after each one with a summary and test
 - Tap-to-move: tap a unit, tap points to add bends, then tap **Done**.
 - A "Simple view" switch lets desktop users use it too.
 
-## Small calls I've made (tell me if you disagree)
-- Waypoints can only go in regions the team knows, including "?" neighbours, as today.
-- Light mode stays available as an option; dark is the default.
-- Icons are inline SVGs, so there's no icon library to install.
+## Small calls (agreed)
+- **Moving into the fog:** a path can go as far into the fog as the unit's movement allows, even through regions the team can't see or doesn't know. The browser shows the fogged part of the line as "unknown ground" and can only estimate its cost from what the team knows. The server works out the real regions and terrain, and checks the order fully when the DM resolves the round. If a move turns out impossible (for example, water with no swim speed), the unit stops at the last point it could reach and the DM sees why. Nothing about unseen regions is sent to the player while they plan.
+- Dark is the default; light mode stays as an option.
+- Icons are inline SVGs kept in one icon registry (`src/components/icons/`). It's built so that **unit icons** can be added later (bundled or DM-uploaded) without changing the components that draw them.

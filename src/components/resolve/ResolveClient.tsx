@@ -92,8 +92,8 @@ interface Props {
 
 const STATUS_STYLE: Record<string, string> = {
   ready: "bg-ok/15 text-ok",
-  needsReview: "bg-amber-500/15 text-amber-600",
-  needsDm: "bg-accent/15 text-accent",
+  needsReview: "bg-warn/15 text-warn",
+  needsDm: "bg-accent/15 text-link",
   invalid: "bg-danger/15 text-danger",
 };
 const STATUS_LABEL: Record<string, string> = { ready: "Ready", needsReview: "Needs review", needsDm: "Needs DM", invalid: "Can't happen" };
@@ -214,7 +214,7 @@ export function ResolveClient(props: Props) {
       )}
 
       {(round.status === "open" || round.status === "locked") && (
-        <div className="rounded-xl border border-border bg-card p-4 text-sm">
+        <div className="glass rounded-xl border border-border shadow-panel p-4 text-sm">
           <p>
             {round.status === "open" ? "Orders are still open. " : "Orders are locked. "}
             Starting resolution locks orders and freezes what players see until you publish.
@@ -226,9 +226,9 @@ export function ResolveClient(props: Props) {
       )}
 
       {round.status === "published" && (
-        <div className="rounded-xl border border-border bg-card p-4 text-sm">
+        <div className="glass rounded-xl border border-border shadow-panel p-4 text-sm">
           <p>Round {round.number} is published: teams can see their results.</p>
-          <Link href={`/dm/games/${gameId}`} className="mt-2 inline-block text-accent underline">
+          <Link href={`/dm/games/${gameId}`} className="mt-2 inline-block text-link underline">
             Open round {round.number + 1} on the Teams page →
           </Link>
         </div>
@@ -329,7 +329,7 @@ function Step({ step: s, props, filter: { team, showDone, onlyFlagged }, focusId
   const unprepared = s.items.some((i) => !DONE.has(i.status) && i.status !== "prepared" && i.backup !== "waiting");
   const ready = s.items.filter((i) => i.status === "prepared" && i.outcome?.proposal?.status === "ready" && i.backup !== "waiting").length;
   return (
-    <section className="rounded-xl border border-border bg-card p-4">
+    <section className="glass rounded-xl border border-border shadow-panel p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium">Action {s.step}</h3>
         <span className="text-sm text-muted">
@@ -351,7 +351,7 @@ function Step({ step: s, props, filter: { team, showDone, onlyFlagged }, focusId
       {s.flags.length > 0 && (
         <ul className="mt-2 space-y-1 text-sm">
           {s.flags.map((f, i) => (
-            <li key={i} className={f.kind === "meeting" ? "text-danger" : "text-amber-600"}>
+            <li key={i} className={f.kind === "meeting" ? "text-danger" : "text-warn"}>
               ⚑ {f.text}
             </li>
           ))}
@@ -407,7 +407,7 @@ function OrderItem({ item: i, props, act, busy, focused, onFocus }: OrderItemPro
         <span className="rounded border border-border px-1.5 text-xs">{label}</span>
         <span className="font-medium">{i.actionName}</span>
         {!i.submitted && <span className="rounded bg-danger/15 px-1.5 text-xs text-danger" title="This team saved but never submitted its orders">draft</span>}
-        {i.scene && <span className="rounded bg-amber-500/15 px-1.5 text-xs text-amber-600">scene {i.scene}</span>}
+        {i.scene && <span className="rounded bg-warn/15 px-1.5 text-xs text-warn">scene {i.scene}</span>}
         {waiting && <span className="text-xs text-muted">waits for the action above to fail</span>}
         {p && !done && <span className={`ml-auto rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>}
         {done && <span className="ml-auto rounded border border-border px-2 py-0.5 text-xs">{i.status}</span>}
@@ -430,7 +430,7 @@ function OrderItem({ item: i, props, act, busy, focused, onFocus }: OrderItemPro
             </p>
           ))}
           {p.notes.map((x, k) => (
-            <p key={k} className="text-amber-600">
+            <p key={k} className="text-warn">
               ⓘ {x}
             </p>
           ))}
@@ -537,7 +537,7 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
   const name = (f: FightView, id: string | null) => f.sides.find((x) => x.id === id)?.name ?? "nobody";
 
   return (
-    <div className="space-y-2 rounded-lg border border-amber-500/40 p-2">
+    <div className="space-y-2 rounded-lg border border-warn/40 p-2">
       {fights.map((f, k) => {
         const odds = o.odds?.[k];
         return (
@@ -561,7 +561,7 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
                       <td className="py-0.5 pr-2 tabular-nums">
                         {u.startHp} → {u.hp}/{u.maxHp} HP
                       </td>
-                      <td className={`py-0.5 ${u.outcome === "dead" ? "text-danger" : u.outcome === "standing" ? "" : "text-amber-600"}`}>{OUTCOME_LABEL[u.outcome] ?? u.outcome}</td>
+                      <td className={`py-0.5 ${u.outcome === "dead" ? "text-danger" : u.outcome === "standing" ? "" : "text-warn"}`}>{OUTCOME_LABEL[u.outcome] ?? u.outcome}</td>
                       {editing && !u.raised && u.outcome !== "captured" && (
                         <td className="py-0.5 pl-2">
                           <span className="flex items-center gap-1">
@@ -595,7 +595,7 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
               </table>
             </div>
             {f.warnings.length > 0 && (
-              <details className="text-xs text-amber-600">
+              <details className="text-xs text-warn">
                 <summary className="cursor-pointer">Not automated ({f.warnings.length}): check whether these would change the result</summary>
                 <ul className="list-inside list-disc">
                   {f.warnings.map((w, j) => (
@@ -674,7 +674,7 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
   };
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2 glass rounded-xl border border-border shadow-panel p-4 text-sm">
         <p className="w-full">
           {eor.applied
             ? "The end of round has been applied: income, upkeep and rolls are in, and movement has been reset. Publish to release the results."
@@ -701,7 +701,7 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
       </div>
       {!eor.applied && eor.eventTables.length > 0 && <EventPicker props={props} act={act} busy={busy} />}
       {eor.trades.length > 0 && (
-        <section className="rounded-xl border border-border bg-card p-4 text-sm">
+        <section className="glass rounded-xl border border-border shadow-panel p-4 text-sm">
           <h3 className="font-medium">Trades</h3>
           <p className="text-xs text-muted">Accepted trades go through last, if both sides still have what they offered.</p>
           <ul className="mt-2 space-y-1">
@@ -716,7 +716,7 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
         </section>
       )}
       {eor.teams.map((t) => (
-        <section key={t.teamId} className="rounded-xl border border-border bg-card p-4">
+        <section key={t.teamId} className="glass rounded-xl border border-border shadow-panel p-4">
           <h3 className="font-medium">{t.teamName}</h3>
           <div className="mt-2">
             <EconomyTable economy={t.economy} resources={props.resources} />
@@ -738,7 +738,7 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
             </ul>
           )}
           {t.notes.map((n, i) => (
-            <p key={i} className="mt-1 text-sm text-amber-600">
+            <p key={i} className="mt-1 text-sm text-warn">
               ⓘ {n}
             </p>
           ))}
@@ -756,7 +756,7 @@ function EndOfRound({ props, act, busy }: { props: Props; act: (fn: () => Promis
         </section>
       ))}
       {eor.wild.length > 0 && (
-        <section className="rounded-xl border border-border bg-card p-4 text-sm">
+        <section className="glass rounded-xl border border-border shadow-panel p-4 text-sm">
           <h3 className="font-medium">Wild monsters</h3>
           <ul className="mt-1 list-inside list-disc">
             {eor.wild.map((l, i) => (
@@ -776,7 +776,7 @@ function EventPicker({ props, act, busy }: { props: Props; act: (fn: () => Promi
   const [teamIds, setTeamIds] = useState<string[]>(eor.events?.teamIds ?? []);
   const all = eor.teams.map((t) => t.teamId);
   return (
-    <section className="rounded-xl border border-border bg-card p-4 text-sm">
+    <section className="glass rounded-xl border border-border shadow-panel p-4 text-sm">
       <h3 className="font-medium">Random events</h3>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1">

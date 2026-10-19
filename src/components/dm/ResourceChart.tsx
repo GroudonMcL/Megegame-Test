@@ -45,10 +45,10 @@ export function ResourceChart({ title, rounds, series }: { title: string; rounds
   }
 
   return (
-    <figure className="rounded-xl border border-border bg-card p-3">
+    <figure className="glass rounded-xl border border-border shadow-panel p-3">
       <figcaption className="flex items-center gap-2 text-sm font-medium">
         {title}
-        <button type="button" className="ml-auto text-xs font-normal text-accent underline" onClick={() => setTable(!table)}>
+        <button type="button" className="ml-auto text-xs font-normal text-link underline" onClick={() => setTable(!table)}>
           {table ? "Show chart" : "Show table"}
         </button>
       </figcaption>

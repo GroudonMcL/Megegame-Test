@@ -7,22 +7,22 @@ export function Guide({ title, intro, sections, other }: { title: string; intro:
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:py-12">
       <p className="text-sm">
-        <Link href="/" className="text-accent underline">
+        <Link href="/" className="text-link underline">
           ← Home
         </Link>{" "}
         ·{" "}
-        <Link href={other.href} className="text-accent underline">
+        <Link href={other.href} className="text-link underline">
           {other.label}
         </Link>
       </p>
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h1>
       <div className="guide mt-3 text-muted">{intro}</div>
-      <nav aria-label="Contents" className="mt-6 rounded-xl border border-border bg-card p-4">
+      <nav aria-label="Contents" className="mt-6 glass rounded-xl border border-border shadow-panel p-4">
         <p className="text-sm font-medium">Contents</p>
         <ol className="mt-2 list-inside list-decimal space-y-0.5 text-sm">
           {sections.map((s) => (
             <li key={s.id}>
-              <a href={`#${s.id}`} className="text-accent underline">
+              <a href={`#${s.id}`} className="text-link underline">
                 {s.title}
               </a>
             </li>

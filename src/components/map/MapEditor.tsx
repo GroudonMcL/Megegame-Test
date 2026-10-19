@@ -127,14 +127,14 @@ export function MapEditor(props: {
     x: r.x,
     y: r.y,
     label: r.name ? `${r.code} ${r.name}` : r.code,
-    fill: r.ownerTeamId ? teamColour.get(r.ownerTeamId) : r.settleable ? "#e2e8f0" : "#64748b",
+    fill: r.ownerTeamId ? teamColour.get(r.ownerTeamId) : r.settleable ? "var(--map-region)" : "var(--map-region-unsettleable)",
     ring: Boolean(r.settlementTierId),
     dashed: r.hidden,
     dim: r.hidden,
   }));
   const edges: MapEdge[] = connections.map((c) => {
     const terrain = ruleset.terrainTypes.find((t) => t.id === c.terrainId);
-    return { id: c.id, a: c.regionA, b: c.regionB, dashed: c.hidden, dim: c.hidden, heavy: (terrain?.costMultiplier ?? 1) > 1, colour: terrain?.requiresMovement.length ? "#38bdf8" : undefined };
+    return { id: c.id, a: c.regionA, b: c.regionB, dashed: c.hidden, dim: c.hidden, heavy: (terrain?.costMultiplier ?? 1) > 1, colour: terrain?.requiresMovement.length ? "var(--map-water)" : undefined };
   });
 
   const report = (ok: boolean, text: string) => setMessage({ ok, text });
@@ -297,7 +297,7 @@ export function MapEditor(props: {
           linkFrom={mode === "connect" ? linkFrom : null}
         />
 
-        <aside className="min-w-0 rounded-xl border border-border bg-card p-4 lg:max-h-[70vh] lg:overflow-y-auto">
+        <aside className="min-w-0 glass rounded-xl border border-border shadow-panel p-4 lg:max-h-[70vh] lg:overflow-y-auto">
           {selectedRegion && (
             <RegionPanel
               key={selectedRegion.id}
@@ -417,7 +417,7 @@ function RegionPanel(props: {
         <ul className="space-y-1 text-sm">
           {props.connections.map((c) => (
             <li key={c.id}>
-              <button type="button" className="text-accent underline" onClick={() => props.onSelectConnection(c.id)}>
+              <button type="button" className="text-link underline" onClick={() => props.onSelectConnection(c.id)}>
                 → {c.to}
               </button>{" "}
               <span className="text-muted">
@@ -481,8 +481,8 @@ function CsvDialog({ onClose, onImport, pending }: { onClose: () => void; onImpo
   const [text, setText] = useState("");
   const preview = useMemo(() => (text.trim() ? parseRegionCsv(text) : null), [text]);
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Import regions">
-      <div className="w-full max-w-3xl space-y-3 rounded-xl border border-border bg-card p-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-overlay p-4" role="dialog" aria-modal="true" aria-label="Import regions">
+      <div className="w-full max-w-3xl space-y-3 glass rounded-xl border border-border p-4 shadow-xl">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Import regions from a spreadsheet</h3>
           <button type="button" className={button} onClick={onClose}>

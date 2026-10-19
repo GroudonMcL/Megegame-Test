@@ -35,7 +35,7 @@ export interface TradeView {
   id: string;
   round: number;
   direction: "out" | "in";
-  otherTeam: { id: string; name: string; colour: string };
+  otherTeam: { id: string; name: string; colour: string; emblem: string };
   give: string;
   get: string;
   message: string;
@@ -62,7 +62,7 @@ export async function loadTeamTrades(gameId: string, teamId: string): Promise<Tr
       id: t.id,
       round: t.round,
       direction: out ? "out" : "in",
-      otherTeam: { id: other?.id ?? "", name: other?.name ?? "?", colour: other?.colour ?? "#888" },
+      otherTeam: { id: other?.id ?? "", name: other?.name ?? "?", colour: other?.colour ?? "#888", emblem: other?.emblem ?? "" },
       give: describeBundle(ruleset, world, out ? t.give : t.get, "your"),
       get: describeBundle(ruleset, world, out ? t.get : t.give, `${other?.name ?? "their"}'s`),
       message: t.message,

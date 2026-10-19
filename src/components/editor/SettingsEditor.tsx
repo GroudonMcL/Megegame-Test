@@ -140,10 +140,10 @@ export function SettingsEditor({ ruleset, version: initialVersion, save }: { rul
           ))}
         </div>
       )}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <Fields fields={metaFields} value={draft.meta} onChange={(v) => (setDraft({ ...draft, meta: v as Ruleset["meta"] }), setDirty(true))} ctx={ctx} />
       </section>
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="glass rounded-xl border border-border shadow-panel p-4">
         <Fields fields={settingsFields} value={draft.settings} onChange={(v) => (setDraft({ ...draft, settings: v as Ruleset["settings"] }), setDirty(true))} ctx={ctx} />
       </section>
     </div>

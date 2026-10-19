@@ -40,7 +40,7 @@ export default async function SettingsPage({ params }: PageProps<"/dm/games/[gam
         <ul className="mt-2 space-y-1 text-sm">
           {TABLES.map((t) => (
             <li key={t.id}>
-              <a href={`/api/dm/games/${gameId}/export/${t.id}`} className="text-accent underline" download>
+              <a href={`/api/dm/games/${gameId}/export/${t.id}`} className="text-link underline" download>
                 {t.label}
               </a>
             </li>

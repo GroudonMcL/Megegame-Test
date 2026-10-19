@@ -90,6 +90,7 @@ export function rowsToWorld(rows: GameRows): World {
       name: t.name,
       colour: t.colour,
       isNpc: t.isNpc,
+      emblem: t.emblem,
       resources: t.resources,
       baseRaceId: t.baseRaceId,
       raceIds: t.raceIds,

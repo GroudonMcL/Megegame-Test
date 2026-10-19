@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { nextTeamEmblem } from "@/components/icons/emblems";
 import { db, schema } from "@/db";
 import { checkDmPassword } from "@/lib/dmPassword";
 import { generateJoinCode } from "@/lib/joinCode";
@@ -54,7 +55,9 @@ export async function createTeam(_prev: FormState, formData: FormData): Promise<
   const { ruleset } = await loadRuleset(parsed.data.gameId);
   const resources = Object.fromEntries(ruleset.resources.map((r) => [r.id, r.startingAmount]));
   const knownRecipeIds = ruleset.recipes.filter((r) => r.knownAtStart).map((r) => r.id);
-  await db.insert(schema.teams).values({ ...parsed.data, joinCode: generateJoinCode(), resources, knownRecipeIds });
+  const used = await db.select({ emblem: schema.teams.emblem }).from(schema.teams).where(eq(schema.teams.gameId, parsed.data.gameId));
+  const emblem = nextTeamEmblem(used.map((t) => t.emblem));
+  await db.insert(schema.teams).values({ ...parsed.data, emblem, joinCode: generateJoinCode(), resources, knownRecipeIds });
   revalidatePath("/dm", "layout");
   return undefined;
 }

@@ -44,7 +44,7 @@ const KIND_LABEL = { numbered: "Numbered action", free: "Free action", condition
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+    <section id={id} className="scroll-mt-4 glass rounded-xl border border-border shadow-panel p-4 sm:p-5">
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>

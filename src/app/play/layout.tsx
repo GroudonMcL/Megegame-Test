@@ -1,4 +1,7 @@
 import { NavLinks } from "@/components/NavLinks";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { teamThemeProps } from "@/components/theme/teamTheme";
 import { Button } from "@/components/ui";
 import { requireViewer } from "@/lib/viewer";
 import { logout } from "../actions";
@@ -7,9 +10,10 @@ import { stopViewingAs } from "./actions";
 export default async function PlayLayout({ children }: LayoutProps<"/play">) {
   const viewer = await requireViewer();
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">
+    // data-team: accents inside use the team colour (globals.css).
+    <div {...teamThemeProps(viewer.team.colour)} className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">
       {viewer.isDm && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-accent bg-card px-3 py-2 text-sm">
+        <div className="glass mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-accent px-3 py-2 text-sm shadow-panel">
           <span>
             👁 You are the DM, viewing as <strong>{viewer.team.name}</strong>. You see exactly what this team sees. You can edit and submit its orders.
           </span>
@@ -20,20 +24,23 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           </form>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="h-5 w-5 shrink-0 rounded-full" style={{ background: viewer.team.colour }} aria-hidden />
+      <header className="glass flex flex-wrap items-center gap-3 rounded-xl border border-border border-t-4 border-t-accent px-3 py-2.5 shadow-panel sm:px-4">
+        <TeamEmblem team={viewer.team} size={30} />
         <h1 className="text-xl font-semibold sm:text-2xl">{viewer.team.name}</h1>
         <span className="text-sm text-muted">
           {viewer.game.name} · {viewer.isDm ? "DM" : viewer.displayName}
         </span>
-        {!viewer.isDm && (
-          <form action={logout} className="ml-auto">
-            <Button variant="secondary" type="submit">
-              Leave
-            </Button>
-          </form>
-        )}
-      </div>
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
+          {!viewer.isDm && (
+            <form action={logout}>
+              <Button variant="secondary" type="submit">
+                Leave
+              </Button>
+            </form>
+          )}
+        </div>
+      </header>
       <NavLinks
         className="mt-3 border-b border-border pb-2"
         links={[

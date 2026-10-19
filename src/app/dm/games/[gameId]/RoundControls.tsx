@@ -35,7 +35,7 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
     return (
       <p className="mt-3 text-sm">
         Being resolved.{" "}
-        <a href={`/dm/games/${gameId}/resolve`} className="text-accent underline">
+        <a href={`/dm/games/${gameId}/resolve`} className="text-link underline">
           Go to the resolution queue →
         </a>
       </p>
@@ -57,7 +57,7 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
           <Button type="submit" variant="secondary" title="Players can no longer change their orders">
             Lock orders now
           </Button>{" "}
-          <a href={`/dm/games/${gameId}/resolve`} className="ml-2 text-sm text-accent underline">
+          <a href={`/dm/games/${gameId}/resolve`} className="ml-2 text-sm text-link underline">
             Resolve the round →
           </a>
         </form>
@@ -69,7 +69,7 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
           <Button type="submit" variant="secondary">
             Reopen orders
           </Button>
-          <a href={`/dm/games/${gameId}/resolve`} className="text-sm text-accent underline">
+          <a href={`/dm/games/${gameId}/resolve`} className="text-sm text-link underline">
             Resolve the round →
           </a>
         </form>

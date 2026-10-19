@@ -2,6 +2,8 @@ import Link from "next/link";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Button, Card } from "@/components/ui";
+import { emblemFor } from "@/components/icons/emblems";
+import { TeamEmblem } from "@/components/icons/TeamEmblem";
 import { fmtRes } from "@/engine/ruleset/effects";
 import { findReferenceProblems } from "@/engine/ruleset/validate";
 import { loadRuleset } from "@/lib/rulesets";
@@ -54,7 +56,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
             return (
               <li key={team.id} className="rounded-lg border border-border p-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="h-4 w-4 rounded-full" style={{ background: team.colour }} aria-hidden />
+                  <TeamEmblem team={team} size={22} />
                   <span className="font-medium">{team.name}</span>
                   {team.isNpc && <span className="rounded border border-border px-1.5 text-xs">NPC</span>}
                   <code className="rounded bg-background px-2 py-1 font-mono text-sm select-all">{team.joinCode}</code>
@@ -85,6 +87,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
                     id: team.id,
                     name: team.name,
                     colour: team.colour,
+                    emblem: emblemFor(team).id,
                     isNpc: team.isNpc,
                     baseRaceId: team.baseRaceId,
                     raceIds: team.raceIds,
@@ -116,7 +119,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
         <p className={`mt-2 text-sm ${problems.length ? "text-danger" : "text-ok"}`}>
           {problems.length ? `${problems.length} problem${problems.length === 1 ? "" : "s"} to fix` : "No problems ✓"}
         </p>
-        <Link href={`/dm/games/${gameId}/ruleset`} className="mt-3 inline-block text-accent underline">
+        <Link href={`/dm/games/${gameId}/ruleset`} className="mt-3 inline-block text-link underline">
           Edit the ruleset →
         </Link>
       </Card>

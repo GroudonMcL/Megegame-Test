@@ -42,6 +42,8 @@ export interface ViewTeam {
   name: string;
   colour: string;
   isNpc: boolean;
+  /** Team emblem ID (src/components/icons/emblems.ts); empty = not picked. */
+  emblem?: string;
 }
 
 export interface OwnTeam extends ViewTeam {
@@ -123,7 +125,7 @@ export function buildTeamView(input: TeamViewInput): TeamView {
   for (const reg of regions) if (reg.ownerTeamId) teamIds.add(reg.ownerTeamId);
   for (const u of otherUnits) if (u.ownerTeamId) teamIds.add(u.ownerTeamId);
   teamIds.delete(team.id);
-  const teams = input.teams.filter((t) => teamIds.has(t.id)).map(({ id, name, colour, isNpc }) => ({ id, name, colour, isNpc }));
+  const teams = input.teams.filter((t) => teamIds.has(t.id)).map(({ id, name, colour, isNpc, emblem }) => ({ id, name, colour, isNpc, emblem }));
 
   return {
     team,

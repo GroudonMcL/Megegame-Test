@@ -257,8 +257,8 @@ function SrdBrowser({ search, fetchMonster, onAdd, onClose }: { search: SrdSearc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Add from the SRD">
-      <div className="w-full max-w-5xl rounded-xl border border-border bg-card p-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-overlay p-4" role="dialog" aria-modal="true" aria-label="Add from the SRD">
+      <div className="w-full max-w-5xl glass rounded-xl border border-border p-4 shadow-xl">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Add a creature from the SRD 5.2</h3>
           <button type="button" className="rounded-md border border-border px-3 py-1 text-sm" onClick={onClose}>
@@ -381,7 +381,7 @@ export function CreaturesEditor({ ruleset, version, save, search, fetchMonster }
       renderDetail={(item, onChange, ctx) => <CreatureDetail item={item as Creature} onChange={(v) => onChange(v as any)} ctx={ctx} />}
       extraToolbar={(add) => (
         <>
-          <button type="button" className="rounded-md border border-accent px-2 py-1 text-xs text-accent" onClick={() => setBrowsing(true)}>
+          <button type="button" className="rounded-md border border-accent px-2 py-1 text-xs text-link" onClick={() => setBrowsing(true)}>
             + From SRD…
           </button>
           {browsing && (
