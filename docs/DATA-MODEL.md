@@ -10,7 +10,7 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | Part | What it is |
 |---|---|
 | `meta` | name, description, terminology map (rename "region" → "Province"…), theme colour, credits |
-| `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat, CR → cost table |
+| `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat (round limit, unit width by size, retreat threshold, odds runs), CR → cost table |
 | `resources` | e.g. Gold, Food, Growth |
 | `terrainTypes` | what a connection between regions can be (Normal, Difficult…) |
 | `settlementTiers` | Outpost → Settlement → City → Capital |
@@ -44,7 +44,7 @@ Building effects apply to the owning team's units in that region.
 
 | Table | Holds |
 |---|---|
-| `games` | name, status, preset, current round |
+| `games` | name, status, preset, current round, map image, the public Discord webhook |
 | `teams` | name, colour, join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
 | `assets` | uploaded files (the map image), stored in the database and served only through the app |
@@ -53,8 +53,9 @@ Building effects apply to the owning team's units in that region.
 | `units` | instances of a creature: owner (none = wild), race, archetype, academy bonus, augments, HP, location, miles used this round, status, per-round ability uses |
 | `inventory` | items per team |
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
-| `rounds` | round lifecycle, deadline, published snapshot |
-| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional), slot, the order a conditional backs up, action, inputs, notes |
+| `trades` | trades between teams: what each side gives, status (proposed, accepted, declined, cancelled, executed, failed), and the result |
+| `rounds` | round lifecycle (open → locked → resolving → review → published), deadline, the state when resolution started (what players see until publishing), the end-of-round results, and the published snapshot; when the deadline reminder was sent |
+| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional), slot, the order a conditional backs up, action, inputs, notes, and during resolution its status and outcome (the app's proposal, rolls, the DM's text and adjustments) |
 | `team_round_orders` | per team per round: who submitted the orders and when, and a version number so two teammates can't overwrite each other |
 | `roll_log` | every roll: expression, seed, breakdown, total, table result, overrides |
 | `audit_log` | every state change with before/after, for history and undo |

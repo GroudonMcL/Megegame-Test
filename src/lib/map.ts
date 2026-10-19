@@ -12,6 +12,17 @@ export interface MapImage {
   height: number;
 }
 
+export async function loadMapImage(gameId: string): Promise<MapImage | null> {
+  const [game] = await db.select({ mapAssetId: schema.games.mapAssetId }).from(schema.games).where(eq(schema.games.id, gameId)).limit(1);
+  if (!game?.mapAssetId) return null;
+  const [image] = await db
+    .select({ id: schema.assets.id, width: schema.assets.width, height: schema.assets.height })
+    .from(schema.assets)
+    .where(eq(schema.assets.id, game.mapAssetId))
+    .limit(1);
+  return image?.width && image.height ? { id: image.id, width: image.width, height: image.height } : null;
+}
+
 /** Everything the DM's map screens need for one game. */
 export async function loadMapState(gameId: string) {
   const [game] = await db.select().from(schema.games).where(eq(schema.games.id, gameId)).limit(1);

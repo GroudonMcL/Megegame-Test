@@ -239,6 +239,8 @@ export const Requirement = z.discriminatedUnion("type", [
 export const ActionInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("unit"), label: z.string().default("Unit"), multiple: z.boolean().default(false), tag: z.string().optional() }),
   z.object({ type: z.literal("region"), label: z.string().default("Region") }),
+  /** Another team's unit or a monster the team can see, in the same region as the acting units. */
+  z.object({ type: z.literal("targetUnit"), label: z.string().default("Target"), monstersOnly: z.boolean().default(false) }),
   z.object({ type: z.literal("path"), label: z.string().default("Path") }),
   z.object({ type: z.literal("creature"), label: z.string().default("Unit type") }),
   z.object({ type: z.literal("race"), label: z.string().default("Race") }),
@@ -282,7 +284,9 @@ export const TableResult = z.discriminatedUnion("type", [
   z.object({ type: z.literal("gainItem"), itemId: Id, qty: DiceExpr.default("1") }),
   z.object({ type: z.literal("rollTable"), tableId: Id, times: z.number().int().positive().default(1), ignore: z.array(z.number().int()).default([]) }),
   z.object({ type: z.literal("damageActor"), dice: DiceExpr }),
-  z.object({ type: z.literal("spawnMonster"), creatureId: Id.nullable().default(null) }),
+  z.object({ type: z.literal("spawnMonster"), creatureId: Id.nullable().default(null), count: DiceExpr.default("1") }),
+  /** Survivors join: the team can recruit units of this race from now on. */
+  z.object({ type: z.literal("gainRace"), raceId: Id }),
   z.object({ type: z.literal("revealConnection") }),
   z.object({ type: z.literal("revealRegion") }),
   z.object({ type: z.literal("addDeposit"), note: z.string().default("") }),
@@ -300,6 +304,11 @@ export const RollTable = z.object({
   modifierNote: z.string().default(""),
   /** Flat bonus per tier of a building in the region (e.g. +1 per Hunter Post tier). */
   buildingBonus: z.object({ buildingId: Id, perTier: z.number() }).nullable().default(null),
+  /** Deficit tables: the resource this table is for (null = any), and the bonus per unit of deficit. */
+  deficitResourceId: Id.nullable().default(null),
+  deficitPerUnit: z.number().default(0),
+  /** +1 for every this many regions the team owns (e.g. a turn-event table: +1 per 6 regions). */
+  perRegionsBonus: z.number().int().positive().nullable().default(null),
   bands: z
     .array(
       z.object({
@@ -323,6 +332,17 @@ export const CrCostRow = z.object({
   upkeep: ResourceAmounts,
 });
 
+/** Footprint = the creature's D&D space × 6, with Small half of Medium. */
+export const DEFAULT_FOOTPRINTS = { tiny: 7.5, small: 15, medium: 30, large: 60, huge: 90, gargantuan: 120 };
+const FootprintFt = z.object({
+  tiny: z.number().positive(),
+  small: z.number().positive(),
+  medium: z.number().positive(),
+  large: z.number().positive(),
+  huge: z.number().positive(),
+  gargantuan: z.number().positive(),
+});
+
 export const Settings = z.object({
   actionSlots: z.number().int().min(1).max(20).default(6),
   conditionalLimit: z.number().int().min(0).default(2),
@@ -340,16 +360,23 @@ export const Settings = z.object({
   combat: z
     .object({
       maxRounds: z.number().int().positive().default(10),
-      unitFootprintFt: z.number().positive().default(30),
+      /** Width in feet that one unit of each size takes up, for area effects. */
+      footprintFt: FootprintFt.default(DEFAULT_FOOTPRINTS),
       usesReset: z.enum(["round", "combat"]).default("round"),
+      /** Team units below this fraction of their max HP retreat (monsters fight on). 0 = never. */
+      retreatBelow: z.number().min(0).max(1).default(0.25),
+      /** Fights simulated for "Show odds". */
+      oddsRuns: z.number().int().min(10).max(2000).default(200),
     })
-    .default({ maxRounds: 10, unitFootprintFt: 30, usesReset: "round" }),
+    .default({ maxRounds: 10, footprintFt: DEFAULT_FOOTPRINTS, usesReset: "round", retreatBelow: 0.25, oddsRuns: 200 }),
   /** Recruit cost and upkeep by Challenge Rating; first matching row wins. */
   crCosts: z.array(CrCostRow).default([]),
   /** Demolish refund fraction. */
   demolishRefund: z.number().min(0).max(1).default(0.5),
   /** Free actions each unit may take per round (null = no limit). */
   freeActionsPerUnit: z.number().int().min(0).nullable().default(null),
+  /** Roll the event table at the end of each round: for nobody (the DM picks) or every team. */
+  roundEvents: z.enum(["off", "all"]).default("off"),
   fog: z
     .object({
       /** Regions seen before stay on a team's map, dimmed, with what the team last saw. */

@@ -2,15 +2,17 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { audit } from "@/lib/audit";
+import { appOrigin, notifyReminder, notifyRoundOpened } from "@/lib/discord";
 import { requireDm } from "@/lib/session";
 import { setViewAs } from "@/lib/viewer";
 
 // Round controls for Phase 4: open the round, set its deadline, lock and
-// reopen orders. Resolving and publishing come in Phase 5.
+// reopen orders. Resolving and publishing are in src/lib/resolution.ts.
 
 const Ids = z.object({ gameId: z.uuid() });
 const Deadline = z.union([z.literal(""), z.iso.datetime({ offset: true })]);
@@ -36,7 +38,7 @@ export async function openRoundAction(formData: FormData) {
   const { gameId } = Ids.parse({ gameId: formData.get("gameId") });
   const deadline = Deadline.parse(formData.get("deadline") ?? "");
   const { game, round } = await currentRound(gameId);
-  // Opening the next round needs this one published (Phase 5).
+  // Opening the next round needs this one published.
   if (round && round.status !== "published") return;
   const number = game.currentRound + 1;
   await db.transaction(async (tx) => {
@@ -47,7 +49,17 @@ export async function openRoundAction(formData: FormData) {
     await tx.update(schema.games).set({ currentRound: number, status: "running" }).where(eq(schema.games.id, gameId));
     await audit(tx, { gameId, actor: "dm", kind: "round.open", description: `Opened round ${number}`, after: row });
   });
+  const origin = await appOrigin();
+  after(() => notifyRoundOpened(gameId, origin));
   done(gameId);
+}
+
+/** Posts a reminder to the game's Discord channel, naming teams that haven't submitted. */
+export async function remindTeamsAction(_prev: { ok: boolean; message: string } | null, formData: FormData) {
+  await requireDm();
+  const { gameId } = Ids.parse({ gameId: formData.get("gameId") });
+  const r = await notifyReminder(gameId, await appOrigin());
+  return r.ok ? { ok: true, message: "Reminder posted to Discord." } : { ok: false, message: r.error };
 }
 
 export async function setDeadlineAction(formData: FormData) {
@@ -56,7 +68,8 @@ export async function setDeadlineAction(formData: FormData) {
   const deadline = Deadline.parse(formData.get("deadline") ?? "");
   const { round } = await currentRound(gameId);
   if (!round) return;
-  await db.update(schema.rounds).set({ deadline: deadline ? new Date(deadline) : null }).where(eq(schema.rounds.id, round.id));
+  // A new deadline gets its own "due in 24 hours" reminder.
+  await db.update(schema.rounds).set({ deadline: deadline ? new Date(deadline) : null, reminderSentAt: null }).where(eq(schema.rounds.id, round.id));
   await audit(db, { gameId, actor: "dm", kind: "round.deadline", description: `Round ${round.number} deadline ${deadline ? `set to ${deadline}` : "removed"}` });
   done(gameId);
 }

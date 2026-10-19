@@ -11,7 +11,7 @@ export function PlayerMapScreen({ view, rules, mapImage }: { view: TeamView; rul
   const [selected, setSelected] = useState<string | null>(null);
   const region = view.regions.find((r) => r.id === selected);
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_20rem]">
+    <div className="grid gap-3 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0">
       <div className="space-y-2">
         <TeamMap view={view} rules={rules} mapImage={mapImage} selectedId={selected} onRegionClick={setSelected} className="h-[60vh] lg:h-[72vh]" />
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">

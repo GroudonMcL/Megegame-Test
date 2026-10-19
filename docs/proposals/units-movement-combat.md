@@ -1,6 +1,6 @@
 # Proposal: stat blocks, map movement and combat
 
-Status: **decided** (answers below). The stat-block format is built in Phase 2. The combat engine waits for Phase 6, where the area-effect formula gets a final check with worked examples.
+Status: **decided** (answers below). Stat blocks were built in Phase 2 and the combat engine in Phase 6. The full combat rules as built are in [COMBAT.md](../COMBAT.md).
 
 ## Decisions
 
@@ -10,7 +10,10 @@ Status: **decided** (answers below). The stat-block format is built in Phase 2. 
 | Q2 | Utterdark player units | **Replace with SRD creatures.** Recruit cost and upkeep come from the creature's **Challenge Rating** via a DM-editable CR → cost table, and each unit type can override it. |
 | Q3 | "Removed from combat" effects | Initial failed save: fail by 1–4 → −50% damage, 5–9 → −75%, 10+ or natural 1 → −100%. **While the effect lasts, the unit re-saves each turn.** A success ends it. A failure *multiplies* the remaining penalty by the same scale (×0.5 / ×0.75 / ×1), because a unit is many creatures and some shake it off. Example: −50%, then fail by 1 again → −25%. It also ends when its duration runs out. |
 | Q4 | Dice | **Rolled** with stored seeds, plus a **"Show odds"** button (run the fight many times). |
-| Q5 | Area effects | One unit occupies a **30 × 30 ft** footprint. An area that covers half a unit (15 ft) deals **+50%** damage to it, and one covering the whole unit (30 ft) deals **+100%**. Bigger areas also hit **additional units** for a share of the damage. *Exact formula to be confirmed with examples in Phase 6.* Stat blocks store each action's area shape and size from now on. |
+| Q5 | Area effects | **By width.** A unit's width depends on its size: Tiny 7.5 ft, Small 15, Medium 30, Large 60, Huge 90, Gargantuan 120 (Small is half of Medium). The first unit takes +(area width ÷ its width) damage, at most +100%; the leftover width hits further units, normal damage for each one fully covered and a share for a partly covered one. Lines hit units one after another at normal damage with no bonus. *(Decided in Phase 6.)* |
+| Q7 | Targeting | **Automatic rules plus focus targets.** Attack and Capture orders focus their target; the DM can pin a focus per side. *(Phase 6)* |
+| Q8 | Who fights whom | **Monsters attack units that move in; teams fight each other only through an Attack order.** *(Phase 6)* |
+| Q9 | Ending a fight | **Team units retreat below 25% HP** (to where they came from); monsters fight to the death; also ends when a side is gone or after the round limit. *(Phase 6)* |
 | Q6 | "X per day" uses | Reset **each game round**. |
 | — | Movement | Feet → miles per day (D&D overland travel). Connections have miles + terrain. Difficult terrain is bypassed by flyers and by groups travelling with a Natural Explorer (e.g. Ranger). |
 | — | Missing Utterdark data | The DM will share the DM sheet (roll tables, races, augments, recipes, settlement Growth). Until then the preset uses clearly marked placeholders. |

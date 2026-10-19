@@ -52,6 +52,8 @@ export interface MapCanvasProps {
   className?: string;
   /** Changes when the parent asks to reset the view to fit the map. */
   fitKey?: number;
+  /** Start zoomed to the nodes (e.g. the regions a team knows) rather than the whole map. */
+  fitToNodes?: boolean;
 }
 
 interface View {
@@ -89,13 +91,30 @@ export function MapCanvas(props: MapCanvasProps) {
     return () => ro.disconnect();
   }, []);
 
-  const fitView = useCallback((): View => {
-    const aspect = size.w / size.h;
-    const w = Math.max(width, height * aspect);
-    const h = w / aspect;
-    return { x: (width - w) / 2, y: (height - h) / 2, w, h };
-  }, [width, height, size.w, size.h]);
-  const fit = () => setView(fitView());
+  const fitToNodes = props.fitToNodes && props.nodes.length > 0;
+  const nodes = props.nodes;
+  const fitView = useCallback(
+    (whole = false): View => {
+      const aspect = size.w / size.h;
+      // The box to show: the whole map, or the nodes with a margin (never closer than a fifth of the map).
+      let box = { x: 0, y: 0, w: width, h: height };
+      if (fitToNodes && !whole) {
+        const xs = nodes.map((n) => n.x * width);
+        const ys = nodes.map((n) => n.y * height);
+        const min = Math.max(width, height) / 5;
+        const bw = Math.max(Math.max(...xs) - Math.min(...xs), min) * 1.3;
+        const bh = Math.max(Math.max(...ys) - Math.min(...ys), min) * 1.3;
+        const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+        const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+        box = { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
+      }
+      const w = Math.max(box.w, box.h * aspect);
+      const h = w / aspect;
+      return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
+    },
+    [width, height, size.w, size.h, fitToNodes, nodes],
+  );
+  const fit = (whole = false) => setView(fitView(whole));
 
   // Re-fit whenever the map or the container changes size (or the parent asks).
   const fitFor = `${width}:${height}:${size.w}:${size.h}:${props.fitKey ?? 0}`;
@@ -311,9 +330,14 @@ export function MapCanvas(props: MapCanvasProps) {
         <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-sm shadow" onClick={() => zoomAt(size.w / 2 + svgRef.current!.getBoundingClientRect().left, size.h / 2 + svgRef.current!.getBoundingClientRect().top, 1.4)} aria-label="Zoom out">
           −
         </button>
-        <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow" onClick={fit}>
+        <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow" onClick={() => fit()}>
           Fit
         </button>
+        {fitToNodes && (
+          <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow" onClick={() => fit(true)}>
+            Whole map
+          </button>
+        )}
       </div>
     </div>
   );

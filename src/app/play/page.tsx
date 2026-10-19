@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Card } from "@/components/ui";
 import { Countdown } from "@/components/play/Countdown";
 import { EconomyTable } from "@/components/play/EconomyTable";
+import { RoundResults } from "@/components/play/RoundResults";
+import { loadTeamResults } from "@/lib/results";
 import { validateOrders } from "@/engine/orders/validate";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
@@ -9,14 +11,17 @@ import { requireViewer } from "@/lib/viewer";
 
 export default async function Dashboard() {
   const viewer = await requireViewer();
-  const { view, rules, round, orderState, orders } = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
+  const [{ view, rules, round, orderState, orders }, [last]] = await Promise.all([
+    loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm }),
+    loadTeamResults(viewer.gameId, viewer.teamId, { limit: 1 }),
+  ]);
   const check = validateOrders(rules, view, orders);
   const open = ordersOpen(round);
   const units = view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status));
   const owned = view.regions.filter((r) => r.ownerTeamId === view.team.id);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_22rem] [&>*]:min-w-0">
       <div className="space-y-4">
         <Card>
           <h2 className="text-lg font-medium">Resources</h2>
@@ -43,12 +48,21 @@ export default async function Dashboard() {
               <EconomyTable economy={check.economy} resources={rules.resources} />
             </div>
           </details>
-          <p className="mt-2 text-xs text-muted">Projected from your current orders, income and upkeep. New buildings and units start counting next round.</p>
+          <p className="mt-2 text-xs text-muted">Projected from your orders, income and upkeep. Buildings and units your orders add count from this round.</p>
         </Card>
 
         <Card>
-          <h2 className="text-lg font-medium">Last round&apos;s results</h2>
-          <p className="mt-2 text-sm text-muted">Results appear here once the DM publishes a round.</p>
+          <h2 className="text-lg font-medium">{last ? `Round ${last.number} results` : "Last round's results"}</h2>
+          {last ? (
+            <div className="mt-3">
+              <RoundResults result={last} rules={rules} />
+              <Link href="/play/results" className="mt-2 inline-block text-sm text-accent underline">
+                All results →
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted">Results appear here once the DM publishes a round.</p>
+          )}
         </Card>
       </div>
 

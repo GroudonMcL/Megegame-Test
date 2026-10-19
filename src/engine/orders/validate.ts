@@ -108,6 +108,8 @@ interface Sim {
   inventory: Record<string, number>;
   augments: Record<string, string[]>;
   heroesRecruited: number;
+  /** Units recruited by these orders, for the upkeep projection. */
+  recruits: WorldUnit[];
   settlementsBuilt: Record<string, number>;
   /** "actionId", "actionId:free:unitId", "actionId:numbered:unitId"… → uses so far. */
   counts: Record<string, number>;
@@ -208,6 +210,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     inventory: { ...view.inventory },
     augments: Object.fromEntries(view.ownUnits.map((u) => [u.id, [...u.augmentIds]])),
     heroesRecruited: 0,
+    recruits: [],
     settlementsBuilt: {},
     counts: {},
     freePerUnit: {},
@@ -291,6 +294,17 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     const simRegion = regionId ? s.regions[regionId] : undefined;
     if (asString(value("region")) && !region) problem("You don't know that region.");
     if (region && region.state !== "visible" && action.handler !== "move") problem(`You can't see ${regionLabel(region)} right now.`);
+
+    const targetInput = action.inputs.find((x) => x.type === "targetUnit");
+    const targetId = asString(value("targetUnit"));
+    if (targetInput?.type === "targetUnit" && targetId) {
+      const target = view.otherUnits.find((u) => u.id === targetId);
+      if (!target || target.dead) problem("You can't see that target.");
+      else {
+        if (targetInput.monstersOnly && target.ownerTeamId !== null) problem("That target isn't a monster.");
+        for (const u of units) if (s.unitRegion[u.id] !== target.regionId) problem(`${unitName(u.id)} isn't in the same region as the target.`);
+      }
+    }
 
     const hostilesIn = (id: string) => view.otherUnits.some((u) => u.regionId === id && !u.dead);
     const ownUnitsIn = (id: string) => view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && s.unitRegion[u.id] === id && !s.disbanded.includes(u.id));
@@ -494,6 +508,22 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           problem("Choose: Archetype.");
         }
         addTo(cost, creatureCosts(creature, r).cost);
+        s.recruits.push({
+          id: `recruit-${d.id}`,
+          ownerTeamId: teamId,
+          creatureId: creature.id,
+          name: `New ${creature.statBlock.name}`,
+          raceId,
+          archetypeId: archetype?.id ?? null,
+          academyBonus: {},
+          augmentIds: [],
+          hp: 1,
+          regionId: regionId ?? null,
+          milesUsed: 0,
+          status: "active",
+          isLeader: false,
+          usesSpent: {},
+        });
         if (creature.category === "hero") {
           const heroes = view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && creatureOf(u)?.category === "hero").length + s.heroesRecruited + 1;
           let limit = 0;
@@ -775,11 +805,14 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     }
   }
 
+  // The end of round counts what the orders build, recruit and disband, so the projection does too.
   const economy = projectEconomy(r, {
     teamId,
     resources: view.team.resources,
-    regions: view.regions.filter((x) => x.state === "visible"),
-    units: view.ownUnits,
+    regions: view.regions
+      .filter((x) => x.state === "visible")
+      .map((x) => ({ ...x, ownerTeamId: sim.regions[x.id].ownerTeamId, settlementTierId: sim.regions[x.id].settlementTierId, buildings: sim.regions[x.id].buildings })),
+    units: [...view.ownUnits.filter((u) => !sim.disbanded.includes(u.id)), ...sim.recruits],
     adhoc,
   });
 

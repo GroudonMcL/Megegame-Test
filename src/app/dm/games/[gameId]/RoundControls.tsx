@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui";
-import { lockRoundAction, openRoundAction, reopenRoundAction, setDeadlineAction } from "./rounds";
+import { lockRoundAction, openRoundAction, remindTeamsAction, reopenRoundAction, setDeadlineAction } from "./rounds";
 
 /** A deadline picker in the DM's local time, sent to the server as an exact moment. */
 function DeadlineInput({ initial }: { initial: string | null }) {
@@ -31,6 +31,16 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
       </form>
     );
   }
+  if (round.status === "resolving" || round.status === "review") {
+    return (
+      <p className="mt-3 text-sm">
+        Being resolved.{" "}
+        <a href={`/dm/games/${gameId}/resolve`} className="text-accent underline">
+          Go to the resolution queue →
+        </a>
+      </p>
+    );
+  }
   return (
     <div className="mt-3 space-y-2">
       <form action={setDeadlineAction} className="flex flex-wrap items-center gap-2">
@@ -46,18 +56,41 @@ export function RoundControls({ gameId, round }: { gameId: string; round: { numb
           <input type="hidden" name="gameId" value={gameId} />
           <Button type="submit" variant="secondary" title="Players can no longer change their orders">
             Lock orders now
-          </Button>
+          </Button>{" "}
+          <a href={`/dm/games/${gameId}/resolve`} className="ml-2 text-sm text-accent underline">
+            Resolve the round →
+          </a>
         </form>
       )}
+      {round.status === "open" && <RemindButton gameId={gameId} />}
       {round.status === "locked" && (
         <form action={reopenRoundAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="gameId" value={gameId} />
           <Button type="submit" variant="secondary">
             Reopen orders
           </Button>
-          <span className="text-xs text-muted">Resolving the round comes in Phase 5.</span>
+          <a href={`/dm/games/${gameId}/resolve`} className="text-sm text-accent underline">
+            Resolve the round →
+          </a>
         </form>
       )}
     </div>
+  );
+}
+
+function RemindButton({ gameId }: { gameId: string }) {
+  const [state, action, pending] = useActionState(remindTeamsAction, null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="gameId" value={gameId} />
+      <Button type="submit" variant="secondary" disabled={pending} title="Posts to the game's Discord channel, naming the teams that haven't submitted">
+        Remind teams on Discord
+      </Button>
+      {state && (
+        <span role="status" className={`text-sm ${state.ok ? "text-ok" : "text-danger"}`}>
+          {state.message}
+        </span>
+      )}
+    </form>
   );
 }

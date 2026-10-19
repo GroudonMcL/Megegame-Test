@@ -190,7 +190,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
       </Section>
 
       <Section id="actions" title="Actions">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
           {rules.actionTypes.map((a) => (
             <div key={a.id} className="rounded-lg border border-border p-3 text-sm">
               <div className="flex flex-wrap items-baseline gap-2">
@@ -232,7 +232,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
       </Section>
 
       <Section id="archetypes" title="Archetypes">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
           {rules.archetypes.map((a) => (
             <div key={a.id} className="rounded-lg border border-border p-3 text-sm">
               <div className="flex flex-wrap items-baseline gap-2">

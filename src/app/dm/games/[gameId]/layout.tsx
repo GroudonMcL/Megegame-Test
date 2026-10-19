@@ -25,9 +25,14 @@ export default async function GameLayout({ children, params }: LayoutProps<"/dm/
         className="mt-3 border-b border-border pb-2"
         links={[
           { href: base, label: "Teams", exact: true },
+          { href: `${base}/resolve`, label: "Resolve round" },
           { href: `${base}/world`, label: "World" },
           { href: `${base}/map`, label: "Map editor" },
           { href: `${base}/ruleset`, label: "Ruleset" },
+          { href: `${base}/diplomacy`, label: "Diplomacy" },
+          { href: `${base}/history`, label: "History" },
+          { href: `${base}/settings`, label: "Settings & export" },
+          { href: "/help/dm", label: "Guide" },
         ]}
       />
       <div className="mt-4">{children}</div>

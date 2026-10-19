@@ -1,0 +1,211 @@
+import type { Metadata } from "next";
+import { B, Guide, K } from "../Guide";
+
+export const metadata: Metadata = { title: "DM guide" };
+
+export default function DmGuide() {
+  return (
+    <Guide
+      title="DM guide"
+      other={{ href: "/help/player", label: "Player guide" }}
+      intro={
+        <p>
+          Setting up a game, running each round and keeping a routine round of six teams well under an hour. Everything here happens under <B>DM login</B> on the home page. Your
+          players have their own <a href="/help/player" className="text-accent underline">player guide</a>.
+        </p>
+      }
+      sections={[
+        {
+          id: "setup",
+          title: "Setting up a game",
+          body: (
+            <ol>
+              <li>
+                On the DM dashboard, give the game a name, choose what to <B>Start from</B> (a preset such as Utterdark, or Blank) and press <B>Create game</B>. The game gets its own copy of
+                the rules, so changing one game never changes another.
+              </li>
+              <li>
+                <B>Ruleset</B>: check and edit resources, buildings, units, actions, items, recipes, roll tables and game settings. Problems (like an action pointing at a table that
+                doesn&apos;t exist) are listed on the Teams page and the Ruleset page. <B>Import / export</B> saves or loads the whole ruleset as a file.
+              </li>
+              <li>
+                <B>Map editor</B>: <B>Upload map image</B>, then <B>Add region</B> and click the image to place regions, and <B>Connect</B> to link neighbours (click one region, then the
+                other). In <B>Select / move</B>, click a region to name it, set its owner, settlement, buildings, deposits, ruins and hazards, or mark it hidden until found. You can also
+                import regions from a spreadsheet.
+              </li>
+              <li>
+                <B>Teams</B>: add each team. Open <B>Edit team</B> to set its base race, other races, starting resources and secret objectives. Tick <B>DM-run (NPC)</B> for factions you play
+                yourself. Give each team its <B>join code</B>; <B>New code</B> replaces it and signs everyone on that team out.
+              </li>
+              <li>
+                <B>World</B>: drag units between regions, or click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
+                race or notes.
+              </li>
+              <li>
+                <B>Settings &amp; export</B>: paste Discord webhooks for the public channel and each team&apos;s private channel, then <B>Send a test message</B>.
+              </li>
+              <li>
+                Press <B>View as team</B> on the Teams page to check what a team will see. It never changes what the team remembers.
+              </li>
+            </ol>
+          ),
+        },
+        {
+          id: "round",
+          title: "Running a round",
+          body: (
+            <>
+              <ol>
+                <li>
+                  On <B>Teams</B>, set a deadline and press <B>Open round</B>. Discord gets a message. The page shows who has submitted; <B>Remind teams on Discord</B> nudges the rest.
+                </li>
+                <li>
+                  At the deadline (or whenever you like), go to <B>Resolve round</B> and press <B>Start resolving</B>. This locks orders, and players keep seeing the world as it is now until
+                  you publish.
+                </li>
+                <li>Work through the queue, one action at a time (below).</li>
+                <li>
+                  <B>Go to end of round</B>: production, upkeep, income, per-round rolls, hazards, deficits, random events and trades for every team. Adjust any numbers, untick teams that
+                  shouldn&apos;t get an event, and press <B>Apply end of round</B>.
+                </li>
+                <li>
+                  <B>Publish</B>. Teams see their results, Discord announces it, and you can open the next round.
+                </li>
+              </ol>
+              <p>
+                <B>↶ Undo last</B> takes back the most recent decision, all the way back to the start of resolving. Use it freely.
+              </p>
+            </>
+          ),
+        },
+        {
+          id: "queue",
+          title: "The resolution queue",
+          body: (
+            <>
+              <p>
+                Orders are grouped by action number: every team&apos;s action 1, then action 2, and so on, with free actions and backups in their places. Press <B>Prepare action 1</B>: the
+                app checks each order against the world as it is now, moves units, rolls dice, looks up tables, runs fights and drafts the outcome text.
+              </p>
+              <ul>
+                <li>
+                  <B>Ready</B>: nothing left to decide. <B>Accept all ready</B> takes them all at once.
+                </li>
+                <li>
+                  <B>Needs review</B>: there&apos;s a roll or a result in words; read it, then accept.
+                </li>
+                <li>
+                  <B>Needs DM</B>: an improvised or manual action. Write the outcome and add any resources.
+                </li>
+                <li>
+                  <B>Can&apos;t happen</B>: the order is no longer possible (the unit died, the money ran out). Mark it failed, which lets a backup order take over, or skip it.
+                </li>
+              </ul>
+              <p>
+                For each order you can edit the outcome text, add or take away resources, hide the rolls from the team, <B>Re-roll</B>, <B>Mark failed</B> or <B>Skip</B>. A ⚑ flag means
+                orders meet: teams moving into the same region, targeting each other, or ending up next to monsters. Flagged orders get the same <B>scene</B> number so you can handle them
+                together.
+              </p>
+              <p>
+                Use the <B>Team</B>, <B>Action</B> and <B>Only flagged</B> filters to focus. <B>Show decided orders</B> brings back the ones you&apos;ve done.
+              </p>
+            </>
+          ),
+        },
+        {
+          id: "keys",
+          title: "Keyboard shortcuts",
+          body: (
+            <>
+              <p>On the Resolve page (not while you&apos;re typing in a box):</p>
+              <ul>
+                <li>
+                  <K>j</K> / <K>k</K>: next / previous order (or click an order to highlight it)
+                </li>
+                <li>
+                  <K>a</K>: accept the highlighted order and move to the next
+                </li>
+                <li>
+                  <K>f</K>: mark it failed; <K>s</K>: skip it; <K>r</K>: re-roll it
+                </li>
+                <li>
+                  <K>e</K>: edit its outcome text; <K>Esc</K> leaves the box
+                </li>
+                <li>
+                  <K>Shift</K>+<K>A</K>: accept all ready orders in this action; <K>p</K>: prepare the next action
+                </li>
+                <li>
+                  <K>?</K>: show the list on the page
+                </li>
+              </ul>
+              <p>
+                A quick round: <K>p</K>, <K>Shift</K>+<K>A</K>, then <K>j</K> and <K>a</K> through whatever&apos;s left; repeat for each action.
+              </p>
+            </>
+          ),
+        },
+        {
+          id: "fights",
+          title: "Fights",
+          body: (
+            <>
+              <p>
+                When an order leads to a fight, the order shows a fight card: who took part, HP before and after, the winner and the full log. Fights use the units&apos; stat blocks.
+                Area spells hit more units the bigger the area is compared to each unit&apos;s size, and units retreat when badly hurt. Anything the simulator can&apos;t handle is listed under
+                <B> Not automated</B>, so check whether it would change the result.
+              </p>
+              <ul>
+                <li>
+                  <B>… focus on</B>: tell a side which enemy to attack first.
+                </li>
+                <li>
+                  <B>edit results by hand</B>: set any unit&apos;s final HP or outcome yourself.
+                </li>
+                <li>
+                  <B>resolve by hand</B>: skip the simulation and write the result.
+                </li>
+                <li>
+                  <B>show the log to the teams</B>: share the full fight log, or keep it to yourself.
+                </li>
+                <li>
+                  Press <B>Apply these settings</B> after changing any of these. <B>Show odds</B> runs the fight many times to show how likely each result is.
+                </li>
+              </ul>
+            </>
+          ),
+        },
+        {
+          id: "between",
+          title: "Between rounds",
+          body: (
+            <ul>
+              <li>
+                <B>Diplomacy</B>: who has met whom (teams meet automatically when their units see each other), and every trade. You can mark teams as met by hand, or cancel a trade.
+              </li>
+              <li>
+                <B>History</B>: charts of each resource for every team, and every past round&apos;s orders and results.
+              </li>
+              <li>
+                <B>Settings &amp; export</B>: download the whole game as a backup file, or spreadsheets of teams, units, regions, orders, rolls and resources. The backup includes join codes,
+                so keep it private.
+              </li>
+              <li>To change a team&apos;s resources or races outside a round, use <B>Edit team</B> on the Teams page. Every change is recorded in the game&apos;s log.</li>
+            </ul>
+          ),
+        },
+        {
+          id: "secrets",
+          title: "What players can and can't see",
+          body: (
+            <ul>
+              <li>A team sees the regions it owns, regions where it has units, and regions its scouts and watchtowers can see. Regions it saw before stay on its map, dimmed, as they were.</li>
+              <li>Other factions&apos; units show only their type and owner, never HP or names. Hidden units stay invisible until spotted.</li>
+              <li>Players never see roll tables&apos; contents, the monster library (except monsters they&apos;ve met), other teams&apos; resources, or your notes.</li>
+              <li>The map image is fogged on the server, so nothing hidden ever reaches a player&apos;s device.</li>
+            </ul>
+          ),
+        },
+      ]}
+    />
+  );
+}
