@@ -40,11 +40,16 @@ describe("quick actions", () => {
     expect(list.some((a) => a.kind === "conditional")).toBe(false);
   });
 
-  it("leaves out actions that need a tag the unit doesn't have", () => {
-    const plain = quickActions(rules, { kind: "unit", unit: unit(tagged("Stealthy", false).id) }).map((a) => a.id);
+  it("offers any unit the preset's actions (none need a particular kind of unit)", () => {
+    expect(quickActions(rules, { kind: "unit", unit: unit(tagged("Stealthy", false).id) }).map((a) => a.id)).toContain("move-stealth");
+  });
+
+  it("leaves out actions that need a tag the unit doesn't have, when a DM adds one", () => {
+    const strict = { ...rules, actionTypes: rules.actionTypes.map((a) => (a.id === "move-stealth" ? { ...a, inputs: a.inputs.map((i) => (i.type === "unit" ? { ...i, tag: "Stealthy" } : i)) } : a)) };
+    const plain = quickActions(strict, { kind: "unit", unit: unit(tagged("Stealthy", false).id) }).map((a) => a.id);
     expect(plain).not.toContain("move-stealth");
-    const sneaky = rules.creatures.find((c) => unitTags(rules, c, null).includes("Stealthy"));
-    if (sneaky) expect(quickActions(rules, { kind: "unit", unit: unit(sneaky.id) }).map((a) => a.id)).toContain("move-stealth");
+    const sneaky = strict.creatures.find((c) => unitTags(strict, c, null).includes("Stealthy"));
+    if (sneaky) expect(quickActions(strict, { kind: "unit", unit: unit(sneaky.id) }).map((a) => a.id)).toContain("move-stealth");
   });
 
   it("offers monster-only attacks against wild monsters but not against teams", () => {

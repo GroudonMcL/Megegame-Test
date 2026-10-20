@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { Map3dInfo } from "@/engine/world/mapLook";
 import { MapCanvas, type MapCanvasProps } from "./MapCanvas";
 import type { Map3DExtras } from "./Map3D";
+import { TerrainTip, type TerrainTipHandle } from "./TerrainTip";
 import { hasWebGL } from "./three/mapTexture";
 
 // A map that can be shown flat (2D, the default) or as 3D terrain. The choice
@@ -19,6 +20,7 @@ export const Map3D = dynamic(() => import("./Map3D"), {
 
 const MODE_KEY = "megagame.map.mode";
 const SLOW_KEY = "megagame.map.3dSlow";
+const TERRAIN_KEY = "megagame.map.terrain";
 
 const listeners = new Set<() => void>();
 function read(key: string): string | null {
@@ -64,6 +66,15 @@ export function MapSurface({ map3d, three, ...props }: MapCanvasProps & { map3d?
   const mode = useSyncExternalStore(subscribe, () => read(MODE_KEY), () => null);
   const slow = useSyncExternalStore(subscribe, () => read(SLOW_KEY), () => null);
   const [note, setNote] = useState<string | null>(null);
+  // Terrain areas can be hidden (remembered on this device); hovering one shows what it is.
+  const hideTerrain = useSyncExternalStore(subscribe, () => read(TERRAIN_KEY) === "hidden", () => false);
+  const terrain = hideTerrain ? undefined : props.terrain;
+  const tip = useRef<TerrainTipHandle>(null);
+  const pointer = useRef({ x: 0, y: 0 });
+  const onHover = (p: [number, number] | null) => {
+    props.onHover?.(p);
+    tip.current?.show(p, pointer.current);
+  };
   const canDraw3d = useWebGL();
   const is3d = Boolean(map3d) && mode === "3d" && !slow && canDraw3d;
 
@@ -78,11 +89,20 @@ export function MapSurface({ map3d, three, ...props }: MapCanvasProps & { map3d?
   };
 
   return (
-    <div className={`relative ${props.className ?? "h-[70vh]"}`}>
+    <div
+      className={`relative ${props.className ?? "h-[70vh]"}`}
+      onPointerMove={(e) => {
+        const box = e.currentTarget.getBoundingClientRect();
+        pointer.current = { x: e.clientX - box.left, y: e.clientY - box.top };
+      }}
+      onPointerLeave={() => tip.current?.show(null, pointer.current)}
+    >
       {is3d && map3d ? (
         <Map3D
           {...props}
           {...three}
+          terrain={terrain}
+          onHover={onHover}
           className="h-full"
           heightUrl={map3d.heightUrl}
           look={map3d.look}
@@ -92,28 +112,42 @@ export function MapSurface({ map3d, three, ...props }: MapCanvasProps & { map3d?
           }}
         />
       ) : (
-        <MapCanvas {...props} className="h-full" tint={props.tint ?? nightTint(map3d)} />
+        <MapCanvas {...props} terrain={terrain} onHover={onHover} className="h-full" tint={props.tint ?? nightTint(map3d)} />
       )}
-      {map3d && (
+      {terrain && terrain.length > 0 && <TerrainTip ref={tip} terrain={terrain} />}
+      {(Boolean(map3d) || Boolean(props.terrain?.length)) && (
         <div className="absolute right-2 bottom-11 flex flex-col items-end gap-1">
           {note && (
             <p role="status" className="glass max-w-64 rounded-lg border border-border px-2.5 py-1.5 text-xs shadow">
               {note}
             </p>
           )}
-          <div className="glass flex overflow-hidden rounded-lg border border-border text-xs shadow" role="group" aria-label="Map view">
-            {(["2d", "3d"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={(m === "3d") === is3d}
-                className={`px-2.5 py-1 ${(m === "3d") === is3d ? "bg-accent text-accent-foreground" : "hover:bg-raised"}`}
-                onClick={() => choose(m)}
-              >
-                {m.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          {props.terrain && props.terrain.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={!hideTerrain}
+              className={`glass rounded-lg border border-border px-2.5 py-1 text-xs shadow ${hideTerrain ? "hover:bg-raised" : "bg-raised font-medium"}`}
+              onClick={() => write(TERRAIN_KEY, hideTerrain ? null : "hidden")}
+              title="Show or hide terrain areas (hover one to see what it does)"
+            >
+              Terrain: {hideTerrain ? "hidden" : "shown"}
+            </button>
+          )}
+          {map3d && (
+            <div className="glass flex overflow-hidden rounded-lg border border-border text-xs shadow" role="group" aria-label="Map view">
+              {(["2d", "3d"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={(m === "3d") === is3d}
+                  className={`px-2.5 py-1 ${(m === "3d") === is3d ? "bg-accent text-accent-foreground" : "hover:bg-raised"}`}
+                  onClick={() => choose(m)}
+                >
+                  {m.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

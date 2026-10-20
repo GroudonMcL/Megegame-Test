@@ -41,6 +41,12 @@ export interface RouteMap {
   label: (regionId: string) => string;
   /** The ways the mover knows of (borders and links), blocked ones included. */
   connections: WorldConnection[];
+  /**
+   * On a team's view: does the team know every border of this region (it can
+   * see it now)? Between regions it doesn't, a missing border may just be one
+   * it hasn't found, so the route goes on and the DM checks it.
+   */
+  knowsBorders?: (regionId: string) => boolean;
   terrain: TerrainShape[];
   scale: MapScale;
   /**
@@ -195,7 +201,9 @@ export function traceRoute(
           unknown = true;
         } else if (region !== null) {
           const c = pair(region, here);
-          if (!c || c.blocked || c.kind !== "border") {
+          const unsure = map.partial && !c && !(map.knowsBorders?.(region) && map.knowsBorders?.(here));
+          if (unsure) unknown = true;
+          else if (!c || c.blocked || c.kind !== "border") {
             at = entry;
             return done({ blocked: c?.blocked ? `The border between ${map.label(region)} and ${map.label(here)} is blocked` : `There's no way from ${map.label(region)} into ${map.label(here)}` });
           }

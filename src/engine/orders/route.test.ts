@@ -96,6 +96,21 @@ describe("routes", () => {
     expect(traceRoute(rules, map({ connections: [] }), centres.A, "A", [centres.B], group(), "normal").blocked).toMatch(/no way/);
   });
 
+  it("on a team's view, goes on between regions whose borders it doesn't know", () => {
+    // Only A is seen; B and D are unexplored, and nobody has told the team about B—D.
+    const fogged = map({ partial: true, connections: [conn("A", "B")], knowsBorders: (id) => id === "A", scale: { aspect: 1, milesAcross: 20 } });
+    const r = traceRoute(rules, fogged, centres.A, "A", [centres.B, centres.D], group(), "normal");
+    expect(r.blocked).toBeUndefined();
+    expect(r.unknown).toBe(true);
+    expect(r.entered.map((e) => e.regionId)).toEqual(["B", "D"]);
+    // Between two regions it can see, a missing border is real.
+    const seen = map({ partial: true, connections: [conn("A", "B")], knowsBorders: () => true });
+    expect(traceRoute(rules, seen, centres.B, "B", [centres.D], group(), "normal").blocked).toMatch(/no way/);
+    // A border it knows is blocked still stops it.
+    const shut = map({ partial: true, connections: [conn("A", "B"), conn("B", "D", { blocked: true })], knowsBorders: (id) => id === "A" });
+    expect(traceRoute(rules, shut, centres.B, "B", [centres.D], group(), "normal").blocked).toMatch(/blocked/);
+  });
+
   it("crosses through a corner where regions only touch at a point", () => {
     const res = traceRoute(rules, map(), centres.A, "A", [centres.D], group(), "normal");
     expect(res.entered.map((e) => e.regionId)).toEqual(["D"]);

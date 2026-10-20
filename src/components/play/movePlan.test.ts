@@ -74,11 +74,11 @@ const move = rules.actionTypes.find((a) => a.id === "move")!;
 const B: [number, number] = [0.375, 0.125];
 
 describe("planning moves on the map", () => {
-  it("offers the moves every unit can take, normal first", () => {
+  it("offers the moves every unit can take (any unit can move stealthily now), normal first", () => {
     const ids = moveActionsFor(rules, [g1, g2]).map((a) => a.id);
     expect(ids[0]).toBe("move");
     expect(ids).toContain("move-force-march");
-    expect(ids).not.toContain("move-stealth");
+    expect(ids).toContain("move-stealth");
   });
 
   it("makes a filled-in move order, taking a numbered slot", () => {
