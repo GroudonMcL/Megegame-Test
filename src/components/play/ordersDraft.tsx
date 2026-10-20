@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { saveOrdersAction } from "@/app/play/actions";
+import type { TeamNote } from "@/engine/messages";
 import type { OrderDraft } from "@/engine/orders/validate";
 
 // The team's order list for this round, shared by the Orders window and the
@@ -36,7 +37,8 @@ export interface OrdersDraft extends OrdersServerState {
   clearFocus: () => void;
   /** The order the Orders window should scroll to, once. */
   focus: { id: string; pick: boolean; key: number } | null;
-  save: (opts: { submit: boolean; bypass?: boolean; orders?: OrderDraft[] }) => Promise<{ ok: boolean; text: string }>;
+  /** note: the DM's optional note to the team about the change. */
+  save: (opts: { submit: boolean; bypass?: boolean; orders?: OrderDraft[]; note?: TeamNote }) => Promise<{ ok: boolean; text: string }>;
 }
 
 const Ctx = createContext<OrdersDraft | null>(null);
@@ -84,9 +86,9 @@ export function OrdersDraftProvider({ server, children }: { server: OrdersServer
     },
     reveal: (id, pick) => setFocus((old) => ({ id, pick, key: (old?.key ?? 0) + 1 })),
     clearFocus: () => setFocus(null),
-    save: async ({ submit, bypass = false, orders }) => {
+    save: async ({ submit, bypass = false, orders, note }) => {
       const list = orders ?? state.orders;
-      const r = await saveOrdersAction({ orders: list, baseVersion: state.version, submit, bypass });
+      const r = await saveOrdersAction({ orders: list, baseVersion: state.version, submit, bypass, note });
       if (!r.ok) return { ok: false, text: r.error };
       setState((s) => ({
         ...s,

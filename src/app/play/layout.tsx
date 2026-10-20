@@ -1,5 +1,6 @@
 import { PlayerShell } from "@/components/play/PlayerShell";
 import { teamThemeProps } from "@/components/theme/teamTheme";
+import { threadUnread } from "@/lib/messages";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
 import { requireViewer } from "@/lib/viewer";
 
@@ -8,7 +9,10 @@ import { requireViewer } from "@/lib/viewer";
 
 export default async function PlayLayout({ children }: LayoutProps<"/play">) {
   const viewer = await requireViewer();
-  const { view, rules, mapImage, map3d, round, orderState, orders } = await loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm });
+  const [{ view, rules, mapImage, map3d, round, orderState, orders }, unreadMessages] = await Promise.all([
+    loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm }),
+    threadUnread(viewer.team, viewer.isDm ? "dm" : "team"),
+  ]);
   return (
     // data-team: accents inside use the team colour (globals.css).
     <div {...teamThemeProps(viewer.team.colour)}>
@@ -23,6 +27,7 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           // The DM viewing as a team can edit its orders even when they're closed.
           ordersOpen: viewer.isDm ? { open: true, reason: "" } : ordersOpen(round),
           resources: rules.resources.map((r) => ({ id: r.id, name: r.name, icon: r.icon, amount: view.team.resources[r.id] ?? 0 })),
+          unreadMessages,
         }}
         view={view}
         rules={rules}

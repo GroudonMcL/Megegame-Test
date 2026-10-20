@@ -58,18 +58,21 @@ src/
   components/  UI: the design tokens and team colours (theme/), icons and team emblems (icons/),
                the map-first screen: toolbar, dock, movable windows, side panel, popups (shell/),
                the ruleset editor, the map (MapCanvas, MapEditor, WorldMap),
-               the player screens and order builder (play/)
+               the player screens and order builder (play/), DM tools such as the note to a team (dm/),
+               the DM–team conversation (messages/)
   db/          Database schema (schema.ts) and connection (index.ts)
   lib/         Server helpers: sessions, join codes, a team's fogged view, the fogged map image,
-               resolving rounds with undo (resolution.ts), published results
+               resolving rounds with undo (resolution.ts), published results, the DM's changes
+               for a team with undo (dmEdits.ts), messages
   app/         Pages and server actions
     page.tsx       Landing page: join a team
-    dm/            DM login, games; per game, (shell)/ holds the World map with Teams, Resolve and
-                   Diplomacy as windows over it; map editor, ruleset, history and settings are full pages
+    dm/            DM login, games; per game, (shell)/ holds the World map with Teams, Resolve,
+                   Diplomacy and Messages as windows over it; map editor, ruleset, history and settings are full pages
     api/assets     Serves uploaded images (DM only)
     api/play/map   The map image with the team's fog of war painted on
     play/          Player screens: the team's map fills the screen (layout.tsx); overview, orders, results,
-                   units, regions, inventory, trades, rules and help open as windows over it
+                   units, regions, inventory, trades, messages, rules and help open as windows over it.
+                   The DM viewing as a team uses the same screens, plus item/recipe editors and the DM log (undo)
     help/          The player guide and DM guide
     api/health     JSON setup check
 drizzle/       SQL migrations (generated from schema.ts, applied on every deploy)
@@ -83,7 +86,7 @@ docs/          Setup guide, data model, fog of war, resolving a round, Utterdark
 | Command | What it does |
 |---|---|
 | `npm run dev` | Run locally at http://localhost:3000 (needs `.env.local`; see `.env.example`) |
-| `npm test` | Run the unit tests |
+| `npm test` | Run the unit tests (set `TEST_DATABASE_URL` to an empty Postgres database to also run the database tests) |
 | `npm run typecheck` / `npm run lint` | Check types and code style |
 | `npm run db:generate` | After editing `src/db/schema.ts`: write a new SQL migration into `drizzle/` |
 | `npm run db:migrate` | Apply migrations to the database in `DATABASE_URL` (Vercel does this on each production deploy) |

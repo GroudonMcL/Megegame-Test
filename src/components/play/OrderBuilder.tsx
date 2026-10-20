@@ -11,6 +11,8 @@ import { fmtRes } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
+import { useTeamNote } from "@/components/dm/TeamNoteOption";
+import { ordersNote } from "@/engine/dmEdits";
 import { EconomyTable } from "./EconomyTable";
 import { useOrdersDraft } from "./ordersDraft";
 import { unitLabel } from "./RegionDetails";
@@ -47,6 +49,8 @@ export function OrderBuilder(props: OrderBuilderProps) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [bypass, setBypass] = useState(false);
   const [pending, startTransition] = useTransition();
+  // The DM editing as the team can tell it what changed.
+  const note = useTeamNote(ordersNote(orders.length, draft.roundNumber));
 
   const check = useMemo(() => validateOrders(rules, view, orders), [rules, view, orders]);
   const byId = new Map(check.orders.map((c) => [c.id, c]));
@@ -103,7 +107,9 @@ export function OrderBuilder(props: OrderBuilderProps) {
 
   const save = (submit: boolean) =>
     startTransition(async () => {
-      setMessage(await draft.save({ submit, bypass }));
+      const r = await draft.save({ submit, bypass, note: draft.isDm ? note.value : undefined });
+      if (r.ok) note.reset();
+      setMessage(r);
     });
 
   const numbered = rules.actionTypes.filter((a) => a.kind === "numbered" || a.kind === "numberedAndFree");
@@ -223,6 +229,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
               </label>
             )}
             {!check.ok && <span className="text-sm text-danger">Some orders have problems.</span>}
+            {draft.isDm && <div className="w-full">{note.ui}</div>}
             {pending && <span className="text-sm text-muted">Saving…</span>}
             {message && (
               <span role="status" className={`w-full text-sm ${message.ok ? "text-ok" : "text-danger"}`}>

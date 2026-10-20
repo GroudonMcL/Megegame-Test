@@ -83,6 +83,11 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                   <B>Trades</B>: offers to and from factions you&apos;ve met.
                 </li>
                 <li>
+                  <B>Messages</B>: your team&apos;s conversation with the DM. Everyone on your team sees it and can reply; each message shows who sent it and when. When the DM changes
+                  something for your team (gives you items, fixes an order…) they can send a note about it, which arrives here too. A number on the button means there&apos;s something
+                  you haven&apos;t read; it clears for the whole team once anyone opens Messages.
+                </li>
+                <li>
                   <B>Rules</B>: actions, buildings, units, items, recipes and the monsters you&apos;ve met, for this game.
                 </li>
               </ul>
@@ -200,7 +205,7 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
               <li>Everything works on a phone. On the map, pinch to zoom and drag to look around.</li>
               <li>The app is dark by default. The sun button at the top switches to the light theme (and the moon switches back); this browser remembers your choice.</li>
               <li>If your DM set up Discord, your team&apos;s channel gets a message when results are ready, with a link straight to them.</li>
-              <li>Stuck? Ask your DM. They can look at exactly what your team sees.</li>
+              <li>Stuck? Write to your DM on <B>Messages</B>. They can look at exactly what your team sees, and fix things for you.</li>
             </ul>
           ),
         },

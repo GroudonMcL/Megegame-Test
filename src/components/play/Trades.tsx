@@ -2,11 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { cancelTradeAction, proposeTradeAction, respondTradeAction } from "@/app/play/trades/actions";
+import { NO_NOTE, noteFor, TeamNoteOption, useTeamNote } from "@/components/dm/TeamNoteOption";
+import { tradeNote, type TradeStep } from "@/engine/dmEdits";
+import type { TeamNote } from "@/engine/messages";
 import type { TradeView } from "@/lib/trades";
 import { TeamEmblem } from "@/components/icons/TeamEmblem";
+import { useViewerInfo } from "./viewerInfo";
 
 // The player's trades: a list with Accept / Decline / Call off, and a form to
-// propose one to a faction the team has met.
+// propose one to a faction the team has met. The DM editing as the team
+// confirms each step, with the option to send the team a note about it.
 
 const STATUS: Record<string, string> = {
   proposed: "waiting for an answer",
@@ -20,14 +25,26 @@ const btn = "rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacit
 const primary = "rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground disabled:opacity-50";
 const field = "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm";
 
+const STEP_LABEL: Record<Exclude<TradeStep, "propose">, string> = { accept: "Accept", decline: "Decline", cancel: "Call off" };
+
 export function TradeList({ trades }: { trades: TradeView[] }) {
+  const { isDm } = useViewerInfo();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const act = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+  // The DM's step waiting to be confirmed, and its note.
+  const [confirm, setConfirm] = useState<{ tradeId: string; step: Exclude<TradeStep, "propose"> } | null>(null);
+  const [noteState, setNoteState] = useState(NO_NOTE);
+  const run = (tradeId: string, step: Exclude<TradeStep, "propose">, note?: TeamNote) =>
     start(async () => {
-      const r = await fn();
+      const r = step === "cancel" ? await cancelTradeAction(tradeId, note) : await respondTradeAction(tradeId, step === "accept", note);
       setError(r.ok ? null : (r.error ?? "Something went wrong."));
+      if (r.ok) setConfirm(null);
     });
+  const act = (tradeId: string, step: Exclude<TradeStep, "propose">) => {
+    if (!isDm) return run(tradeId, step);
+    setNoteState(NO_NOTE);
+    setConfirm({ tradeId, step });
+  };
   if (!trades.length) return <p className="mt-3 text-sm text-muted">None.</p>;
   return (
     <>
@@ -56,20 +73,33 @@ export function TradeList({ trades }: { trades: TradeView[] }) {
             <div className="mt-2 flex flex-wrap gap-2">
               {t.direction === "in" && t.status === "proposed" && (
                 <>
-                  <button type="button" className={primary} disabled={pending} onClick={() => act(() => respondTradeAction(t.id, true))}>
+                  <button type="button" className={primary} disabled={pending} onClick={() => act(t.id, "accept")}>
                     Accept
                   </button>
-                  <button type="button" className={btn} disabled={pending} onClick={() => act(() => respondTradeAction(t.id, false))}>
+                  <button type="button" className={btn} disabled={pending} onClick={() => act(t.id, "decline")}>
                     Decline
                   </button>
                 </>
               )}
               {(t.status === "proposed" || t.status === "accepted") && (
-                <button type="button" className={btn} disabled={pending} onClick={() => act(() => cancelTradeAction(t.id))}>
+                <button type="button" className={btn} disabled={pending} onClick={() => act(t.id, "cancel")}>
                   Call off
                 </button>
               )}
             </div>
+            {confirm?.tradeId === t.id && (
+              <div className="mt-2 space-y-2 rounded-lg border border-accent/50 p-2">
+                <TeamNoteOption suggested={tradeNote(confirm.step, t.otherTeam.name)} value={noteState} onChange={setNoteState} />
+                <div className="flex gap-2">
+                  <button type="button" className={primary} disabled={pending} onClick={() => run(t.id, confirm.step, noteFor(noteState, tradeNote(confirm.step, t.otherTeam.name)))}>
+                    {STEP_LABEL[confirm.step]} (DM)
+                  </button>
+                  <button type="button" className={btn} onClick={() => setConfirm(null)}>
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -138,14 +168,17 @@ export function TradeForm({ contacts, holdings, catalogue }: { contacts: { id: s
   const [message, setMessage] = useState("");
   const [pending, start] = useTransition();
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const { isDm } = useViewerInfo();
+  const note = useTeamNote(tradeNote("propose", contacts.find((c) => c.id === to)?.name ?? "another faction"));
 
   const submit = () =>
     start(async () => {
-      const r = await proposeTradeAction({ toTeamId: to, give, get, message });
+      const r = await proposeTradeAction({ toTeamId: to, give, get, message, note: isDm ? note.value : undefined });
       if (r.ok) {
         setGive(empty());
         setGet(empty());
         setMessage("");
+        note.reset();
         setStatus({ ok: true, text: "Trade proposed. They can accept or decline it on their Trades page." });
       } else setStatus({ ok: false, text: r.error });
     });
@@ -228,8 +261,9 @@ export function TradeForm({ contacts, holdings, catalogue }: { contacts: { id: s
         <span className="text-xs text-muted">Message (optional)</span>
         <textarea className={field} rows={2} maxLength={2000} value={message} onChange={(e) => setMessage(e.target.value)} />
       </label>
+      {isDm && note.ui}
       <button type="button" className={primary} disabled={pending || !to} onClick={submit}>
-        Propose trade
+        Propose trade{isDm ? " (DM)" : ""}
       </button>
       {status && (
         <p role="status" className={status.ok ? "text-ok" : "text-danger"}>

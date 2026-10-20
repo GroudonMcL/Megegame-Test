@@ -27,6 +27,7 @@ import { ownerName, RegionDetails } from "./RegionDetails";
 import { TeamMap } from "./TeamMap";
 import { UnitDetails } from "./UnitDetails";
 import { useMapMoves, type MapMoves } from "./useMapMoves";
+import { ViewerInfoContext } from "./viewerInfo";
 
 // The player screen: the team's fogged map is always there; every other screen
 // opens as a window over it, and clicking a region opens its details on the side.
@@ -39,9 +40,13 @@ export const PLAYER_TOOLS: Tool[] = [
   { id: "regions", href: "/play/regions", label: "Regions", icon: "regions", width: 680 },
   { id: "inventory", href: "/play/inventory", label: "Inventory", icon: "inventory", width: 720 },
   { id: "trades", href: "/play/trades", label: "Trades", icon: "trades", width: 780 },
+  { id: "messages", href: "/play/messages", label: "Messages", icon: "messages", width: 640 },
   { id: "rules", href: "/play/rules", label: "Rules", icon: "rules", width: 880 },
   { id: "help", href: "/play/help", label: "Help", icon: "help", width: 720 },
 ];
+
+/** Only for the DM editing as a team: its changes to the team, with Undo. */
+const DM_CHANGES_TOOL: Tool = { id: "dm-changes", href: "/play/dm-changes", label: "DM log", icon: "undo", width: 720 };
 
 export interface ToolbarInfo {
   team: EmblemTeam;
@@ -53,6 +58,8 @@ export interface ToolbarInfo {
   /** Whether orders can be changed now, and why not. */
   ordersOpen: { open: boolean; reason: string };
   resources: { id: string; name: string; icon: string; amount: number }[];
+  /** Messages not read yet: from the DM for players; from the team for the DM. */
+  unreadMessages: number;
 }
 
 interface ShellProps {
@@ -89,6 +96,8 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
     draft.reveal(id, false);
     router.push("/play/orders");
   });
+
+  const tools = info.isDm ? [...PLAYER_TOOLS, DM_CHANGES_TOOL] : PLAYER_TOOLS;
 
   // "Show on map" from a window: close the window, select the thing and centre the map on it.
   const showOnMap = (s: MapSelection) => {
@@ -128,11 +137,12 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
       </ul>
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
         {info.isDm && (
-          <form action={stopViewingAs} className="flex items-center gap-2 rounded-full border border-accent px-1 py-0.5 pl-3 text-xs">
+          <form action={stopViewingAs} className="flex items-center gap-2 rounded-full border-2 border-accent bg-accent/15 px-1 py-0.5 pl-3 text-xs font-medium">
             <span className="hidden md:inline">
-              <Icon name="eye" size={14} className="mr-1 inline align-[-2px]" />
-              Viewing as this team
+              <Icon name="edit" size={14} className="mr-1 inline align-[-2px]" />
+              Editing as {info.team.name} (DM)
             </span>
+            <span className="md:hidden">DM</span>
             <Button type="submit" variant="secondary" className="px-2.5! py-1! text-xs">
               Back to DM
             </Button>
@@ -149,51 +159,71 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
   );
 
   return (
-    <MapShell
-      toolbar={toolbar}
-      dock={<Dock tools={PLAYER_TOOLS} closeHref="/play" />}
-      map={
-        <TeamMap
-          view={view}
-          rules={rules}
-          mapImage={mapImage}
-          selectedId={panel?.regionId}
-          // While tapping out a move, clicks on the map are its stops.
-          onRegionClick={moves.tapping ? undefined : (id) => setSelection({ kind: "region", id })}
-          onBadgeClick={moves.tapping ? undefined : onBadge}
-          onBackgroundClick={moves.tapping ? undefined : () => setSelection(null)}
-          className="h-full"
-          bare
-          focus={focus}
-          map3d={map3d}
-          {...moves.map}
-        />
-      }
-    >
-      <MapSelectionContext value={showOnMap}>
-        <WindowSlot tools={PLAYER_TOOLS} closeHref="/play">
-          {children}
-        </WindowSlot>
-      </MapSelectionContext>
-      {panel && (
-        <SidePanel title={panel.title} onClose={() => setSelection(null)}>
-          {panel.body}
-        </SidePanel>
-      )}
-      {moves.ui}
-      <MapKey view={view} />
-      <Modal open={leaving} onClose={() => setLeaving(false)} title="Leave the game?">
-        <p className="text-sm text-muted">You&apos;ll be signed out on this device. To come back, join again with your team&apos;s code.</p>
-        <form action={logout} className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={() => setLeaving(false)}>
-            Stay
-          </Button>
-          <Button type="submit" variant="danger">
-            Leave
-          </Button>
-        </form>
-      </Modal>
-    </MapShell>
+    <ViewerInfoContext value={{ isDm: info.isDm, teamName: info.team.name }}>
+      <MapShell
+        toolbar={
+          <>
+            {toolbar}
+            {info.isDm && <DmBanner teamName={info.team.name} />}
+          </>
+        }
+        dock={<Dock tools={tools} closeHref="/play" badges={{ messages: info.unreadMessages }} />}
+        map={
+          <TeamMap
+            view={view}
+            rules={rules}
+            mapImage={mapImage}
+            selectedId={panel?.regionId}
+            // While tapping out a move, clicks on the map are its stops.
+            onRegionClick={moves.tapping ? undefined : (id) => setSelection({ kind: "region", id })}
+            onBadgeClick={moves.tapping ? undefined : onBadge}
+            onBackgroundClick={moves.tapping ? undefined : () => setSelection(null)}
+            className="h-full"
+            bare
+            focus={focus}
+            map3d={map3d}
+            {...moves.map}
+          />
+        }
+      >
+        <MapSelectionContext value={showOnMap}>
+          <WindowSlot tools={tools} closeHref="/play">
+            {children}
+          </WindowSlot>
+        </MapSelectionContext>
+        {panel && (
+          <SidePanel title={panel.title} onClose={() => setSelection(null)}>
+            {panel.body}
+          </SidePanel>
+        )}
+        {moves.ui}
+        <MapKey view={view} />
+        <Modal open={leaving} onClose={() => setLeaving(false)} title="Leave the game?">
+          <p className="text-sm text-muted">You&apos;ll be signed out on this device. To come back, join again with your team&apos;s code.</p>
+          <form action={logout} className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setLeaving(false)}>
+              Stay
+            </Button>
+            <Button type="submit" variant="danger">
+              Leave
+            </Button>
+          </form>
+        </Modal>
+      </MapShell>
+    </ViewerInfoContext>
+  );
+}
+
+/** Under the toolbar while the DM edits as a team, so it's never mistaken for the DM's own screens. */
+function DmBanner({ teamName }: { teamName: string }) {
+  return (
+    <div role="status" className="relative z-30 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b-2 border-accent bg-accent/20 px-3 py-1 text-xs">
+      <strong>Editing as {teamName} (DM)</strong>
+      <span className="hidden text-muted sm:inline">Everything you do here happens for this team and is logged. Looking around never changes what the team remembers.</span>
+      <Link href="/play/dm-changes" className="ml-auto text-link underline">
+        DM changes and undo
+      </Link>
+    </div>
   );
 }
 

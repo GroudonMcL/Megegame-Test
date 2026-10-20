@@ -5,8 +5,12 @@ import { db, schema } from "@/db";
 import { Id } from "@/engine/ruleset/common";
 import { describeBundle, isEmpty, type TradeBundle } from "@/engine/trades";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
+import type { TradeStep } from "@/engine/dmEdits";
+import type { TeamNote } from "@/engine/messages";
 import { audit } from "./audit";
 import { contactsOf } from "./contacts";
+import type { TradeState } from "./dmEdits";
+import { sendDmNote } from "./messages";
 import { loadRuleset } from "./rulesets";
 import { loadGameRows, rowsToWorld } from "./world";
 
@@ -99,7 +103,28 @@ function checkRequest(b: TradeBundle): string | null {
   return null;
 }
 
-export async function proposeTrade(gameId: string, fromTeamId: string, toTeamId: string, give: TradeBundle, get: TradeBundle, message: string): Promise<string | null> {
+/** Set when the DM acts for the team from "view as team": logged as the DM's change (undoable), with an optional note. */
+export interface ByDm {
+  note?: TeamNote;
+}
+
+/** Logs a trade step the DM took for a team, so it shows in the team's DM changes and can be undone. */
+async function auditDmStep(gameId: string, teamId: string, step: TradeStep, otherTeamId: string, before: TradeState, after: TradeState, dm: ByDm) {
+  const [team, other] = await Promise.all(
+    [teamId, otherTeamId].map((id) =>
+      db
+        .select({ name: schema.teams.name })
+        .from(schema.teams)
+        .where(eq(schema.teams.id, id))
+        .then((r) => r[0]?.name ?? "?"),
+    ),
+  );
+  const what = { propose: `Proposed a trade to ${other}`, accept: `Accepted the trade from ${other}`, decline: `Declined the trade from ${other}`, cancel: `Called off the trade with ${other}` }[step];
+  await audit(db, { gameId, actor: "dm", kind: `dm.trade.${step === "accept" || step === "decline" ? "respond" : step}`, teamId, description: `${what} for ${team}`, before, after });
+  await sendDmNote(db, gameId, teamId, dm.note);
+}
+
+export async function proposeTrade(gameId: string, fromTeamId: string, toTeamId: string, give: TradeBundle, get: TradeBundle, message: string, dm?: ByDm): Promise<string | null> {
   if (fromTeamId === toTeamId) return "You can't trade with yourself.";
   if (!(await contactsOf(gameId, fromTeamId)).includes(toTeamId)) return "You can only trade with factions you've met.";
   give = clean(give);
@@ -109,7 +134,8 @@ export async function proposeTrade(gameId: string, fromTeamId: string, toTeamId:
   if (problem) return problem;
   const [game] = await db.select({ currentRound: schema.games.currentRound }).from(schema.games).where(eq(schema.games.id, gameId)).limit(1);
   const [row] = await db.insert(schema.trades).values({ gameId, fromTeamId, toTeamId, round: game?.currentRound ?? 0, give, get, message: message.slice(0, 2000) }).returning();
-  await audit(db, { gameId, actor: fromTeamId, kind: "trade.propose", description: "Proposed a trade", after: row });
+  if (dm) await auditDmStep(gameId, fromTeamId, "propose", toTeamId, null, { id: row.id, status: row.status, respondedAt: null }, dm);
+  else await audit(db, { gameId, actor: fromTeamId, kind: "trade.propose", description: "Proposed a trade", after: row });
   return null;
 }
 
@@ -119,7 +145,7 @@ async function tradeFor(gameId: string, tradeId: string) {
 }
 
 /** The receiving team accepts or declines a proposal. */
-export async function respondToTrade(gameId: string, teamId: string, tradeId: string, accept: boolean): Promise<string | null> {
+export async function respondToTrade(gameId: string, teamId: string, tradeId: string, accept: boolean, dm?: ByDm): Promise<string | null> {
   const t = await tradeFor(gameId, tradeId);
   if (!t || t.toTeamId !== teamId) return "Trade not found.";
   if (t.status !== "proposed") return "That trade has already been answered.";
@@ -127,24 +153,36 @@ export async function respondToTrade(gameId: string, teamId: string, tradeId: st
     const problem = await checkOffer(gameId, teamId, t.get);
     if (problem) return `You can't accept: ${problem}`;
   }
-  await db
+  const respondedAt = new Date();
+  const updated = await db
     .update(schema.trades)
-    .set({ status: accept ? "accepted" : "declined", respondedAt: new Date() })
-    .where(and(eq(schema.trades.id, t.id), eq(schema.trades.status, "proposed")));
-  await audit(db, { gameId, actor: teamId, kind: `trade.${accept ? "accept" : "decline"}`, description: `${accept ? "Accepted" : "Declined"} a trade` });
+    .set({ status: accept ? "accepted" : "declined", respondedAt })
+    .where(and(eq(schema.trades.id, t.id), eq(schema.trades.status, "proposed")))
+    .returning({ id: schema.trades.id });
+  if (!updated.length) return "That trade has already been answered.";
+  const status = accept ? "accepted" : "declined";
+  if (dm) await auditDmStep(gameId, teamId, accept ? "accept" : "decline", t.fromTeamId, { id: t.id, status: "proposed", respondedAt: null }, { id: t.id, status, respondedAt: respondedAt.toISOString() }, dm);
+  else await audit(db, { gameId, actor: teamId, kind: `trade.${accept ? "accept" : "decline"}`, description: `${accept ? "Accepted" : "Declined"} a trade` });
   return null;
 }
 
 /** Either team calls off a trade that hasn't executed yet (the DM can too). */
-export async function cancelTrade(gameId: string, actor: string | "dm", tradeId: string): Promise<string | null> {
+export async function cancelTrade(gameId: string, actor: string | "dm", tradeId: string, dm?: ByDm): Promise<string | null> {
   const t = await tradeFor(gameId, tradeId);
   if (!t || (actor !== "dm" && t.fromTeamId !== actor && t.toTeamId !== actor)) return "Trade not found.";
   if (t.status !== "proposed" && t.status !== "accepted") return "That trade can't be called off any more.";
-  await db
+  const respondedAt = t.respondedAt ?? new Date();
+  const updated = await db
     .update(schema.trades)
-    .set({ status: "cancelled", respondedAt: t.respondedAt ?? new Date() })
-    .where(and(eq(schema.trades.id, t.id), inArray(schema.trades.status, ["proposed", "accepted"])));
-  await audit(db, { gameId, actor, kind: "trade.cancel", description: "Called off a trade" });
+    .set({ status: "cancelled", respondedAt })
+    .where(and(eq(schema.trades.id, t.id), inArray(schema.trades.status, ["proposed", "accepted"])))
+    .returning({ id: schema.trades.id });
+  if (!updated.length) return "That trade can't be called off any more.";
+  if (dm && actor !== "dm") {
+    const other = t.fromTeamId === actor ? t.toTeamId : t.fromTeamId;
+    const before = { id: t.id, status: t.status, respondedAt: t.respondedAt?.toISOString() ?? null };
+    await auditDmStep(gameId, actor, "cancel", other, before, { id: t.id, status: "cancelled", respondedAt: respondedAt.toISOString() }, dm);
+  } else await audit(db, { gameId, actor, kind: "trade.cancel", description: "Called off a trade" });
   return null;
 }
 

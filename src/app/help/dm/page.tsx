@@ -45,7 +45,7 @@ export default function DmGuide() {
                 yourself. Give each team its <B>join code</B>; <B>New code</B> replaces it and signs everyone on that team out.
               </li>
               <li>
-                <B>World map</B>: the screen behind <B>Teams</B>, <B>Resolve</B> and <B>Diplomacy</B>, which open as windows over it (move, resize or maximise them; × or <B>Esc</B> closes
+                <B>World map</B>: the screen behind <B>Teams</B>, <B>Resolve</B>, <B>Diplomacy</B> and <B>Messages</B>, which open as windows over it (move, resize or maximise them; × or <B>Esc</B> closes
                 them). Drag units between regions, or click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
                 race or notes.
               </li>
@@ -53,7 +53,8 @@ export default function DmGuide() {
                 <B>Settings &amp; export</B>: paste Discord webhooks for the public channel and each team&apos;s private channel, then <B>Send a test message</B>.
               </li>
               <li>
-                Press <B>View as team</B> on the Teams page to check what a team will see. It never changes what the team remembers.
+                Press <B>View as team</B> on the Teams page to see the player screens exactly as that team does, and to act for it (see <B>Editing as a team</B> below). Looking around
+                never changes what the team remembers.
               </li>
             </ol>
           ),
@@ -198,6 +199,52 @@ export default function DmGuide() {
                 so keep it private.
               </li>
               <li>To change a team&apos;s resources or races outside a round, use <B>Edit team</B> on the Teams page. Every change is recorded in the game&apos;s log.</li>
+            </ul>
+          ),
+        },
+        {
+          id: "edit-as-team",
+          title: "Editing as a team",
+          body: (
+            <>
+              <p>
+                <B>View as team</B> opens the team&apos;s own screens with a bar saying <B>Editing as … (DM)</B>. You can do anything the team can: write and submit its orders (even
+                after orders close, and past failed checks with <B>Bypass checks</B>), rename its units, and propose, accept, decline or call off its trades. <B>Back to DM</B> returns to
+                your screens.
+              </p>
+              <ul>
+                <li>
+                  On <B>Inventory</B>, the <B>DM: edit items and recipes</B> panel lets you add or remove items, change quantities, and teach or make the team forget recipes. It shows the
+                  live game, even during resolution when players still see the start-of-round picture.
+                </li>
+                <li>
+                  Every change you make here offers <B>Send a note to the team</B>: tick it and the team gets a message from you in <B>Messages</B>, pre-filled with what changed
+                  (&quot;The DM gave you 2× Iron Ingot&quot;). Edit the text as you like.
+                </li>
+                <li>
+                  <B>DM log</B> (in the team&apos;s dock, or <B>DM changes and undo</B> in the bar) lists every change you made for this team. <B>Undo…</B> puts back what was there before,
+                  unless something else has changed it since (the team edited its orders again, the item was used, the trade went ahead); then it says so and you can fix it by hand.
+                  Order changes can only be undone until resolving starts.
+                </li>
+              </ul>
+            </>
+          ),
+        },
+        {
+          id: "messages",
+          title: "Messages",
+          body: (
+            <ul>
+              <li>
+                <B>Messages</B> on the World map lists every team, with a number for messages you haven&apos;t read and the latest one. Pick a team to read the conversation and reply. The
+                number on the <B>Messages</B> button is the total unread.
+              </li>
+              <li>Everyone on a team sees its conversation and can write to you. Notes you send with changes show here too, marked <B>change note</B>.</li>
+              <li>
+                Inside <B>View as team</B>, the team&apos;s <B>Messages</B> window is the same conversation; what you write there comes from the DM. Reading it there doesn&apos;t mark
+                anything read for the team.
+              </li>
+              <li>New messages turn up every 20 seconds while a conversation is open, or when you reload.</li>
             </ul>
           ),
         },

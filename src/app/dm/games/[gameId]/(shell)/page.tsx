@@ -76,7 +76,7 @@ export default async function GameOverview({ params }: PageProps<"/dm/games/[gam
                   <form action={viewAsTeamAction} className="ml-auto">
                     <input type="hidden" name="gameId" value={gameId} />
                     <input type="hidden" name="teamId" value={team.id} />
-                    <Button variant="secondary" type="submit" title="See the player screens exactly as this team sees them, and edit its orders">
+                    <Button variant="secondary" type="submit" title="See the player screens exactly as this team sees them, and act for it: orders, units, trades, items and recipes">
                       View as team
                     </Button>
                   </form>

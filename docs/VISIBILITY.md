@@ -47,7 +47,11 @@ Players get the ruleset without the monster library (except monsters they've met
 
 ## The DM
 
-The DM sees everything on the World map. **View as team** (on the game's Teams page) shows the player screens exactly as that team sees them. Viewing as a team never changes what the team remembers.
+The DM sees everything on the World map. **View as team** (on the game's Teams page) shows the player screens exactly as that team sees them, and lets the DM act for the team (orders, unit names, trades) and change its inventory and recipes. Viewing as a team never changes what the team remembers: every page loads the team's view without recording it, and the DM's own controls (the item and recipe editors, the DM log) are only sent when the DM is viewing. Opening the team's Messages there doesn't mark them read for the team.
+
+## Messages
+
+Each team's conversation with the DM is sent only to that team's players and to the DM.
 
 ## Checking orders
 
