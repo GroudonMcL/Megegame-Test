@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { milesPerRound, modeMultiplier, type MoveMode } from "@/engine/orders/movement";
 import { parsePath, traceRoute, type PathStep } from "@/engine/orders/route";
 import { routeMapFromView } from "@/engine/orders/routeMap";
-import { allowedKinds, UNKNOWN_REGION, validateOrders, type OrderCheck, type OrderDraft, type OrderKind } from "@/engine/orders/validate";
+import { allowedKinds, DM_MOVE_INPUT, isDmMove, UNKNOWN_REGION, validateOrders, type OrderCheck, type OrderDraft, type OrderKind } from "@/engine/orders/validate";
 import { ABILITIES, ABILITY_NAMES } from "@/engine/ruleset/common";
 import { creatureCosts, unitTags } from "@/engine/ruleset/derive";
 import { fmtRes } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
-import type { TeamView } from "@/engine/world/teamView";
+import { movableUnits, type TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
 import { useTeamNote } from "@/components/dm/TeamNoteOption";
 import { ordersNote } from "@/engine/dmEdits";
@@ -78,7 +78,10 @@ export function OrderBuilder(props: OrderBuilderProps) {
   const update = (id: string, patch: Partial<OrderDraft>) => change(orders.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   const setInput = (id: string, index: number, value: unknown) => {
     const o = orders.find((x) => x.id === id)!;
-    update(id, { inputs: { ...o.inputs, [String(index)]: value } });
+    // A move the DM added stops ignoring borders once it's changed here.
+    const inputs = { ...o.inputs };
+    delete inputs[DM_MOVE_INPUT];
+    update(id, { inputs: { ...inputs, [String(index)]: value } });
   };
   const move = (id: string, delta: number) => {
     const i = orders.findIndex((o) => o.id === id);
@@ -399,7 +402,8 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
     const i = action.inputs.findIndex((x) => x.type === type);
     return i < 0 ? undefined : p.order.inputs[String(i)];
   };
-  const units = view.ownUnits.filter((u) => ACTIVE_STATUSES.has(u.status) && u.regionId);
+  // Units lent to the team can only be moved.
+  const units = (action.handler === "move" ? movableUnits(view) : view.ownUnits).filter((u) => ACTIVE_STATUSES.has(u.status) && u.regionId);
   const regionName = (id: string | null) => {
     const r = view.regions.find((x) => x.id === id);
     return r ? regionTitle(r) : "?";
@@ -587,10 +591,10 @@ function PathField({ index, p }: { index: number; p: Parameters<typeof OrderCard
   const startAt = first?.at ?? null;
   const startRegion = first?.regionId && first.regionId !== UNKNOWN_REGION ? first.regionId : null;
   const group = unitIds
-    .map((id) => view.ownUnits.find((u) => u.id === id))
+    .map((id) => movableUnits(view).find((u) => u.id === id))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
     .map((u) => ({ unit: u, used: before[u.id]?.used ?? 1 }));
-  const route = startAt && startRegion && group.length ? traceRoute(rules, routeMap, startAt, startRegion, steps, group, mode) : null;
+  const route = startAt && startRegion && group.length ? traceRoute(rules, routeMap, startAt, startRegion, steps, group, mode, undefined, { ignoreBorders: isDmMove(p.order) }) : null;
 
   // The line to draw: from the start through each stop (a link jumps to the far region's centre).
   const line: [number, number][] = startAt ? [startAt] : [];

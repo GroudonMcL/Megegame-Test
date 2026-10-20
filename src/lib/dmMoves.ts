@@ -16,7 +16,8 @@ import { loadTeamView } from "./teamView";
 // border or distance checks. It's logged as "dm.move" per team (wild monsters:
 // no team) and can be undone. The other choice adds a move order to the team's
 // orders for this round ("dm.orders", undoable like any DM change to orders),
-// which is resolved like the team's own moves.
+// which is resolved like the team's own moves except that it ignores borders
+// (it still only goes as far as the units' miles allow).
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

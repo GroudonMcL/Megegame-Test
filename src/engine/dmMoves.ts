@@ -1,5 +1,5 @@
 import type { Pt } from "./geo/polygon";
-import type { OrderDraft } from "./orders/validate";
+import { DM_MOVE_INPUT, isDmMove, type OrderDraft } from "./orders/validate";
 import { unitTags } from "./ruleset/derive";
 import type { Ruleset } from "./ruleset/ruleset";
 
@@ -97,7 +97,29 @@ export function dmMoveOrder(action: Action, unitIds: string[], to: Pt, id: strin
     if (input.type === "unit") inputs[String(i)] = input.multiple ? unitIds : unitIds[0];
     if (input.type === "path") inputs[String(i)] = [to];
   });
+  // The DM's move ignores borders (not distance) when it's checked and resolved.
+  inputs[DM_MOVE_INPUT] = true;
   return { id, kind: "free", actionTypeId: action.id, inputs, notes };
+}
+
+const withoutFlag = (inputs: Record<string, unknown>) => JSON.stringify(Object.entries(inputs).filter(([k]) => k !== DM_MOVE_INPUT).sort(([a], [b]) => a.localeCompare(b)));
+
+/**
+ * A team's orders as it saves them, with the DM's "ignores borders" mark kept
+ * only on orders the DM added and the team hasn't changed since (stored: the
+ * orders as saved before). Players can't add the mark, or keep it on a move
+ * they redraw.
+ */
+export function keepDmFlags<T extends { id: string; actionTypeId: string; inputs: Record<string, unknown> }>(incoming: T[], stored: { id: string; actionTypeId: string; inputs: Record<string, unknown> }[]): T[] {
+  return incoming.map((o) => {
+    if (!(DM_MOVE_INPUT in o.inputs)) return o;
+    const was = stored.find((s) => s.id === o.id);
+    const unchanged = was && isDmMove(was) && was.actionTypeId === o.actionTypeId && withoutFlag(was.inputs) === withoutFlag(o.inputs);
+    if (unchanged && isDmMove(o)) return o;
+    const inputs = { ...o.inputs };
+    delete inputs[DM_MOVE_INPUT];
+    return { ...o, inputs };
+  });
 }
 
 /** "The DM moved Bram and 2 others to C4." */

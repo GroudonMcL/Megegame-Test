@@ -99,6 +99,17 @@ export function effectiveKind(r: Ruleset, d: { kind: string; actionTypeId: strin
   return isMove && d.kind === "numbered" ? "free" : (d.kind as OrderKind);
 }
 
+/**
+ * The input that marks a move the DM added for a team (true): its route ignores
+ * borders, but not distance. Only the DM can set it (see keepDmFlags in src/engine/dmMoves.ts).
+ */
+export const DM_MOVE_INPUT = "dm";
+
+/** Was this order added by the DM, so its route ignores borders? */
+export function isDmMove(order: { inputs: Record<string, unknown> }): boolean {
+  return order.inputs[DM_MOVE_INPUT] === true;
+}
+
 // ---------------------------------------------------------------------------
 // Simulated state while walking down the order list.
 
@@ -477,7 +488,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
         }
         const group = units.map((u) => ({ unit: u, used: s.unitUsed[u.id] ?? 1 }));
         // After a move into ground the team doesn't know, the next one starts there (in no known region).
-        const route = traceRoute(r, routeMap ??= routeMapFromView(view), startAt, from === UNKNOWN_REGION ? null : from, path, group, mode);
+        const route = traceRoute(r, routeMap ??= routeMapFromView(view), startAt, from === UNKNOWN_REGION ? null : from, path, group, mode, undefined, { ignoreBorders: isDmMove(d) });
         if (route.blocked) problem(route.blocked);
         if (route.outOfMovement) {
           group.forEach((g, i) => {

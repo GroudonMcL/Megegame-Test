@@ -48,9 +48,11 @@ export default function DmGuide() {
                 <B>World map</B>: the screen behind <B>Teams</B>, <B>Resolve</B>, <B>Diplomacy</B> and <B>Messages</B>, which open as windows over it (move, resize or maximise them; × or <B>Esc</B> closes
                 them). Click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
                 race or notes. Click a unit badge to open a menu of every unit standing there; tick units in it, then drag the badge to move them (with none ticked, the whole
-                stack goes). You can drop units anywhere: borders and distance don&apos;t apply. Wild monsters move straight away. For a team&apos;s units you choose <B>Instant change</B>
+                stack goes). You can drop units anywhere: borders never stop your moves. Wild monsters move straight away. For a team&apos;s units you choose <B>Instant change</B>
                 (moved now, no miles used, no fight; logged and undoable from the message on the map or the team&apos;s DM log) or <B>Add as a move order</B> (added to the team&apos;s
-                orders for this round and resolved like its own moves, so borders and miles apply then; undo it from the team&apos;s DM log). Both offer <B>Send a note to the team</B>.
+                orders for this round and resolved like its own moves; borders don&apos;t stop it, but it only goes as far as the units&apos; miles allow, and the team can&apos;t make
+                its own moves cross borders this way: if they change it, it becomes a normal move; undo it from the team&apos;s DM log). Both offer <B>Send a note to the team</B>.
+                You can drag units of several owners at once: wild monsters move straight away and every team&apos;s units go through the same choice.
                 Units a team has lent to another say so in the side panel.
               </li>
               <li>

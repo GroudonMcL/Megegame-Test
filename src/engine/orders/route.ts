@@ -11,7 +11,9 @@ import { milesPerRound, modeMultiplier, MOVE_EPSILON, terrainFactor, unitSpeeds,
 // more for the stretches inside difficult terrain. Crossing from one region
 // into another needs an open border between them. Entering a region is what
 // the rules care about (monsters attack, stealth rolls…), so the route reports
-// each region it enters, and where.
+// each region it enters, and where. A move the DM added for a team can ignore
+// borders (ignoreBorders): it crosses from any region into any other, and over
+// open ground, but still pays its miles and terrain.
 
 /** One step of a path: walk to a point, or take a link to the region at its other end. */
 export type PathStep = Pt | { link: string };
@@ -104,6 +106,7 @@ export function traceRoute(
   mode: MoveMode,
   /** Called on entering each region; return true to stop the move there. */
   onEnter?: (regionId: string, at: Pt) => boolean,
+  opts: { ignoreBorders?: boolean } = {},
 ): RouteResult {
   const speeds = group.map((g) => unitSpeeds(r, g.unit));
   const groupExplorer = speeds.some((s) => s?.explorer === "group");
@@ -193,7 +196,9 @@ export function traceRoute(
       const entry = lerp(a, b, t0);
 
       if (here !== region) {
-        if (here === null) {
+        if (opts.ignoreBorders) {
+          // The DM's move: any way across.
+        } else if (here === null) {
           if (!map.partial) {
             at = entry;
             return done({ blocked: "There's no way across open ground" });

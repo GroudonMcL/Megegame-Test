@@ -92,6 +92,18 @@ describe("routes", () => {
     expect(res.end[0]).toBeCloseTo(0.5);
   });
 
+  it("ignores borders for the DM's moves, but not distance", () => {
+    const shut = map({ connections: [conn("A", "B", { blocked: true })] });
+    const res = traceRoute(rules, shut, centres.A, "A", [centres.B], group(), "normal", undefined, { ignoreBorders: true });
+    expect(res.blocked).toBeUndefined();
+    expect(res.endRegion).toBe("B");
+    expect(traceRoute(rules, map({ connections: [] }), centres.A, "A", [centres.B], group(), "normal", undefined, { ignoreBorders: true }).endRegion).toBe("B");
+    // Miles still run out part-way.
+    const tired = traceRoute(rules, shut, centres.A, "A", [centres.B], group(0.5), "normal", undefined, { ignoreBorders: true });
+    expect(tired.outOfMovement).toBe(true);
+    expect(tired.end[0]).toBeCloseTo(0.25 + 0.5 * 0.6);
+  });
+
   it("needs a border to cross at all", () => {
     expect(traceRoute(rules, map({ connections: [] }), centres.A, "A", [centres.B], group(), "normal").blocked).toMatch(/no way/);
   });

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { effectiveKind, OrderDraft, validateOrders } from "@/engine/orders/validate";
 import { renameDescription } from "@/engine/dmEdits";
+import { keepDmFlags } from "@/engine/dmMoves";
 import { audit } from "@/lib/audit";
 import { editInventory, editRecipes, ordersStateFor, undoDmChange, type OrdersState, type RenameState } from "@/lib/dmEdits";
 import { lendUnit } from "@/lib/lending";
@@ -36,15 +37,17 @@ export async function saveOrdersAction(input: z.input<typeof SaveInput>): Promis
   const parsed = SaveInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Those orders couldn't be read." };
   if (JSON.stringify(parsed.data.orders).length > 200_000) return { ok: false, error: "Those orders are too long. Shorten some notes." };
-  const { orders, baseVersion, submit } = parsed.data;
+  const { baseVersion, submit } = parsed.data;
   const bypass = parsed.data.bypass && viewer.isDm;
-  if (new Set(orders.map((o) => o.id)).size !== orders.length) return { ok: false, error: "Two orders have the same ID." };
+  if (new Set(parsed.data.orders.map((o) => o.id)).size !== parsed.data.orders.length) return { ok: false, error: "Two orders have the same ID." };
 
   const loaded = await loadTeamView(viewer.gameId, viewer.teamId, { record: false });
   const round = loaded.round;
   if (!round) return { ok: false, error: "No round has been opened yet." };
   const open = ordersOpen(round);
   if (!open.open && !viewer.isDm) return { ok: false, error: open.reason };
+  // Only the DM marks a move as ignoring borders; a player's save keeps the mark only on the DM's moves they left alone.
+  const orders = viewer.isDm ? parsed.data.orders : keepDmFlags(parsed.data.orders, loaded.orders);
 
   // Checked against the same fogged view the browser has, so the result never reveals hidden things.
   const check = validateOrders(loaded.rules, loaded.view, orders);

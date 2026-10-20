@@ -1,7 +1,7 @@
 import type { Pt } from "@/engine/geo/polygon";
 import { type MoveMode } from "@/engine/orders/movement";
 import { traceRoute, type PathStep, type RouteMap, type RouteResult } from "@/engine/orders/route";
-import { allowedKinds, UNKNOWN_REGION, validateOrders, type OrderDraft, type OrdersCheck } from "@/engine/orders/validate";
+import { allowedKinds, DM_MOVE_INPUT, UNKNOWN_REGION, validateOrders, type OrderDraft, type OrdersCheck } from "@/engine/orders/validate";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import type { WorldUnit } from "@/engine/world/types";
@@ -115,7 +115,14 @@ export function joinOrder(rules: Ruleset, order: OrderDraft, unitIds: string[]):
   const action = rules.actionTypes.find((a) => a.id === order.actionTypeId);
   if (!action) return order;
   const ids = [...new Set([...orderUnits(rules, order), ...unitIds])];
-  return { ...order, inputs: { ...order.inputs, [String(unitInput(action))]: ids } };
+  return { ...order, inputs: { ...withoutDmMark(order.inputs), [String(unitInput(action))]: ids } };
+}
+
+/** A move the DM added stops ignoring borders once the team changes it (the server drops the mark too). */
+function withoutDmMark(inputs: Record<string, unknown>): Record<string, unknown> {
+  const rest = { ...inputs };
+  delete rest[DM_MOVE_INPUT];
+  return rest;
 }
 
 /** The path of a move order (the points and links it was given). */
@@ -129,5 +136,5 @@ export function orderPath(rules: Ruleset, order: OrderDraft): unknown {
 export function withPath(rules: Ruleset, order: OrderDraft, path: PathStep[]): OrderDraft {
   const action = rules.actionTypes.find((a) => a.id === order.actionTypeId);
   const i = action?.inputs.findIndex((x) => x.type === "path") ?? -1;
-  return i < 0 ? order : { ...order, inputs: { ...order.inputs, [String(i)]: path } };
+  return i < 0 ? order : { ...order, inputs: { ...withoutDmMark(order.inputs), [String(i)]: path } };
 }

@@ -6,7 +6,7 @@ import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
 import { addTo, buildingTier, unitEffects } from "../orders/economy";
 import { milesPerRound, type MoveMode } from "../orders/movement";
-import { validateOrders, type OrderDraft } from "../orders/validate";
+import { isDmMove, validateOrders, type OrderDraft } from "../orders/validate";
 import type { TeamView } from "../world/teamView";
 import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types";
 import { defendersOf, fightChanges, fightSummary, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
@@ -244,7 +244,7 @@ export function resolveOrder(input: ResolveInput): Proposal {
           });
         }
         return true;
-      });
+      }, { ignoreBorders: isDmMove(order) });
       const at = route.endRegion ?? from;
       const walked = route.entered.flatMap((e) => (e.regionId ? [e.regionId] : []));
       p.regions.push(...walked);

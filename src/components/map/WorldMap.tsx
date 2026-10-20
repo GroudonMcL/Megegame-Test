@@ -719,7 +719,7 @@ function DmMoveConfirm({
           </button>
           <button type="button" disabled={busy} className="block w-full rounded-lg border border-border bg-raised px-3 py-2 text-left hover:border-accent disabled:opacity-50" onClick={() => confirm("order")}>
             <span className="font-medium">Add as a move order for {names}</span>
-            <span className="mt-0.5 block text-xs text-muted">Added to {teams.length === 1 ? "the team's" : "each team's"} orders for this round and resolved like their own moves (borders and miles apply then). Undo it from the team&apos;s DM log.</span>
+            <span className="mt-0.5 block text-xs text-muted">Added to {teams.length === 1 ? "the team's" : "each team's"} orders for this round and resolved like their own moves: borders don&apos;t stop it, but it only goes as far as the units&apos; miles allow. Undo it from the team&apos;s DM log.</span>
           </button>
           <TeamNoteOption suggested={suggested(false)(teams[0])} value={note} onChange={setNote} teamName={teams.length === 1 ? teamName(teams[0].teamId) : undefined} />
           {note.send && note.text === null && (

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildPreset } from "@/presets";
-import { dmMoveNote, dmMoveOrder, dmMoveRecord, movedSince, normalMoveFor, planDmMove } from "./dmMoves";
-import { validateOrders } from "./orders/validate";
+import { dmMoveNote, dmMoveOrder, dmMoveRecord, keepDmFlags, movedSince, normalMoveFor, planDmMove } from "./dmMoves";
+import { isDmMove, validateOrders } from "./orders/validate";
+import { resolveOrder } from "./resolve/resolveOrder";
 import { buildTeamView } from "./world/teamView";
 
 const r = buildPreset("utterdark");
@@ -42,12 +43,12 @@ describe("the DM moving units on the World map", () => {
     expect(movedSince(rec.after, [{ ...rec.after[0], regionId: "c" }, rec.after[1]])).toEqual(["u1"]);
   });
 
-  it("adds a normal move straight to the point, which the team's checks accept", () => {
+  it("adds a normal move straight to the point, across a blocked border but not beyond its miles", () => {
     const guard = { creatureId: "guard", archetypeId: null };
     const action = normalMoveFor(r, [guard, guard]);
     expect(action?.id).toBe("move");
     const o = dmMoveOrder(action!, ["10000000-0000-4000-8000-000000000001"], [0.3, 0.1], "10000000-0000-4000-8000-0000000000aa");
-    expect(o).toMatchObject({ kind: "free", actionTypeId: "move", inputs: { "0": ["10000000-0000-4000-8000-000000000001"], "1": [[0.3, 0.1]] } });
+    expect(o).toMatchObject({ kind: "free", actionTypeId: "move", inputs: { "0": ["10000000-0000-4000-8000-000000000001"], "1": [[0.3, 0.1]], dm: true } });
     const square = (i: number): [number, number][] => [
       [i / 4, 0],
       [(i + 1) / 4, 0],
@@ -55,11 +56,16 @@ describe("the DM moving units on the World map", () => {
       [i / 4, 0.25],
     ];
     const reg = (id: string, i: number) => ({ id, code: id, name: "", description: "", x: (i + 0.5) / 4, y: 0.125, polygon: square(i), settleable: true, hidden: false, ownerTeamId: null, settlementTierId: null, buildings: [], structures: [], deposits: [], features: [] });
+    const U = "10000000-0000-4000-8000-000000000001";
+    // The team owns b, so it can see it past the blocked border.
+    const regions = [reg("a", 0), { ...reg("b", 1), ownerTeamId: "T" }, reg("c", 2), reg("d", 3)];
+    const connections = ["ab", "bc", "cd"].map((id) => ({ id, regionA: id[0], regionB: id[1], kind: "border", blocked: id === "ab", miles: null, terrainId: "normal", hidden: false }));
+    const units = [{ id: U, ownerTeamId: "T", creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 10, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {} }];
     const view = buildTeamView({
       ruleset: r,
-      regions: [reg("a", 0), reg("b", 1)],
-      connections: [{ id: "ab", regionA: "a", regionB: "b", kind: "border", blocked: false, miles: null, terrainId: "normal", hidden: false }],
-      units: [{ id: "10000000-0000-4000-8000-000000000001", ownerTeamId: "T", creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 10, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {} }],
+      regions,
+      connections,
+      units,
       teams: [{ id: "T", name: "T", colour: "#000", isNpc: false }],
       team: { id: "T", name: "T", colour: "#000", isNpc: false, resources: {}, baseRaceId: null, raceIds: [], knownRecipeIds: [], secretObjectives: "" },
       knowledge: { regions: new Map(), connections: new Set(), detectedUnits: new Set() },
@@ -68,9 +74,40 @@ describe("the DM moving units on the World map", () => {
       inventory: {},
       round: 1,
     });
-    const check = validateOrders(r, view, [dmMoveOrder(action!, ["10000000-0000-4000-8000-000000000001"], [0.375, 0.125], "10000000-0000-4000-8000-0000000000aa")]);
+    const B: [number, number] = [0.375, 0.125];
+    const dmOrder = dmMoveOrder(action!, [U], B, "10000000-0000-4000-8000-0000000000aa");
+    // a—b is blocked: the DM's move goes across, a team's own move doesn't.
+    const check = validateOrders(r, view, [dmOrder]);
     expect(check.orders[0].problems).toEqual([]);
-    expect(check.units["10000000-0000-4000-8000-000000000001"].regionId).toBe("b");
+    expect(check.units[U].regionId).toBe("b");
+    const plain = { ...dmOrder.inputs };
+    delete plain.dm;
+    expect(validateOrders(r, view, [{ ...dmOrder, inputs: plain }]).orders[0].problems.join()).toMatch(/blocked/);
+    // 36 miles to d's far side is more than a guard's 24 a round, DM or not.
+    const far = validateOrders(r, view, [dmMoveOrder(action!, [U], [0.99, 0.125], "10000000-0000-4000-8000-0000000000ab")]);
+    expect(far.orders[0].problems.join()).toMatch(/miles of movement left/);
+
+    // Resolved the same way: across the border, as far as the miles go.
+    const world = { regions, connections, units, teams: [{ id: "T", name: "T", colour: "#000", isNpc: false, resources: {}, baseRaceId: null, raceIds: [], knownRecipeIds: [] }], inventory: {}, map: { aspect: 1, milesAcross: 48 } };
+    const p = resolveOrder({ ruleset: r, world, teamId: "T", order: dmOrder, round: 1, seed: "s" });
+    expect(p.changes).toContainEqual(expect.objectContaining({ type: "moveUnit", unitId: U, regionId: "b" }));
+  });
+
+  it("keeps the DM's mark only on the DM's moves the team left alone", () => {
+    const action = normalMoveFor(r, [{ creatureId: "guard", archetypeId: null }])!;
+    const stored = dmMoveOrder(action, ["u1"], [0.3, 0.1], "o1");
+    // Saved back unchanged (even with its keys in another order): kept.
+    expect(isDmMove(keepDmFlags([{ ...stored, inputs: { dm: true, "1": [[0.3, 0.1]], "0": ["u1"] } }], [stored])[0])).toBe(true);
+    // Redrawn, or with units added: dropped.
+    expect(isDmMove(keepDmFlags([{ ...stored, inputs: { ...stored.inputs, "1": [[0.5, 0.1]] } }], [stored])[0])).toBe(false);
+    expect(isDmMove(keepDmFlags([{ ...stored, inputs: { ...stored.inputs, "0": ["u1", "u2"] } }], [stored])[0])).toBe(false);
+    // A player can't add it to a move of their own, or copy it onto a new order.
+    const own = { id: "o2", kind: "free" as const, actionTypeId: "move", inputs: { "0": ["u1"], "1": [[0.5, 0.1]], dm: true }, notes: "" };
+    const cleaned = keepDmFlags([own, { ...stored, id: "o3" }], [stored]);
+    expect(cleaned.map(isDmMove)).toEqual([false, false]);
+    expect(cleaned[0].inputs).toEqual({ "0": ["u1"], "1": [[0.5, 0.1]] });
+    // Orders without the mark pass through as they are.
+    expect(keepDmFlags([{ ...own, inputs: { "0": ["u1"] } }], [])[0]).toEqual({ ...own, inputs: { "0": ["u1"] } });
   });
 
   it("finds no normal move when none suits every unit", () => {
