@@ -10,6 +10,7 @@ const ICON: Partial<Record<LogEntry["kind"], string>> = {
   condition: "◌",
   retreat: "↩",
   capture: "⛓",
+  loot: "💰",
   initiative: "⏱",
 };
 

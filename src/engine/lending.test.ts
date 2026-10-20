@@ -51,7 +51,7 @@ const unit = (extra: Partial<WorldUnit>): WorldUnit => ({
   raceId: null,
   archetypeId: null,
   academyBonus: {},
-  augmentIds: [],
+  equippedItemIds: [],
   hp: 11,
   regionId: "a",
   x: null,

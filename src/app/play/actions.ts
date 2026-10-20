@@ -10,6 +10,7 @@ import { renameDescription } from "@/engine/dmEdits";
 import { keepDmFlags } from "@/engine/dmMoves";
 import { audit } from "@/lib/audit";
 import { editInventory, editRecipes, ordersStateFor, undoDmChange, type OrdersState, type RenameState } from "@/lib/dmEdits";
+import { changeEquipment, setArchetype } from "@/lib/equipment";
 import { lendUnit } from "@/lib/lending";
 import { markRead, postMessage, sendDmNote, TeamNoteInput } from "@/lib/messages";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
@@ -151,6 +152,31 @@ export async function renameUnitAction(unitId: string, name: string, note?: unkn
   return { ok: true, value: clean.data };
 }
 
+const EquipInput = z.object({ unitId: z.uuid(), itemId: z.string().min(1).max(100), force: z.boolean().default(false), note: TeamNoteInput });
+
+/** Equip an item from the team's inventory on one of its units (force: DM only, skip the requirement checks). */
+export async function equipItemAction(input: z.input<typeof EquipInput>): Promise<ActionResult<null>> {
+  return equipment("equip", input);
+}
+
+/** Unequip an item from one of the team's units, back into the inventory. */
+export async function unequipItemAction(input: z.input<typeof EquipInput>): Promise<ActionResult<null>> {
+  return equipment("unequip", input);
+}
+
+async function equipment(kind: "equip" | "unequip", input: z.input<typeof EquipInput>): Promise<ActionResult<null>> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: "Your session has ended." };
+  const parsed = EquipInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That unit or item wasn't found." };
+  const { unitId, itemId, force, note } = parsed.data;
+  const error = await changeEquipment(viewer.gameId, viewer.teamId, unitId, { kind, itemId, force: force && viewer.isDm }, { isDm: viewer.isDm, displayName: viewer.displayName, note });
+  if (error) return { ok: false, error };
+  revalidatePath("/play", "layout");
+  revalidatePath(`/dm/games/${viewer.gameId}`, "layout");
+  return { ok: true, value: null };
+}
+
 /** Lend one of the team's units to a team it has met (toTeamId), or take it back (null). */
 export async function lendUnitAction(unitId: string, toTeamId: string | null, note?: unknown): Promise<ActionResult<null>> {
   const viewer = await getViewer();
@@ -184,6 +210,21 @@ export async function dmEditInventoryAction(input: z.input<typeof DmInventory>):
   const error = await editInventory(viewer.gameId, viewer.teamId, parsed.data.items, parsed.data.note);
   if (error) return { ok: false, error };
   revalidatePath("/play", "layout");
+  return { ok: true, value: null };
+}
+
+const DmArchetype = z.object({ unitId: z.uuid(), archetypeId: z.string().min(1).max(100).nullable(), note: TeamNoteInput });
+
+/** DM only: set or change one of the team's units' archetype (teams choose it only when recruiting). */
+export async function dmSetArchetypeAction(input: z.input<typeof DmArchetype>): Promise<ActionResult<null>> {
+  const viewer = await requireDmViewer();
+  if (!viewer) return { ok: false, error: "Only the DM can do that." };
+  const parsed = DmArchetype.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That unit or archetype wasn't found." };
+  const error = await setArchetype(viewer.gameId, viewer.teamId, parsed.data.unitId, parsed.data.archetypeId, parsed.data.note);
+  if (error) return { ok: false, error };
+  revalidatePath("/play", "layout");
+  revalidatePath(`/dm/games/${viewer.gameId}`, "layout");
   return { ok: true, value: null };
 }
 

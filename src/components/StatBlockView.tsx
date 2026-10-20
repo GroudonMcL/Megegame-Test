@@ -4,7 +4,7 @@ import { describeEffect } from "@/engine/ruleset/effects";
 import { SKILL_ABILITY, type StatAction, type StatBlock } from "@/engine/ruleset/statblock";
 
 // Renders a stat block the way D&D prints it, with live numbers from the
-// effective stats (race, academy and augment bonuses included). Hovering a
+// effective stats (race, archetype, academy and equipment bonuses included). Hovering a
 // number shows where it came from.
 
 function why(b: Breakdown) {
@@ -159,7 +159,7 @@ export function StatBlockView({ sb, bonuses = [] }: { sb: StatBlock; bonuses?: B
       )}
       {s.otherEffects.length > 0 && (
         <>
-          <h4 className="mt-3 border-b border-accent/40 text-base font-semibold">From race, academy and augments</h4>
+          <h4 className="mt-3 border-b border-accent/40 text-base font-semibold">From race, archetype, academy and equipment</h4>
           <ul className="mt-1 list-disc pl-5 text-sm">
             {s.otherEffects.map((o, i) => (
               <li key={i}>

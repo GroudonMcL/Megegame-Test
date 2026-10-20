@@ -1,9 +1,10 @@
 import type { Ruleset } from "../ruleset/ruleset";
+import { itemsText, mergeItems, unitItems } from "../equipment";
 import { milesPerRound } from "../orders/movement";
 import type { Change, World } from "../resolve/types";
-import type { WorldUnit } from "../world/types";
+import type { ItemQty, WorldUnit } from "../world/types";
 import { simulateCombat } from "./simulate";
-import type { CombatResult, CombatSideInput } from "./types";
+import type { CombatResult, CombatSideInput, FightLoot, LootChoice } from "./types";
 
 // Sets up fights from the game state, and turns their results into changes,
 // outcome text for the attacking team, and reports for the other teams involved.
@@ -57,10 +58,106 @@ export function runFight(r: Ruleset, world: World, regionId: string, sides: Comb
   });
 }
 
+const itemNamer = (r: Ruleset) => (id: string) => r.items.find((x) => x.id === id)?.name ?? id;
+
+/** Teams with a unit still standing on the winning side of a fight. */
+export function winningTeams(world: World, res: CombatResult): string[] {
+  const side = res.sides.find((s) => s.id === res.winner);
+  if (!side?.teamId) return [];
+  const byId = new Map(world.units.map((u) => [u.id, u]));
+  const teams = res.units
+    .filter((u) => u.sideId === side.id && u.outcome === "standing")
+    .map((u) => (u.raised ? u.raised.teamId : (byId.get(u.unitId)?.ownerTeamId ?? null)))
+    .filter((t): t is string => Boolean(t));
+  // The side's own team first, so it's the default for a split.
+  return [...new Set(teams)].sort((a, b) => Number(b === side.teamId) - Number(a === side.teamId));
+}
+
+/** Does a split hand out exactly the loot, only to winning teams? */
+export function splitMatches(items: ItemQty[], teamIds: string[], shares: Record<string, ItemQty[]>): boolean {
+  if (Object.keys(shares).some((t) => !teamIds.includes(t))) return false;
+  const given = mergeItems(Object.values(shares));
+  const want = mergeItems([items]);
+  return given.length === want.length && want.every((x) => given.find((g) => g.itemId === x.itemId)?.qty === x.qty);
+}
+
+/** "Loot from the fight in A3, for Iron Clan and Ash Court to share out between you: …", the suggested note for the "note" choice. */
+export function lootNoteText(world: World, loot: Pick<FightLoot, "items" | "teamIds">, regionId: string | null, itemName: (id: string) => string): string {
+  const reg = world.regions.find((x) => x.id === regionId);
+  const where = reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "the fight";
+  const teams = loot.teamIds.map((t) => sideName(world, t));
+  const names = teams.length > 1 ? `${teams.slice(0, -1).join(", ")} and ${teams.at(-1)}` : (teams[0] ?? "");
+  return `Loot from the fight in ${where}, for ${names} to share out between you: ${itemsText(loot.items, itemName)}. Agree how to split it and tell the DM.`;
+}
+
+/**
+ * What the units that died in a fight had on them, and who gets it. With one
+ * winning team it all goes to that team; with several, the DM's choice
+ * (default: everything to the side's own team until the DM splits it).
+ */
+export function fightLoot(r: Ruleset, world: World, res: CombatResult, choice?: LootChoice): FightLoot | undefined {
+  const byId = new Map(world.units.map((u) => [u.id, u]));
+  const from = res.units
+    .filter((u) => u.outcome === "dead" && !u.raised)
+    .map((u) => {
+      const unit = byId.get(u.unitId);
+      return { unitId: u.unitId, label: u.label.replace(/ \[.*\]$/, ""), items: unit ? unitItems(unit) : [] };
+    })
+    .filter((x) => x.items.length);
+  if (!from.length) return undefined;
+  const items = mergeItems(from.map((x) => x.items));
+  const teamIds = winningTeams(world, res);
+  const base = { items, from, teamIds };
+  if (!teamIds.length) return { ...base, mode: "corpse", shares: {} };
+  if (teamIds.length === 1) return { ...base, mode: "auto", shares: { [teamIds[0]]: items } };
+  if (choice?.mode === "note") return { ...base, mode: "note", shares: {}, note: choice.text?.trim() || lootNoteText(world, base, res.regionId, itemNamer(r)) };
+  if (choice?.mode === "split" && splitMatches(items, teamIds, choice.shares)) {
+    const shares = Object.fromEntries(Object.entries(choice.shares).map(([t, l]) => [t, mergeItems([l])]).filter(([, l]) => l.length));
+    return { ...base, mode: "split", shares };
+  }
+  return { ...base, mode: "split", shares: { [teamIds[0]]: items }, splitReset: choice?.mode === "split" };
+}
+
+/** The fight log's line about the loot. */
+export function lootLogText(world: World, loot: FightLoot, itemName: (id: string) => string): string {
+  const all = itemsText(loot.items, itemName);
+  switch (loot.mode) {
+    case "corpse":
+      return `Nobody won the fallen's gear, so it stays with them: ${all}.`;
+    case "note":
+      return `Loot for ${loot.teamIds.map((t) => sideName(world, t)).join(" and ")} to share out between them: ${all}.`;
+    default:
+      return `Loot: ${Object.entries(loot.shares)
+        .map(([t, l]) => `${sideName(world, t)} takes ${itemsText(l, itemName)}`)
+        .join("; ")}.`;
+  }
+}
+
+/** The loot, as a sentence for one team's results ("" = nothing to say). */
+export function lootSentence(world: World, loot: FightLoot | undefined, teamId: string | null, itemName: (id: string) => string): string {
+  if (!loot || loot.mode === "corpse") return "";
+  if (loot.mode === "note") {
+    const others = loot.teamIds.filter((t) => t !== teamId).map((t) => sideName(world, t));
+    return loot.teamIds.includes(teamId ?? "")
+      ? `Loot to share out with ${others.join(" and ")}: ${itemsText(loot.items, itemName)}. The DM has sent you a note about it.`
+      : `The winners took the fallen's gear: ${itemsText(loot.items, itemName)}.`;
+  }
+  const mine = teamId ? loot.shares[teamId] : undefined;
+  const others = Object.entries(loot.shares).filter(([t]) => t !== teamId);
+  return [
+    mine?.length ? `You took as loot: ${itemsText(mine, itemName)}.` : "",
+    others.length ? `${others.map(([t, l]) => `${sideName(world, t)} took ${itemsText(l, itemName)}`).join("; ")}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** The game changes a fight makes. */
 export function fightChanges(r: Ruleset, world: World, res: CombatResult, opts: { reveal?: string[] } = {}): Change[] {
   const changes: Change[] = [];
   const byId = new Map(world.units.map((u) => [u.id, u]));
+  // The fallen lose what they had to the winners (unless nobody won it).
+  const looted = new Set(res.loot && res.loot.mode !== "corpse" ? res.loot.from.map((x) => x.unitId) : []);
   for (const u of res.units) {
     const side = res.sides.find((s) => s.id === u.sideId);
     if (u.raised) {
@@ -77,7 +174,7 @@ export function fightChanges(r: Ruleset, world: World, res: CombatResult, opts: 
           raceId: null,
           archetypeId: null,
           academyBonus: {},
-          augmentIds: [],
+          equippedItemIds: [],
           hp: u.hp,
           regionId: res.regionId,
           x: null,
@@ -95,6 +192,10 @@ export function fightChanges(r: Ruleset, world: World, res: CombatResult, opts: 
     const patch: Extract<Change, { type: "updateUnit" }>["patch"] = {};
     if (u.hp !== before.hp) patch.hp = u.hp;
     if (u.outcome === "dead") patch.status = "dead";
+    if (looted.has(u.unitId)) {
+      patch.equippedItemIds = [];
+      patch.carried = [];
+    }
     else if (u.outcome === "captured") {
       patch.status = "captured";
       const capturer = res.sides.find((s) => s.id === res.winner);
@@ -106,6 +207,9 @@ export function fightChanges(r: Ruleset, world: World, res: CombatResult, opts: 
       changes.push({ type: "moveUnit", unitId: u.unitId, regionId: u.retreatTo, milesUsed: milesPerRound(r, before) });
     }
   }
+  for (const [teamId, list] of Object.entries(res.loot?.shares ?? {})) {
+    for (const x of list) changes.push({ type: "inventory", teamId, itemId: x.itemId, delta: x.qty });
+  }
   return changes;
 }
 
@@ -113,8 +217,8 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** A short account of a fight from one side's point of view. Enemy hit points aren't given away. */
-export function fightSummary(world: World, res: CombatResult, sideId: string): string {
+/** A short account of a fight from one side's point of view, with any loot. Enemy hit points aren't given away. */
+export function fightSummary(world: World, res: CombatResult, sideId: string, r?: Ruleset): string {
   const regionOf = (id: string | null) => {
     const reg = world.regions.find((x) => x.id === id);
     return reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "an unknown region";
@@ -150,5 +254,7 @@ export function fightSummary(world: World, res: CombatResult, sideId: string): s
     count("captured") && `${count("captured")} captured`,
     count("standing") && `${count("standing")} still standing`,
   ].filter(Boolean);
-  return `${head}: ${verdict} after ${plural(res.rounds, "round")}. Your units: ${ownText}. Enemies: ${enemyBits.join(", ") || "none"}.`;
+  const side = res.sides.find((s) => s.id === sideId);
+  const loot = r ? lootSentence(world, res.loot, side?.teamId ?? null, itemNamer(r)) : "";
+  return `${head}: ${verdict} after ${plural(res.rounds, "round")}. Your units: ${ownText}. Enemies: ${enemyBits.join(", ") || "none"}.${loot ? ` ${loot}` : ""}`;
 }

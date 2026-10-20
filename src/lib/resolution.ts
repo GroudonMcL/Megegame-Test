@@ -14,6 +14,7 @@ import type { Change, Proposal, RollRecord, World } from "@/engine/resolve/types
 import { recordMeetings } from "./contacts";
 import { loadRuleset } from "./rulesets";
 import { loadGameRows, rowsToWorld } from "./world";
+import { sendDmNote } from "./messages";
 
 // Resolving a round on the server. Every change to the game goes through
 // applyChanges, inside a transaction, with an audit entry holding the rows as
@@ -210,12 +211,14 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
 async function restore(tx: Tx, gameId: string, before: Before) {
   for (const id of before.createdUnitIds) await tx.delete(schema.units).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   for (const u of before.units) {
-    const { id, regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
-    // Older undo records have no lentToTeamId; leave the unit's as it is then.
+    const { id, regionId, x, y, milesUsed, status, hp, academyBonus, name, usesSpent, ownerTeamId } = u;
+    // Older undo records have no lentToTeamId or carried items, and call equipped items augmentIds; leave what's missing as it is.
     const lent = "lentToTeamId" in u ? { lentToTeamId: u.lentToTeamId } : {};
+    const carried = "carried" in u ? { carried: u.carried } : {};
+    const equippedItemIds = u.equippedItemIds ?? (u as { augmentIds?: string[] }).augmentIds ?? [];
     await tx
       .update(schema.units)
-      .set({ regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId, ...lent })
+      .set({ regionId, x, y, milesUsed, status, hp, equippedItemIds, academyBonus, name, usesSpent, ownerTeamId, ...lent, ...carried })
       .where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   }
   if (before.detections) {
@@ -403,8 +406,8 @@ export async function prepareStep(gameId: string, step: number) {
 async function prepareOne(o: OrderRow, ruleset: Ruleset, world: World, roundNumber: number, previous: OrderOutcome | null, reroll = false) {
   const rerolls = (previous?.rerolls ?? 0) + (reroll ? 1 : 0);
   const seed = `${o.id}:${rerolls}`;
-  // A re-roll is a fresh fight: the DM's hand-set results no longer apply.
-  const combat = reroll && previous?.combat ? { ...previous.combat, overrides: undefined } : previous?.combat;
+  // A re-roll is a fresh fight: the DM's hand-set results and loot split no longer apply.
+  const combat = reroll && previous?.combat ? { ...previous.combat, overrides: undefined, loot: undefined } : previous?.combat;
   const proposal = resolveOrder({ ruleset, world, teamId: o.teamId, order: toDraft(o), round: roundNumber, seed, combat });
   const outcome: OrderOutcome = {
     seed,
@@ -444,7 +447,7 @@ export async function setFightSettings(gameId: string, orderId: string, settings
   const live = new Set(world.units.map((u) => u.id));
   const priority = Object.fromEntries(Object.entries(settings.priority ?? {}).filter(([, id]) => live.has(id)));
   const overrides = Object.fromEntries(Object.entries(settings.overrides ?? {}).filter(([id]) => live.has(id)));
-  const combat: FightSettings = { priority, byHand: Boolean(settings.byHand), shareLog: settings.shareLog !== false, overrides };
+  const combat: FightSettings = { priority, byHand: Boolean(settings.byHand), shareLog: settings.shareLog !== false, overrides, loot: settings.loot };
   const proposal = resolveOrder({ ruleset, world, teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed, combat });
   // Keep the DM's own wording unless it was the drafted text.
   const text = previous.text === previous.proposal.text ? proposal.text : previous.text;
@@ -494,6 +497,8 @@ export async function acceptOrder(gameId: string, orderId: string, d: Decision):
     const outcome: OrderOutcome = { ...previous, proposal, text: d.text, adjust: d.adjust, hideRolls: d.hideRolls, delta };
     await tx.update(schema.orders).set({ status: "resolved", outcome }).where(eq(schema.orders.id, order.id));
     await logRolls(tx, gameId, round.id, order.id, proposal.rolls, d.hideRolls);
+    // Loot left for several teams to share out goes to them as a DM note (undoing the order doesn't unsend it).
+    for (const n of proposal.teamNotes ?? []) await sendDmNote(tx, gameId, n.teamId, { send: true, text: n.text });
     await tx.insert(schema.auditLog).values({
       gameId,
       roundId: round.id,

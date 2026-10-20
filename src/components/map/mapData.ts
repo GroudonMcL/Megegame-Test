@@ -40,7 +40,9 @@ export interface UnitData {
   raceId: string | null;
   archetypeId: string | null;
   academyBonus: Record<string, number>;
-  augmentIds: string[];
+  equippedItemIds: string[];
+  /** Items it carries without using them; loot when it dies in a fight. */
+  carried: { itemId: string; qty: number }[];
   hp: number;
   regionId: string | null;
   x: number | null;

@@ -375,26 +375,26 @@ export const SECTION_CONFIG: Record<Exclude<RulesetSection, "creatures">, Sectio
   },
   itemCategories: {
     title: "Item categories",
-    intro: "Kinds of item, e.g. Basic Material, Material, Trinket, Augment.",
-    fields: [idField, nameField, { kind: "checkbox", key: "equippable", label: "Can be equipped on units (augments)" }],
+    intro: "Kinds of item, e.g. Basic Material, Material, Trinket, Augment. Items in an equippable category can be equipped on units from the unit's Edit window.",
+    fields: [idField, nameField, { kind: "checkbox", key: "equippable", label: "Can be equipped on units" }],
     newItem: (id) => ({ id, name: "New category", equippable: false }),
     label: (x) => x.name,
   },
-  augmentSlots: {
-    title: "Augment slots",
-    intro: "Where augments go on a unit, e.g. Armour, Shield, Weapon. The total per unit is a game setting.",
+  equipSlots: {
+    title: "Equipment slots",
+    intro: "Where equipped items go on a unit, e.g. Armour, Shield, Weapon. An item without a slot only counts towards the total per unit, which is a game setting.",
     fields: [idField, nameField, { kind: "number", key: "maxPerUnit", label: "Max per unit", min: 1 }],
     newItem: (id) => ({ id, name: "New slot", maxPerUnit: 1 }),
     label: (x) => x.name,
   },
   items: {
     title: "Items",
-    intro: "Materials, trinkets and augments.",
+    intro: "Materials, trinkets and equipment. An item is equippable if its category is; a slot is optional.",
     fields: [
       idField,
       nameField,
       { kind: "select", key: "categoryId", label: "Category", options: { ref: "itemCategories" } },
-      { kind: "select", key: "slotId", label: "Augment slot", options: { ref: "augmentSlots" }, nullable: true, nullLabel: "— not an augment —" },
+      { kind: "select", key: "slotId", label: "Equipment slot (equippable items)", options: { ref: "equipSlots" }, nullable: true, nullLabel: "— no slot —" },
       { kind: "text", key: "rarity", label: "Rarity" },
       { kind: "checkbox", key: "consumable", label: "Used up when used" },
       descriptionField,

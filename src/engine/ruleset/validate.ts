@@ -111,7 +111,10 @@ export function findReferenceProblems(r: Ruleset): Problem[] {
   for (const item of r.items) {
     const p = `items › ${item.id}`;
     need(p, "itemCategories", item.categoryId, "item category");
-    need(p, "augmentSlots", item.slotId, "augment slot");
+    need(p, "equipSlots", item.slotId, "equipment slot");
+    if (item.slotId && !r.itemCategories.find((c) => c.id === item.categoryId)?.equippable) {
+      problems.push({ path: p, message: "Has an equipment slot, but its category can't be equipped. Make the category equippable, or clear the slot." });
+    }
     item.requiresRaces.forEach((x) => need(p, "races", x, "race"));
     effects(p, item.effects);
   }

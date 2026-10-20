@@ -24,7 +24,7 @@ describe("deriveStats", () => {
     expect(s.maxHp.total).toBe(75);
   });
 
-  it("adds augment and fortification modifiers with a breakdown", () => {
+  it("adds equipment and fortification modifiers with a breakdown", () => {
     const s = deriveStats(veteran, [
       { source: "Chain Shirt", effects: [{ type: "modifier", target: "ac", value: 1, when: [] }] },
       { source: "Fortification", effects: [{ type: "modifier", target: "toHit", value: 2, when: [] }] },
@@ -52,10 +52,10 @@ describe("deriveStats", () => {
 });
 
 describe("unit loadouts", () => {
-  it("layer race, archetype, academy and augments onto the stat block", () => {
+  it("layer race, archetype, academy and equipped items onto the stat block", () => {
     const r = utterdarkPreset();
     const creature = r.creatures.find((c) => c.id === "warrior-veteran")!;
-    const bonuses = unitBonuses(r, { raceId: "orc", archetypeId: "regiment", academyBonus: { str: 2 }, augmentIds: ["plus1-armour"] });
+    const bonuses = unitBonuses(r, { raceId: "orc", archetypeId: "regiment", academyBonus: { str: 2 }, equippedItemIds: ["plus1-armour"] });
     expect(bonuses.map((b) => b.source)).toEqual(["Orc", "Regiment", "Academy", "+1 Armour"]);
     const s = deriveStats(creature.statBlock, bonuses);
     expect(s.abilities.str.total).toBe(20); // 16 + 2 (Orc) + 2 (Academy)

@@ -8,12 +8,15 @@ import { describeEffect, fmtRes, namesFrom } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { WorldUnit } from "@/engine/world/types";
 import { unitMaxHp } from "./RegionDetails";
+import { itemsText } from "@/engine/equipment";
+import { ABILITIES, signed } from "@/engine/ruleset/common";
+import { EditUnit } from "./EditUnit";
 import { LendUnit } from "./LendUnit";
-import { RenameUnit } from "./RenameUnit";
 
 // Everything about one of the team's own units: shown in the Units window and
 // in the side panel when the unit is clicked on the map. Units another team
-// has lent this team are shown in full too, saying whose they are.
+// has lent this team are shown in full too, saying whose they are. The Edit
+// button (own units only) renames the unit and changes its equipment.
 
 export const STATUS_LABEL: Record<string, string> = {
   active: "Active",
@@ -54,6 +57,17 @@ export function UnitDetails({
   const tags = c ? unitTags(rules, c, u.archetypeId) : [];
   const abilities = unitEffects(rules, u);
   const upkeep = unitUpkeep(rules, u);
+  const itemName = (id: string) => rules.items.find((x) => x.id === id)?.name ?? id;
+  // Each race, archetype, academy and item bonus, with what it changes.
+  const bonuses = unitBonuses(rules, u)
+    .map((b) => ({
+      source: b.source,
+      parts: [
+        ...ABILITIES.filter((a) => b.abilities?.[a]).map((a) => `${a.toUpperCase()} ${signed(b.abilities![a]!)}`),
+        ...(b.effects ?? []).map((e) => describeEffect(e, names)),
+      ],
+    }))
+    .filter((b) => b.parts.length);
   return (
     <>
       {lentBy && (
@@ -65,7 +79,8 @@ export function UnitDetails({
         </p>
       )}
       <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
-        {lentBy ? <span className="px-1 py-0.5 text-base font-medium">{u.name || c?.statBlock.name || "Unit"}</span> : <RenameUnit unitId={u.id} name={u.name} placeholder={c?.statBlock.name ?? "Unit"} />}
+        <span className="px-1 py-0.5 text-base font-medium">{u.name || c?.statBlock.name || "Unit"}</span>
+        {!lentBy && <EditUnit unit={u} rules={rules} />}
         <span className="text-sm text-muted">
           {[c?.statBlock.name ?? u.creatureId, archetype?.name, race?.name].filter(Boolean).join(" · ")}
           {u.isLeader ? " · Leader" : ""}
@@ -99,9 +114,27 @@ export function UnitDetails({
       )}
       {tags.length > 0 && <p className="mt-2 text-xs text-muted">Tags: {tags.join(", ")}</p>}
       <div className="mt-2 text-sm">
-        <span className="font-medium">Augments: </span>
-        {u.augmentIds.length ? u.augmentIds.map((id) => rules.items.find((x) => x.id === id)?.name ?? id).join(", ") : <span className="text-muted">none</span>}
+        <span className="font-medium">Equipped: </span>
+        {u.equippedItemIds.length ? u.equippedItemIds.map(itemName).join(", ") : <span className="text-muted">nothing</span>}
       </div>
+      {(u.carried ?? []).length > 0 && (
+        <div className="mt-1 text-sm">
+          <span className="font-medium">Carrying: </span>
+          {itemsText(u.carried ?? [], itemName)}
+        </div>
+      )}
+      {bonuses.length > 0 && (
+        <div className="mt-2 text-sm">
+          <span className="font-medium">Where its bonuses come from</span>
+          <ul className="mt-1 space-y-0.5">
+            {bonuses.map((b, i) => (
+              <li key={i}>
+                <span className="text-muted">{b.source}:</span> {b.parts.join("; ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {abilities.length > 0 && (
         <div className="mt-2 text-sm">
           <span className="font-medium">Abilities</span>

@@ -58,6 +58,15 @@ const FightSettings = z.object({
   byHand: z.boolean().optional(),
   shareLog: z.boolean().optional(),
   overrides: z.record(z.uuid(), z.object({ hp: z.number().int().min(0).max(100000).optional(), outcome: z.enum(["standing", "dead", "retreated"]).optional() })).optional(),
+  loot: z
+    .record(
+      z.string().regex(/^\d{1,3}$/),
+      z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("split"), shares: z.record(z.uuid(), z.array(z.object({ itemId: z.string().max(100), qty: z.number().int().min(1).max(1_000_000) })).max(500)) }),
+        z.object({ mode: z.literal("note"), text: z.string().max(2000).optional() }),
+      ]),
+    )
+    .optional(),
 });
 export const fightSettingsAction = async (gameId: string, orderId: string, settings: z.input<typeof FightSettings>) =>
   run(gameId, (id) => setFightSettings(id, OrderId.parse(orderId), FightSettings.parse(settings)));

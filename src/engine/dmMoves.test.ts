@@ -60,7 +60,7 @@ describe("the DM moving units on the World map", () => {
     // The team owns b, so it can see it past the blocked border.
     const regions = [reg("a", 0), { ...reg("b", 1), ownerTeamId: "T" }, reg("c", 2), reg("d", 3)];
     const connections = ["ab", "bc", "cd"].map((id) => ({ id, regionA: id[0], regionB: id[1], kind: "border", blocked: id === "ab", miles: null, terrainId: "normal", hidden: false }));
-    const units = [{ id: U, ownerTeamId: "T", creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 10, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {} }];
+    const units = [{ id: U, ownerTeamId: "T", creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, equippedItemIds: [], hp: 10, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {} }];
     const view = buildTeamView({
       ruleset: r,
       regions,

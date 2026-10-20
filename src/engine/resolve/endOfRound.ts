@@ -124,7 +124,7 @@ export function endOfRound(r: Ruleset, world: World, seed: string, opts: EndOfRo
     for (const e of reg.features) {
       if (e.type !== "regionDamage" || e.trigger !== "roundStart") continue;
       for (const u of world.units.filter((x) => x.regionId === reg.id && ACTIVE_STATUSES.has(x.status))) {
-        if (e.unlessItemTag && u.augmentIds.some((id) => r.items.find((i) => i.id === id)?.tags.includes(e.unlessItemTag!))) continue;
+        if (e.unlessItemTag && u.equippedItemIds.some((id) => r.items.find((i) => i.id === id)?.tags.includes(e.unlessItemTag!))) continue;
         const d = rollDice(e.dice, rng);
         const roll: RollRecord = { label: `${regionName(reg.id)} hazard on ${unitName(u)}`, expression: e.dice, seed, breakdown: describeRoll(d), total: d.total, tableId: null, outcome: null };
         const hp = Math.max(0, u.hp - d.total);

@@ -173,7 +173,7 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
   );
 
   return (
-    <ViewerInfoContext value={{ isDm: info.isDm, teamName: info.team.name, contacts: info.contacts }}>
+    <ViewerInfoContext value={{ isDm: info.isDm, teamName: info.team.name, contacts: info.contacts, view }}>
       <MapShell
         toolbar={
           <>

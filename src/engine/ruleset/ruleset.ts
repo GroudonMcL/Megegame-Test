@@ -155,10 +155,12 @@ export type Archetype = z.infer<typeof Archetype>;
 export const ItemCategory = z.object({
   id: Id,
   name: z.string().min(1),
+  /** Items in this category can be equipped on units (armour, weapons, augments…). */
   equippable: z.boolean().default(false),
 });
 
-export const AugmentSlot = z.object({
+/** Where an equipped item goes on a unit (Armour, Shield, Weapon…), and how many fit. */
+export const EquipSlot = z.object({
   id: Id,
   name: z.string().min(1),
   maxPerUnit: z.number().int().positive().default(1),
@@ -170,7 +172,7 @@ export const Item = z.object({
   categoryId: Id,
   description: z.string().default(""),
   rarity: z.string().default("common"),
-  /** Augments only. */
+  /** Equippable items only: the slot it takes (null = it only counts towards the unit's total). */
   slotId: Id.nullable().default(null),
   /** Tags used by requirements and hazards, e.g. "heat-resistant". */
   tags: z.array(z.string()).default([]),
@@ -201,7 +203,6 @@ export const ACTION_HANDLERS = [
   "annex",
   "heal",
   "raid",
-  "applyAugment",
   "disband",
   "trade",
   "market",
@@ -351,7 +352,10 @@ const FootprintFt = z.object({
 export const Settings = z.object({
   actionSlots: z.number().int().min(1).max(20).default(6),
   conditionalLimit: z.number().int().min(0).default(2),
-  maxAugmentsPerUnit: z.number().int().min(0).default(3),
+  /** Items a unit can have equipped in total (an equipLimit effect can change it per unit). */
+  maxEquippedPerUnit: z.number().int().min(0).default(3),
+  /** An item unequipped this round can only go back on the unit it came from until the next round. */
+  equipSwapLock: z.boolean().default(false),
   movement: z
     .object({
       /** D&D normal pace: 24 miles per day for a 30 ft walking speed. */
@@ -394,7 +398,7 @@ export const Settings = z.object({
     .default({ showPreviouslySeen: true, fogImage: true, revealRadius: 0.07 }),
 });
 
-export const Ruleset = z.object({
+const RulesetObject = z.object({
   format: z.literal(RULESET_FORMAT_VERSION).default(RULESET_FORMAT_VERSION),
   meta: z
     .object({
@@ -417,15 +421,54 @@ export const Ruleset = z.object({
   archetypes: z.array(Archetype).default([]),
   spells: z.array(Spell).default([]),
   itemCategories: z.array(ItemCategory).default([]),
-  augmentSlots: z.array(AugmentSlot).default([]),
+  equipSlots: z.array(EquipSlot).default([]),
   items: z.array(Item).default([]),
   recipes: z.array(Recipe).default([]),
   actionTypes: z.array(ActionType).default([]),
   rollTables: z.array(RollTable).default([]),
   rulesSections: z.array(RulesSection).default([]),
 });
-export type Ruleset = z.infer<typeof Ruleset>;
-export type RulesetInput = z.input<typeof Ruleset>;
+
+/**
+ * Brings rulesets saved in an older shape up to date, so nothing is lost:
+ * augments became equippable items (augmentSlots → equipSlots,
+ * maxAugmentsPerUnit → maxEquippedPerUnit, the augmentLimit effect →
+ * equipLimit), and the Apply Augment action was replaced by equipping from
+ * the unit's Edit window.
+ */
+export function migrateRuleset(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const r = renameEffects(structuredClone(input)) as Record<string, unknown>;
+  if ("augmentSlots" in r) {
+    if (!("equipSlots" in r)) r.equipSlots = r.augmentSlots;
+    delete r.augmentSlots;
+  }
+  const settings = r.settings as Record<string, unknown> | undefined;
+  if (settings && typeof settings === "object" && "maxAugmentsPerUnit" in settings) {
+    if (!("maxEquippedPerUnit" in settings)) settings.maxEquippedPerUnit = settings.maxAugmentsPerUnit;
+    delete settings.maxAugmentsPerUnit;
+  }
+  if (Array.isArray(r.actionTypes)) r.actionTypes = r.actionTypes.filter((a) => (a as { handler?: unknown })?.handler !== "applyAugment");
+  // An item with a slot was an augment, so its category could always be equipped.
+  if (Array.isArray(r.items) && Array.isArray(r.itemCategories)) {
+    const slotted = new Set(r.items.filter((i) => (i as { slotId?: unknown })?.slotId).map((i) => (i as { categoryId?: unknown }).categoryId));
+    for (const c of r.itemCategories as Record<string, unknown>[]) if (c && slotted.has(c.id)) c.equippable = true;
+  }
+  return r;
+}
+
+function renameEffects(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(renameEffects);
+  if (!v || typeof v !== "object") return v;
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) o[k] = renameEffects(o[k]);
+  if (o.type === "augmentLimit" && typeof o.max === "number") o.type = "equipLimit";
+  return o;
+}
+
+export const Ruleset = z.preprocess(migrateRuleset, RulesetObject);
+export type Ruleset = z.infer<typeof RulesetObject>;
+export type RulesetInput = z.input<typeof RulesetObject>;
 
 /** The editable top-level lists, in the order the editor shows them. */
 export const RULESET_SECTIONS = [
@@ -438,7 +481,7 @@ export const RULESET_SECTIONS = [
   "archetypes",
   "spells",
   "itemCategories",
-  "augmentSlots",
+  "equipSlots",
   "items",
   "recipes",
   "actionTypes",
@@ -457,7 +500,7 @@ export const SECTION_SCHEMAS = {
   archetypes: Archetype,
   spells: Spell,
   itemCategories: ItemCategory,
-  augmentSlots: AugmentSlot,
+  equipSlots: EquipSlot,
   items: Item,
   recipes: Recipe,
   actionTypes: ActionType,

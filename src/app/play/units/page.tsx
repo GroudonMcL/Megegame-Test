@@ -56,7 +56,7 @@ export default async function UnitsPage() {
           </ul>
         </Card>
       )}
-      <p className="text-sm text-muted">Click a name to rename a unit. Lend one to a faction you&apos;ve met to let them move it too.</p>
+      <p className="text-sm text-muted">Use Edit to rename a unit or change its equipment. Lend one to a faction you&apos;ve met to let them move it too.</p>
       {units.map((u) => (
         <Card key={u.id} className={u.status === "dead" || u.status === "disbanded" ? "opacity-60" : ""}>
           <UnitDetails unit={u} rules={rules} regionLabel={regionOf(u.regionId)} borrower={team(u.lentToTeamId)} />

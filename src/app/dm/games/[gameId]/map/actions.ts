@@ -494,7 +494,11 @@ const UnitFields = z.object({
   status: z.enum(["active", "hidden", "dead", "captured", "tamed", "stored", "disbanded"]),
   isLeader: z.boolean(),
   academyBonus: z.partialRecord(z.enum(ABILITIES), z.number().int()),
-  augmentIds: z.array(z.string()),
+  equippedItemIds: z.array(z.string().max(100)).max(100),
+  carried: z
+    .array(z.object({ itemId: z.string().min(1).max(100), qty: z.number().int().min(1).max(1_000_000) }))
+    .max(200)
+    .default([]),
   notes: z.string().max(5000),
 });
 
@@ -504,6 +508,7 @@ async function checkUnitRefs(gameId: string, u: z.infer<typeof UnitFields>) {
   if (!creature) return { error: "That creature isn't in the ruleset." } as const;
   if (u.raceId && !ruleset.races.some((r) => r.id === u.raceId)) return { error: "That race isn't in the ruleset." } as const;
   if (u.archetypeId && !ruleset.archetypes.some((a) => a.id === u.archetypeId)) return { error: "That archetype isn't in the ruleset." } as const;
+  if ([...u.equippedItemIds, ...u.carried.map((x) => x.itemId)].some((id) => !ruleset.items.some((i) => i.id === id))) return { error: "One of its items isn't in the ruleset." } as const;
   if (u.ownerTeamId) {
     const [t] = await db.select({ id: schema.teams.id }).from(schema.teams).where(and(eq(schema.teams.id, u.ownerTeamId), eq(schema.teams.gameId, gameId)));
     if (!t) return { error: "That team isn't in this game." } as const;

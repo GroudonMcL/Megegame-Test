@@ -75,7 +75,11 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                   emblem and how many units are there; your own have square corners.
                 </li>
                 <li>
-                  <B>Units</B>: every unit you own, where it is, its hit points, movement left and full stat block. Tap a unit&apos;s name to rename it.
+                  <B>Units</B>: every unit you own, where it is, its hit points, movement left, what it has equipped, where each of its bonuses comes from, and its full stat block.
+                  <B> Edit</B> on a unit renames it and changes its equipment: <B>Equip</B> takes an item out of your inventory and puts it on the unit; <B>Unequip</B> puts it back.
+                  This happens straight away, but only while the round is open and the unit is in a region you own. Change your mind by unequipping or equipping again until orders
+                  lock. An item can only be equipped if the unit meets its needs (a Martial unit, a certain race…) and has room for it: each unit has a limit, and some items take a slot
+                  (one Armour, one Shield…). A unit&apos;s archetype is chosen when you recruit it and can&apos;t be changed later.
                 </li>
                 <li>
                   <B>Regions</B> and <B>Inventory</B>: the regions you hold, their buildings and income, and the items and materials you carry.
@@ -180,6 +184,11 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
               <p>
                 Fights are worked out automatically, round by round, using each unit&apos;s stat block. Units retreat when badly hurt. If your units were attacked, the report says by whom and how
                 it went. The DM may share the full fight log.
+              </p>
+              <p>
+                <B>Loot:</B> when a unit dies in a fight, whatever it carried or had equipped (your units&apos; too) goes to the winners: the teams with a unit still standing on the
+                winning side. If that&apos;s only you, it&apos;s in your inventory with your results. If it&apos;s shared with another team (say, a unit they lent you fought too), the DM
+                splits it, or sends you both a note listing it so you can agree how to share it. If nobody wins, it stays with the fallen.
               </p>
             </>
           ),

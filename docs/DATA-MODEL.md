@@ -10,7 +10,7 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | Part | What it is |
 |---|---|
 | `meta` | name, description, terminology map (rename "region" → "Province"…), theme colour, credits |
-| `settings` | action slots, conditional limit, augments per unit, movement (feet → miles per day), combat (round limit, unit width by size, retreat threshold, odds runs), CR → cost table |
+| `settings` | action slots, conditional limit, equipped items per unit and the swap lock, movement (feet → miles per day), combat (round limit, unit width by size, retreat threshold, odds runs), CR → cost table |
 | `resources` | e.g. Gold, Food, Growth |
 | `terrainTypes` | what terrain areas (and links) can be (Normal, Difficult, Flooded…): cost, speeds needed, colour on the map |
 | `settlementTiers` | Outpost → Settlement → City → Capital |
@@ -19,7 +19,7 @@ Each game has one **ruleset**, a single JSON document stored in `game_rulesets.d
 | `creatures` | units, heroes and monsters, each with a **full D&D 5e stat block** |
 | `archetypes` | roles chosen when recruiting (Scout, Regiment, Defender…): tags, abilities, spells, actions |
 | `spells` | spells that archetypes and items grant, with combat profiles where possible |
-| `itemCategories`, `augmentSlots`, `items`, `recipes` | items and crafting |
+| `itemCategories`, `equipSlots`, `items`, `recipes` | items, equipment and crafting (see below) |
 | `actionTypes` | everything teams can order, with requirements, inputs and a handler |
 | `rollTables` | dice tables with outcome bands and automatic results |
 | `rulesSections` | free text for the rules reference |
@@ -30,7 +30,15 @@ Why one JSON document instead of many tables? The ruleset is edited only by the 
 
 ### Stat blocks
 
-A stat block stores everything printed in a D&D 5e stat block. Each action keeps its **text** (for players) and a **combat profile** (for the engine): attack, saving-throw effect, multiattack, heal, buff, spellcasting, or text only. Numbers that come from ability scores record *which* ability they use, so race, academy and augment bonuses change to-hit, damage, save DCs and HP correctly (`src/engine/ruleset/derive.ts`).
+A stat block stores everything printed in a D&D 5e stat block. Each action keeps its **text** (for players) and a **combat profile** (for the engine): attack, saving-throw effect, multiattack, heal, buff, spellcasting, or text only. Numbers that come from ability scores record *which* ability they use, so race, archetype, academy and equipment bonuses change to-hit, damage, save DCs and HP correctly (`src/engine/ruleset/derive.ts`).
+
+### Items and equipment
+
+An item is **equippable** if its category is (`itemCategories[].equippable`). It may also take an **equipment slot** (`slotId`, from `equipSlots`: Armour, Shield…, each with a `maxPerUnit`); an item without a slot only counts towards the unit's total, `settings.maxEquippedPerUnit` (an `equipLimit` effect changes it for one unit). The item's `requiresUnitTags` and `requiresRaces` must fit the unit. Equipped items' effects change the unit's stats through `src/engine/ruleset/derive.ts` (`unitBonuses`), each bonus named after its item.
+
+Teams equip and unequip from the unit's **Edit** window: the item leaves or returns to the team's inventory at once, only while the round is open and the unit is in a region the team owns (`src/engine/equipment.ts`, `src/lib/equipment.ts`). With `settings.equipSwapLock`, an item unequipped this round can only go back on the unit it came from until the next round.
+
+Rulesets saved before augments became equipment are brought up to date when they're read (`migrateRuleset` in `ruleset.ts`): `augmentSlots` → `equipSlots`, `maxAugmentsPerUnit` → `maxEquippedPerUnit`, the `augmentLimit` effect → `equipLimit`, the category of any item with a slot becomes equippable, and Apply Augment actions are dropped.
 
 Imported SRD actions are marked `auto`, `needsReview` (a guess worth checking) or `text` (the DM handles it).
 
@@ -51,7 +59,7 @@ Building effects apply to the owning team's units in that region.
 | `regions` | shapes on the map: outline and centre (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
 | `connections` | ways between regions (each pair at most once): **borders** between regions that touch (kept up to date from the shapes; can be blocked or hidden) and **links** between regions that don't (miles, terrain, hidden, blocked) |
 | `terrain_areas` | difficult ground drawn over the regions: outline and terrain type |
-| `units` | instances of a creature: owner (none = wild), race, archetype, academy bonus, augments, HP, region and position in it (empty = the region's centre), miles used this round, status, per-round ability uses |
+| `units` | instances of a creature: owner (none = wild), race, archetype (chosen when recruited; only the DM changes it), academy bonus, equipped items (`equipped_item_ids`; each came out of a team's inventory), items it carries without using them (`carried`, e.g. a monster's hoard; loot when it dies in a fight), items unequipped from it this round (`unequipped`, for the swap lock), HP, region and position in it (empty = the region's centre), miles used this round, status, per-round ability uses |
 | `inventory` | items per team |
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `trades` | trades between teams: what each side gives, status (proposed, accepted, declined, cancelled, executed, failed), and the result |
@@ -66,13 +74,15 @@ Every table has Postgres row-level security switched on with no policies, so Sup
 
 ## DM changes from "view as team"
 
-While viewing as a team, the DM can do anything the team can, and also change its inventory and recipes. Each change is one `audit_log` row with `actor = "dm"`, the team in `team_id`, and enough `before`/`after` to undo it (`src/lib/dmEdits.ts`, with the pure parts in `src/engine/dmEdits.ts`):
+While viewing as a team, the DM can do anything the team can, and also change its inventory and recipes, change a unit's archetype, and equip items any time, anywhere, past the item's requirements (but only from the inventory). A team's own equipment changes are logged as `unit.equip` / `unit.unequip`. Each change is one `audit_log` row with `actor = "dm"`, the team in `team_id`, and enough `before`/`after` to undo it (`src/lib/dmEdits.ts`, with the pure parts in `src/engine/dmEdits.ts`):
 
 | Kind | `before` / `after` hold | Undo |
 |---|---|---|
 | `dm.inventory` | quantities of the items that changed (0 = none) | if each item still has its `after` quantity |
 | `dm.recipes` | for each recipe that changed, whether the team knew it | if the team still knows (or doesn't know) each one |
 | `dm.rename` | the unit and its name | if the unit still has the new name |
+| `dm.equip` | the unit, the item, the unit's equipped items and the team's quantity of the item | if both are still as the change left them |
+| `dm.archetype` | the unit and its archetype | if the unit still has the new archetype |
 | `dm.orders` | the round and order-list version; `before` also has the replaced order rows and who had submitted them | if nobody has saved the list since and the round is still open or locked |
 | `dm.trade.propose` / `respond` / `cancel` | the trade's id, status and answer time (`before` is null for a new proposal) | if the trade is still in the status the DM left it; undoing a proposal deletes it |
 

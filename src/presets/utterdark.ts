@@ -257,7 +257,7 @@ const ARCHETYPES: ArchetypeInput[] = [
     categories: ["hero"],
     description: "A master of invention who unlocks extraordinary capabilities in objects.",
     tags: ["Spellcaster", "Arcane", "Crafter"],
-    effects: [spells("heal", "summon-construct", "dispel-magic"), { type: "augmentLimit", max: 4 }, text("Tinker: may attempt to create a construct.")],
+    effects: [spells("heal", "summon-construct", "dispel-magic"), { type: "equipLimit", max: 4 }, text("Tinker: may attempt to create a construct.")],
     unlocksActions: ["craft", "research"],
   }),
   archetype({
@@ -357,7 +357,9 @@ export function utterdarkPreset() {
     settings: {
       actionSlots: 6,
       conditionalLimit: 2,
-      maxAugmentsPerUnit: 3,
+      maxEquippedPerUnit: 3,
+      // "You can't unequip an item and equip it on another unit in the same turn."
+      equipSwapLock: true,
       freeActionsPerUnit: 1,
       movement: { milesPerDayAt30ft: 24, travelDaysPerRound: 1, defaultConnectionMiles: 12, forceMarchMultiplier: 2, stealthMultiplier: 0.5 },
       combat: { maxRounds: 10, usesReset: "round", retreatBelow: 0.25 },
@@ -656,7 +658,7 @@ export function utterdarkPreset() {
       { id: "trinket", name: "Trinket" },
       { id: "structure", name: "Structure or Trap", equippable: false },
     ],
-    augmentSlots: [
+    equipSlots: [
       { id: "armour", name: "Armour" },
       { id: "consumable", name: "Consumable", maxPerUnit: 3 },
       { id: "equipment", name: "Equipment", maxPerUnit: 2 },
@@ -899,7 +901,7 @@ export function utterdarkPreset() {
         inputs: [{ type: "region" }, { type: "building" }],
       },
       // Free actions
-      { id: "apply-augment", name: "Apply Augment", description: "Equip an augment from your inventory on a unit. You can't unequip an item and equip it on another unit in the same turn.", kind: "free", handler: "applyAugment", inputs: [{ type: "unit" }, { type: "item" }] },
+      // Augments are equipped from the unit's Edit window, not with an order.
       {
         id: "craft",
         name: "Craft",
@@ -912,7 +914,7 @@ export function utterdarkPreset() {
       {
         id: "disband",
         name: "Disband Unit",
-        description: "Disband a unit in a region you control. Its augments return to your inventory. It can't be disbanded on the turn it was recruited. If it has more than half its maximum HP, you regain one Population.",
+        description: "Disband a unit in a region you control. Its augments and anything it carries return to your inventory. It can't be disbanded on the turn it was recruited. If it has more than half its maximum HP, you regain one Population.",
         kind: "free",
         handler: "disband",
         config: { refundIfAboveHalfHp: { population: 1 } },

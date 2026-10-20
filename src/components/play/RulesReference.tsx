@@ -106,7 +106,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
     { id: "archetypes", title: "Archetypes" },
     ...(rules.spells.length ? [{ id: "spells", title: "Spells" }] : []),
     ...(rules.races.length ? [{ id: "races", title: "Races" }] : []),
-    { id: "items", title: "Items and augments" },
+    { id: "items", title: "Items and equipment" },
     { id: "movement", title: "Movement and terrain" },
     ...(met.length ? [{ id: "monsters", title: "Monsters you've met" }] : []),
   ];
@@ -133,7 +133,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
           <li>Free actions can go anywhere in your list and happen at that point.{rules.settings.freeActionsPerUnit !== null ? ` Each unit can take ${rules.settings.freeActionsPerUnit} free action${rules.settings.freeActionsPerUnit === 1 ? "" : "s"} per round, not counting moves.` : ""}</li>
           <li>Moving is free and limited only by each unit&apos;s movement: a unit can move several times a round while it has miles left. Moves happen between the numbered actions (the ones listed before your action 1 before everyone&apos;s action 1, and so on), all teams&apos; at the same time.</li>
           <li>Up to {rules.settings.conditionalLimit} conditional actions per round. A conditional action goes straight after another action and only happens if that action fails.</li>
-          <li>Units can carry up to {rules.settings.maxAugmentsPerUnit} augments.</li>
+          <li>Each unit can have up to {rules.settings.maxEquippedPerUnit} items equipped. Equip and unequip them with the unit&apos;s Edit button while the round is open and the unit is in a region you own.</li>
         </ul>
       </Section>
 
@@ -282,12 +282,12 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
         </Section>
       )}
 
-      <Section id="items" title="Items and augments">
-        {rules.augmentSlots.length > 0 && (
-          <p className="mb-3 text-sm">
-            Augment slots: {rules.augmentSlots.map((s) => `${s.name} (max ${s.maxPerUnit})`).join(", ")}. Up to {rules.settings.maxAugmentsPerUnit} augments per unit.
-          </p>
-        )}
+      <Section id="items" title="Items and equipment">
+        <p className="mb-3 text-sm">
+          {rules.equipSlots.length > 0 && <>Equipment slots: {rules.equipSlots.map((s) => `${s.name} (max ${s.maxPerUnit})`).join(", ")}. </>}
+          Up to {rules.settings.maxEquippedPerUnit} equipped items per unit.
+          {rules.settings.equipSwapLock && " An item unequipped this round can only go back on the unit it came from until next round."}
+        </p>
         <Table
           head={["Item", "Type", "Needs", "Effects"]}
           rows={rules.items.map((it) => [
@@ -295,7 +295,7 @@ export function RulesReference({ rules, metCreatureIds }: { rules: Ruleset; metC
               <strong>{it.name}</strong>
               {it.description && <p className="text-xs text-muted">{it.description}</p>}
             </div>,
-            [rules.itemCategories.find((c) => c.id === it.categoryId)?.name, rules.augmentSlots.find((s) => s.id === it.slotId)?.name, it.consumable ? "consumable" : ""].filter(Boolean).join(" · "),
+            [rules.itemCategories.find((c) => c.id === it.categoryId)?.name, rules.itemCategories.find((c) => c.id === it.categoryId)?.equippable ? `equipment${it.slotId ? `: ${rules.equipSlots.find((s) => s.id === it.slotId)?.name ?? it.slotId}` : ""}` : "", it.consumable ? "consumable" : ""].filter(Boolean).join(" · "),
             [...it.requiresUnitTags.map((t) => `${t} unit`), ...it.requiresRaces.map((id) => rules.races.find((x) => x.id === id)?.name ?? id)].join(", ") || "–",
             effectList(it.effects),
           ])}

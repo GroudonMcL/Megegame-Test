@@ -81,6 +81,19 @@ Anything else (an ability with only text, or a trait the app doesn't recognise) 
 - The fight also ends when one side has nobody left, or after the **maximum number of rounds** (Settings, default 10), with no winner.
 - Units at 0 HP **die** and stay on the map as corpses that can be harvested.
 
+## Loot
+
+When a unit dies in a fight, everything it **carries** (the DM gives monsters items when placing them) and everything it has **equipped** (team units too) becomes loot for the winning side (`fightLoot` in `src/engine/combat/fight.ts`).
+
+- **Who wins it:** the teams with a unit still **standing** on the winning side at the end. Retreated units don't count. Usually that's one team; it can be several when a team moved a unit lent to it by another team into the fight.
+- **One team:** the loot goes into its inventory when you accept the order.
+- **Several teams:** the fight card shows the loot and two choices:
+  - **Split it between them now:** set how many of each item each team gets. Each item's shares must add up to how many there are; until they do (or if the fight changes after a re-roll or an edit), everything goes to the team that gave the order. Accepting puts each share into that team's inventory.
+  - **Send them a note to share it out themselves:** edit the suggested note; accepting sends it to each of those teams' Messages (as a DM note). The loot isn't added to anyone's inventory; give it out by hand from View as team › Inventory once they agree. Undoing the order doesn't unsend the note.
+- **Nobody wins** (the monsters win, or the round limit is reached): the gear stays on the fallen. You can see and change it in the unit's editor on the World map.
+- Either way, the dead units lose what was taken from them.
+- The loot is listed in the **fight log** (💰) and in each team's **results**. A team whose lent unit fought gets a report of its share.
+
 ## Your controls on each fight
 
 - **The fight card** shows every unit's HP before and after, what happened to it, the abilities that aren't automated, and the round-by-round log.
@@ -89,5 +102,6 @@ Anything else (an ability with only text, or a trait the app doesn't recognise) 
 - **Focus on** pins a target for a side. **Resolve by hand** skips the simulation: the move still happens, and you set HP and statuses on the World map.
 - **Edit results by hand** lets you set any unit's final HP and whether it's standing, retreated or dead. The log notes your change. A re-roll clears these edits.
 - **Show the log to the teams** (on by default): both sides see the round-by-round log on their Results page. The defending team gets an "Attacked" report even though it gave no order.
-- Click **Apply these settings** after changing any of these. The fight is worked out again with the same dice.
+- **Loot** (several winning teams only): split it or send a note (see above).
+- Click **Apply these settings** after changing any of these. The fight is worked out again with the same dice. A re-roll clears the loot split too.
 - As with every order, accepting re-runs the fight with the same dice against the game as it is now, and **Undo last** reverses it.

@@ -1,8 +1,10 @@
+import { itemsText } from "../equipment";
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
 import { parsePath, traceRoute } from "../orders/route";
 import { routeMapFromWorld } from "../orders/routeMap";
 import type { OrderDraft } from "../orders/validate";
+import type { ItemQty } from "../world/types";
 import type { Change, World } from "./types";
 
 // Plain-English summaries for the DM's resolution screen.
@@ -112,16 +114,19 @@ export function describeChange(r: Ruleset, world: World, c: Change): string {
     case "moveUnit":
       return `${unit(c.unitId)} → ${region(c.regionId)}`;
     case "updateUnit": {
+      const itemName = (id: string) => r.items.find((x) => x.id === id)?.name ?? id;
       const parts = Object.entries(c.patch).map(([k, v]) =>
-        k === "augmentIds"
-          ? `augments: ${(v as string[]).map((id) => r.items.find((x) => x.id === id)?.name ?? id).join(", ") || "none"}`
-          : k === "milesUsed"
-            ? "movement used up"
-            : k === "usesSpent"
-              ? `uses spent: ${Object.entries(v as Record<string, number>).map(([n, x]) => `${n} ×${x}`).join(", ") || "none"}`
-              : k === "ownerTeamId"
-                ? `now belongs to ${v ? team(v as string) : "the wild"}`
-                : `${k} → ${typeof v === "object" ? JSON.stringify(v) : v}`,
+        k === "equippedItemIds"
+          ? `equipped: ${(v as string[]).map(itemName).join(", ") || "nothing"}`
+          : k === "carried"
+            ? `carries: ${itemsText(v as ItemQty[], itemName) || "nothing"}`
+            : k === "milesUsed"
+              ? "movement used up"
+              : k === "usesSpent"
+                ? `uses spent: ${Object.entries(v as Record<string, number>).map(([n, x]) => `${n} ×${x}`).join(", ") || "none"}`
+                : k === "ownerTeamId"
+                  ? `now belongs to ${v ? team(v as string) : "the wild"}`
+                  : `${k} → ${typeof v === "object" ? JSON.stringify(v) : v}`,
       );
       return `${unit(c.unitId)}: ${parts.join(", ")}`;
     }

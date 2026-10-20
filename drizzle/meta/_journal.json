@@ -92,6 +92,13 @@
       "when": 1792494781334,
       "tag": "0012_unit_lending",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792526655476,
+      "tag": "0013_equipment_and_loot",
+      "breakpoints": true
     }
   ]
 }
