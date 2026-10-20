@@ -1,7 +1,8 @@
 import { deriveStats, unitBonuses } from "@/engine/ruleset/derive";
 import { describeEffect, fmtRes, namesFrom } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
-import type { TeamView, ViewRegion } from "@/engine/world/teamView";
+import { lendLabel } from "@/engine/lending";
+import { movableUnits, type TeamView, type ViewRegion } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES, type WorldUnit } from "@/engine/world/types";
 import { regionTitle } from "./format";
 import { TeamEmblem } from "@/components/icons/TeamEmblem";
@@ -26,7 +27,9 @@ export function ownerName(view: TeamView, id: string | null) {
 
 /**
  * What the team knows about a region. showTitle = false when the panel around
- * it already names the region; onUnitClick makes the units listed clickable.
+ * it already names the region; onUnitClick makes the units listed clickable;
+ * greyed says which units to grey out (those the team can't move, or left out
+ * of the units ticked to move on the map).
  */
 export function RegionDetails({
   region,
@@ -34,12 +37,14 @@ export function RegionDetails({
   rules,
   showTitle = true,
   onUnitClick,
+  greyed,
 }: {
   region: ViewRegion;
   view: TeamView;
   rules: Ruleset;
   showTitle?: boolean;
   onUnitClick?: (kind: "unit" | "other", id: string) => void;
+  greyed?: (unitId: string) => boolean;
 }) {
   const unitButton = (kind: "unit" | "other", id: string, text: string) =>
     onUnitClick ? (
@@ -51,7 +56,9 @@ export function RegionDetails({
     );
   const names = namesFrom(rules);
   const tier = rules.settlementTiers.find((t) => t.id === region.settlementTierId);
-  const own = view.ownUnits.filter((u) => u.regionId === region.id && ON_MAP_STATUSES.has(u.status));
+  // The team's own units and those lent to it.
+  const own = movableUnits(view).filter((u) => u.regionId === region.id && ON_MAP_STATUSES.has(u.status));
+  const teamOf = (id: string | null) => (id === view.team.id ? view.team : (id && view.teams.find((t) => t.id === id)) || null);
   const others = view.otherUnits.filter((u) => u.regionId === region.id);
 
   if (region.state === "glimpsed") {
@@ -148,15 +155,19 @@ export function RegionDetails({
           <h4 className="font-medium">Units here</h4>
           {own.length + others.length === 0 && <p className="text-muted">None that you can see.</p>}
           <ul className="space-y-0.5">
-            {own.map((u) => (
-              <li key={u.id}>
-                <TeamEmblem team={view.team} size={14} className="mr-1 align-[-2px]" />
-                {unitButton("unit", u.id, unitLabel(rules, u))} · {u.status === "dead" ? "dead" : `${u.hp}/${unitMaxHp(rules, u)} HP`}
-                {u.status === "hidden" ? " · stealthed" : ""}
-              </li>
-            ))}
+            {own.map((u) => {
+              const lent = lendLabel(u, view.team.id, (id) => teamOf(id)?.name ?? "another faction");
+              return (
+                <li key={u.id} className={greyed?.(u.id) ? "opacity-50" : undefined}>
+                  <TeamEmblem team={teamOf(u.ownerTeamId)} size={14} className="mr-1 align-[-2px]" />
+                  {unitButton("unit", u.id, unitLabel(rules, u))} · {u.status === "dead" ? "dead" : `${u.hp}/${unitMaxHp(rules, u)} HP`}
+                  {u.status === "hidden" ? " · stealthed" : ""}
+                  {lent ? ` · ${lent.charAt(0).toLowerCase()}${lent.slice(1)}` : ""}
+                </li>
+              );
+            })}
             {others.map((u) => (
-              <li key={u.id}>
+              <li key={u.id} className={greyed?.(u.id) ? "opacity-50" : undefined}>
                 <TeamEmblem team={(u.ownerTeamId && view.teams.find((t) => t.id === u.ownerTeamId)) || null} size={14} className="mr-1 align-[-2px]" />
                 {unitButton("other", u.id, u.creatureName)} · {u.ownerTeamId ? ownerName(view, u.ownerTeamId) : "wild"}
                 {u.dead ? " · dead" : ""}

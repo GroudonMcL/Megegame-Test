@@ -48,6 +48,8 @@ export interface UnitData {
   status: string;
   isLeader: boolean;
   notes: string;
+  /** Another team its owner lets move it. */
+  lentToTeamId?: string | null;
 }
 
 export interface TerrainAreaData {

@@ -72,6 +72,8 @@ export interface WorldUnit {
   isLeader: boolean;
   /** Per-round ability uses spent, e.g. { "Fireball": 1 }. */
   usesSpent: Record<string, number>;
+  /** Another team its owner lets move it (both teams can); null or missing = not lent. */
+  lentToTeamId?: string | null;
 }
 
 /** What one team has discovered or been given. */

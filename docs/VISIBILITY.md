@@ -34,6 +34,9 @@ Borders and links are sent when one side is seen now or seen before (blocked one
 - Other teams' units and wild monsters in a region the team sees: **only the type and the owner** (e.g. "Knight · Iron Clan"). No names, HP, augments or stats.
 - Stealthed units of other teams stay invisible until this team has detected them.
 - The first time a team sees a monster type, its stat block appears in the team's rules reference.
+- **Lent units**: a team can lend some of its units to a team it has met (and take them back at any time). While lent, the borrower gets the unit **in full**, like its own, and the unit gives it **vision** like its own units (its region, plus its vision range). Both teams can move it; only the owner can give it other orders. A third team still sees only its type and owner, and nothing says it is lent. Taking it back ends the borrower's view of it and through it straight away (regions it saw are then remembered as usual).
+
+In the map's unit menu (click a badge) and the side panel, units the team can't move are greyed out and show only what the team knows by these rules: type and owner, unless they're its own or lent to it.
 
 ## The map image
 
@@ -53,7 +56,7 @@ Players get the ruleset without the monster library (except monsters they've met
 
 ## The DM
 
-The DM sees everything on the World map. **View as team** (on the game's Teams page) shows the player screens exactly as that team sees them, and lets the DM act for the team (orders, unit names, trades) and change its inventory and recipes. Viewing as a team never changes what the team remembers: every page loads the team's view without recording it, and the DM's own controls (the item and recipe editors, the DM log) are only sent when the DM is viewing. Opening the team's Messages there doesn't mark them read for the team.
+The DM sees everything on the World map, and can drag any unit anywhere there (see the DM guide). An instant move changes only where the units are; what each team sees follows from that on its next page load. **View as team** (on the game's Teams page) shows the player screens exactly as that team sees them, and lets the DM act for the team (orders, unit names, trades) and change its inventory and recipes. Viewing as a team never changes what the team remembers: every page loads the team's view without recording it, and the DM's own controls (the item and recipe editors, the DM log) are only sent when the DM is viewing. Opening the team's Messages there doesn't mark them read for the team.
 
 ## Messages
 

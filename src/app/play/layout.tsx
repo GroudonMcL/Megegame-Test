@@ -1,5 +1,8 @@
 import { PlayerShell } from "@/components/play/PlayerShell";
 import { teamThemeProps } from "@/components/theme/teamTheme";
+import { inArray } from "drizzle-orm";
+import { db, schema } from "@/db";
+import { contactsOf } from "@/lib/contacts";
 import { threadUnread } from "@/lib/messages";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
 import { requireViewer } from "@/lib/viewer";
@@ -9,10 +12,15 @@ import { requireViewer } from "@/lib/viewer";
 
 export default async function PlayLayout({ children }: LayoutProps<"/play">) {
   const viewer = await requireViewer();
-  const [{ view, rules, mapImage, map3d, round, orderState, orders }, unreadMessages] = await Promise.all([
+  const [{ view, rules, mapImage, map3d, round, orderState, orders }, unreadMessages, contactIds] = await Promise.all([
     loadTeamView(viewer.gameId, viewer.teamId, { record: !viewer.isDm }),
     threadUnread(viewer.team, viewer.isDm ? "dm" : "team"),
+    contactsOf(viewer.gameId, viewer.teamId),
   ]);
+  // Teams it has met: it can lend them units.
+  const contacts = contactIds.length
+    ? await db.select({ id: schema.teams.id, name: schema.teams.name, colour: schema.teams.colour, emblem: schema.teams.emblem }).from(schema.teams).where(inArray(schema.teams.id, contactIds))
+    : [];
   return (
     // data-team: accents inside use the team colour (globals.css).
     <div {...teamThemeProps(viewer.team.colour)}>
@@ -28,6 +36,7 @@ export default async function PlayLayout({ children }: LayoutProps<"/play">) {
           ordersOpen: viewer.isDm ? { open: true, reason: "" } : ordersOpen(round),
           resources: rules.resources.map((r) => ({ id: r.id, name: r.name, icon: r.icon, amount: view.team.resources[r.id] ?? 0 })),
           unreadMessages,
+          contacts,
         }}
         view={view}
         rules={rules}

@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import { effectiveKind, type OrderDraft } from "@/engine/orders/validate";
-import { buildTeamView, memoriesToRecord, playerRuleset, type TeamView } from "@/engine/world/teamView";
+import { buildTeamView, memoriesToRecord, movableUnits, playerRuleset, type TeamView } from "@/engine/world/teamView";
 import type { RegionMemory, TeamKnowledge } from "@/engine/world/types";
 import { fogHoles, fogKey } from "./fogImage";
 import { loadMapImage } from "./map";
@@ -128,7 +128,8 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
 
   const rules = playerRuleset(ruleset, {
     metCreatureIds: [...seen, ...newlySeen],
-    ownCreatureIds: view.ownUnits.map((u) => u.creatureId),
+    // Units lent to the team are shown in full, stat block included.
+    ownCreatureIds: movableUnits(view).map((u) => u.creatureId),
     knownRecipeIds: team.knownRecipeIds,
   });
 

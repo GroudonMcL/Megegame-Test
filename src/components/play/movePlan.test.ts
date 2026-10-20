@@ -110,6 +110,21 @@ describe("planning moves on the map", () => {
     expect(far.outOfMovement).toBe(true);
   });
 
+  it("repositions units inside their own region, using miles", () => {
+    const start = moveStart(validateOrders(rules, view, []), [g1.id]);
+    if ("error" in start) throw new Error(start.error);
+    const spot: [number, number] = [0.2, 0.2];
+    const route = previewMove(rules, routeMapFromView(view), [g1], start, [spot], move);
+    expect(route.endRegion).toBe("a");
+    expect(route.blocked).toBeUndefined();
+    // From the centre (0.125, 0.125): about 5 of the 48 miles across.
+    expect(route.miles[0]).toBeCloseTo(Math.hypot(0.075, 0.075) * 48, 1);
+    const check = validateOrders(rules, view, [newOrder(rules, move, { unitIds: [g1.id], path: [spot] }, true, "o1")]);
+    expect(check.orders[0].problems).toEqual([]);
+    expect(check.units[g1.id]).toMatchObject({ regionId: "a", at: spot });
+    expect(check.units[g1.id].used).toBeGreaterThan(0);
+  });
+
   it("joins a move already going from the same region to the same region", () => {
     const o = newOrder(rules, move, { unitIds: [g1.id], path: [B] }, true, "o1");
     expect(findJoin(rules, view, [o], move, [g2.id], "a", "b")?.id).toBe("o1");

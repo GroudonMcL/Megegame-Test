@@ -132,6 +132,18 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                 see-through badge where the units will end up (drag that to plan their next move); tap a route to redraw or cancel it.
               </p>
               <p>
+                Click a unit badge to open a small menu around it with every unit standing there (more than eight show as a list). Click a unit in it for its details. Tick
+                the units you want to move: dragging the badge then moves only those (the stack splits in two), or, with none ticked, every unit there you can move. Units you
+                can&apos;t move (other factions&apos; units and monsters) are greyed out and show only their type and owner; in the side panel, units left out of the ones you
+                ticked are greyed out too.
+              </p>
+              <p>
+                <B>Lending units</B>: on one of your units, <B>Lend to…</B> lets a faction you&apos;ve met move it too, and <B>Take back</B> ends that at any time (not while the
+                DM is resolving a round). While it&apos;s lent, both of you can move it, but only you can give it other orders. They see it in full and see what it sees. A unit lent to you
+                shows in its owner&apos;s badge, says who lent it, and can be ticked and dragged with your own units. If it&apos;s taken back after you planned a move with it, that
+                move fails when the round is resolved. The <B>Units</B> window lists the units you&apos;ve lent and those lent to you.
+              </p>
+              <p>
                 In the Orders window, pick the units, then <B>Draw route on map</B> and tap the map to add stops: your units walk in straight lines from stop to stop. The miles come from the map&apos;s scale; the
                 part of the route through difficult terrain costs more, and water needs swimming or flying. A route can only cross into a neighbouring region (not through a blocked border), but
                 it can go on into ground you can&apos;t see: your units go as far as they can, and the DM checks the rest. Units that move together go at the speed of the slowest, and each

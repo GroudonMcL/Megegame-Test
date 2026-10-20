@@ -17,8 +17,11 @@ import { gridPositions, nextRegionCode } from "@/engine/map/codes";
 import { parseRegionCsv } from "@/engine/map/csv";
 import { MapLook } from "@/engine/world/mapLook";
 import sharp from "sharp";
+import { planDmMove } from "@/engine/dmMoves";
 import { audit } from "@/lib/audit";
 import { syncBorders } from "@/lib/borders";
+import { dmAddMoveOrders, dmMoveNow, undoWorldChange, type DoneChange } from "@/lib/dmMoves";
+import { TeamNoteInput } from "@/lib/messages";
 import { loadRuleset } from "@/lib/rulesets";
 import { requireDm } from "@/lib/session";
 
@@ -575,4 +578,49 @@ export async function deleteUnitAction(gameId: string, unitId: string) {
     .returning();
   if (before) await audit(db, { gameId: id, actor: "dm", kind: "unit.delete", description: `Removed ${before.name}`, before });
   done(id);
+}
+
+// ——— Dragging units on the World map ———
+
+const DmMove = z.object({
+  unitIds: z.array(RowId).min(1).max(200),
+  regionId: RowId,
+  at: z.tuple([Fraction, Fraction]),
+  /** instant = move them now; order = add a move to each team's orders for this round. */
+  mode: z.enum(["instant", "order"]),
+  /** teamId → the note to that team. */
+  notes: z.record(z.string(), TeamNoteInput).default({}),
+});
+
+/** The DM drags units to a point: anywhere, ignoring borders and distance. */
+export async function dmMoveUnitsAction(gameId: string, input: z.input<typeof DmMove>): Promise<ActionResult<DoneChange[]>> {
+  const id = await guard(gameId);
+  const parsed = DmMove.safeParse(input);
+  if (!parsed.success) return fail("That move couldn't be read.");
+  const { unitIds, regionId, at, mode, notes } = parsed.data;
+  const target = { regionId, at };
+  let result: { error: string } | { done: DoneChange[] };
+  if (mode === "instant") result = await dmMoveNow(id, unitIds, target, notes);
+  else {
+    const owners = await db.select({ id: schema.units.id, ownerTeamId: schema.units.ownerTeamId }).from(schema.units).where(and(eq(schema.units.gameId, id), inArray(schema.units.id, unitIds)));
+    const plan = planDmMove(owners);
+    if (plan.wild.length) return fail("Wild monsters can only be moved straight away.");
+    result = await dmAddMoveOrders(id, plan.teams, target, notes);
+  }
+  if ("error" in result) return fail(result.error);
+  done(id);
+  revalidatePath(`/dm/games/${id}`, "layout");
+  revalidatePath("/play", "layout");
+  return { ok: true, value: result.done };
+}
+
+/** Undo a move made from the World map (or the move order it added). */
+export async function dmUndoWorldAction(gameId: string, auditId: string): Promise<ActionResult<null>> {
+  const id = await guard(gameId);
+  const error = await undoWorldChange(id, RowId.parse(auditId));
+  if (error) return fail(error);
+  done(id);
+  revalidatePath(`/dm/games/${id}`, "layout");
+  revalidatePath("/play", "layout");
+  return { ok: true, value: null };
 }

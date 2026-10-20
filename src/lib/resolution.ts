@@ -182,7 +182,11 @@ async function applyChanges(tx: Tx, gameId: string, changes: Change[]) {
           .where(and(eq(schema.units.id, c.unitId), eq(schema.units.gameId, gameId)));
         break;
       case "updateUnit":
-        await tx.update(schema.units).set(c.patch).where(and(eq(schema.units.id, c.unitId), eq(schema.units.gameId, gameId)));
+        // A unit that changes hands (captured) is no longer lent to anyone.
+        await tx
+          .update(schema.units)
+          .set("ownerTeamId" in c.patch ? { ...c.patch, lentToTeamId: null } : c.patch)
+          .where(and(eq(schema.units.id, c.unitId), eq(schema.units.gameId, gameId)));
         break;
       case "createUnit":
         await tx.insert(schema.units).values({ ...c.unit, gameId });
@@ -207,7 +211,12 @@ async function restore(tx: Tx, gameId: string, before: Before) {
   for (const id of before.createdUnitIds) await tx.delete(schema.units).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   for (const u of before.units) {
     const { id, regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId } = u;
-    await tx.update(schema.units).set({ regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId }).where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
+    // Older undo records have no lentToTeamId; leave the unit's as it is then.
+    const lent = "lentToTeamId" in u ? { lentToTeamId: u.lentToTeamId } : {};
+    await tx
+      .update(schema.units)
+      .set({ regionId, x, y, milesUsed, status, hp, augmentIds, academyBonus, name, usesSpent, ownerTeamId, ...lent })
+      .where(and(eq(schema.units.id, id), eq(schema.units.gameId, gameId)));
   }
   if (before.detections) {
     const ids = [...new Set([...before.detections.map((d) => d.unitId), ...(before.detectionUnitIds ?? [])])];

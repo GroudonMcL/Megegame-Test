@@ -51,8 +51,9 @@ export function fullView(world: World, teamId: string, round: number): TeamView 
     })),
     connections: world.connections,
     ownUnits: world.units.filter((u) => u.ownerTeamId === teamId),
+    lentUnits: world.units.filter((u) => u.ownerTeamId && u.ownerTeamId !== teamId && u.lentToTeamId === teamId),
     otherUnits: world.units
-      .filter((u) => u.ownerTeamId !== teamId && u.regionId && ON_MAP_STATUSES.has(u.status))
+      .filter((u) => u.ownerTeamId !== teamId && !(u.ownerTeamId && u.lentToTeamId === teamId) && u.regionId && ON_MAP_STATUSES.has(u.status))
       .map((u) => ({ id: u.id, creatureId: u.creatureId, creatureName: u.creatureId, ownerTeamId: u.ownerTeamId, regionId: u.regionId!, x: u.x, y: u.y, dead: u.status === "dead" })),
     terrain: (world.terrain ?? []).map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: [[a.polygon]] })),
     map: mapScaleOf(world),
@@ -117,9 +118,10 @@ export function resolveOrder(input: ResolveInput): Proposal {
   const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : str(v) ? [v as string] : []);
   const unitById = new Map(world.units.map((u) => [u.id, u]));
   const regionById = new Map(world.regions.map((x) => [x.id, x]));
+  // The team's own units; for a move, units lent to it too (the check above stops other orders using them).
   const units = strs(value("unit"))
     .map((id) => unitById.get(id))
-    .filter((u): u is WorldUnit => Boolean(u && u.ownerTeamId === teamId));
+    .filter((u): u is WorldUnit => Boolean(u && (u.ownerTeamId === teamId || (action.handler === "move" && u.ownerTeamId && u.lentToTeamId === teamId))));
   const name = (u: WorldUnit) => u.name || r.creatures.find((c) => c.id === u.creatureId)?.statBlock.name || "a unit";
   const unitList = units.map(name).join(", ");
   const regionName = (id: string | null | undefined) => {

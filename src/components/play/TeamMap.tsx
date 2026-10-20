@@ -1,18 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import type { MapNode } from "@/components/map/MapCanvas";
 import { MapSurface } from "@/components/map/MapSurface";
 import type { Map3dInfo } from "@/engine/world/mapLook";
 import { DEFAULT_MAP_SIZE } from "@/components/map/mapData";
 import { connectionEdges, terrainLayer } from "@/components/map/mapLayers";
-import { groupBadges, SpotBadges, type BadgeTeam } from "@/components/map/UnitBadges";
+import { groupBadges, parseBadge, spotOf, SpotBadges, type BadgeTeam } from "@/components/map/UnitBadges";
+import { UnitRadial } from "@/components/map/UnitRadial";
+import { toggleUnit, type StackEntry } from "@/components/map/unitStack";
+import { lendLabel } from "@/engine/lending";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
-import { ON_MAP_STATUSES } from "@/engine/world/types";
+import { ON_MAP_STATUSES, type WorldUnit } from "@/engine/world/types";
 
 // A team's fogged map. Shows only what's in its view: regions it sees now,
 // regions it remembers (dimmed), unexplored neighbours (dashed outline, "?"),
-// terrain where it can see, and units where they stand.
+// terrain where it can see, and units where they stand. Clicking a unit badge
+// opens the radial menu (UnitRadial) of every unit at that spot; dragging the
+// badge moves the ticked units, or all the ones the team can move.
 
 type Pt = [number, number];
 
@@ -35,8 +41,15 @@ export interface TeamMapProps {
   bare?: boolean;
   /** Centre the map on this region whenever key changes. */
   focus?: { nodeId: string; key: number } | null;
-  /** Own units that can be dragged (their stacks become drag handles). */
+  /** Units that can be dragged now: own and lent (their stacks become drag handles). */
   movable?: Set<string>;
+  /** Units with a move already planned (dragged on from their ghost stack instead). */
+  moving?: Set<string>;
+  /** The units ticked in the radial menu, to move together. */
+  stackSelection?: ReadonlySet<string>;
+  onStackSelection?: (ids: Set<string>) => void;
+  /** A unit was clicked in the radial menu: own (or lent) units are "unit", the rest "other". */
+  onUnitOpen?: (kind: "unit" | "other", id: string) => void;
   /** A stack (or ghost stack) is being dragged: its units, the pointer, and whether it was let go. */
   onStackDrag?: (unitIds: string[], p: Pt, done: boolean) => void;
   /** Where units will be after their planned moves: drawn as see-through stacks you can drag on from. */
@@ -62,6 +75,8 @@ export interface PlannedRoute {
 
 export function TeamMap(props: TeamMapProps) {
   const { view, rules, mapImage, selectedId, onRegionClick, highlight, path, onPointClick, onBackgroundClick, onBadgeClick, className, bare, focus, movable, onStackDrag, ghosts, routes, preview } = props;
+  // The spot whose radial menu is open.
+  const [openSpot, setOpenSpot] = useState<string | null>(null);
   const size = mapImage ?? DEFAULT_MAP_SIZE;
   const allTeams = new Map<string, BadgeTeam>([[view.team.id, view.team], ...view.teams.map((t) => [t.id, t] as const)]);
   const byId = new Map(view.regions.map((r) => [r.id, r]));
@@ -83,46 +98,96 @@ export function TeamMap(props: TeamMapProps) {
     dim: state(c.regionA) === "remembered" || state(c.regionB) === "remembered",
   }));
 
+  const centre = (id: string): Pt | undefined => {
+    const r = byId.get(id);
+    return r ? [r.x, r.y] : undefined;
+  };
+  const teamName = (id: string) => allTeams.get(id)?.name ?? "another faction";
+  const creatureName = (id: string) => rules.creatures.find((c) => c.id === id)?.statBlock.name ?? "Unit";
+  const onMap = (u: WorldUnit) => Boolean(u.regionId && ON_MAP_STATUSES.has(u.status));
+  // Own units, units lent to the team (in their owner's colours) and other units it can see.
+  const controlled = [...view.ownUnits.filter(onMap), ...(view.lentUnits ?? []).filter(onMap)];
   const spots = groupBadges(
     [
-      ...view.ownUnits.filter((u) => u.regionId && ON_MAP_STATUSES.has(u.status)).map((u) => ({ id: u.id, regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: view.team.id, dead: u.status === "dead" })),
-      ...view.otherUnits.map((u) => ({ regionId: u.regionId, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId, dead: u.dead })),
+      ...controlled.map((u) => ({ id: u.id, regionId: u.regionId!, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId ?? view.team.id, dead: u.status === "dead", lent: Boolean(u.lentToTeamId) })),
+      ...view.otherUnits.map((u) => ({ id: u.id, regionId: u.regionId, x: u.x, y: u.y, ownerTeamId: u.ownerTeamId, dead: u.dead })),
     ],
-    (id) => {
-      const r = byId.get(id);
-      return r ? [r.x, r.y] : undefined;
-    },
+    centre,
     (id) => allTeams.get(id),
   );
+
+  // What the radial menu lists at each spot. Other sides' units: only their type and owner.
+  const entriesAt = new Map<string, StackEntry[]>();
+  const addEntry = (regionId: string, x: number | null, y: number | null, e: StackEntry) => {
+    const at: Pt | undefined = x !== null && y !== null ? [x, y] : centre(regionId);
+    if (!at) return;
+    const key = spotOf(regionId, at);
+    entriesAt.set(key, [...(entriesAt.get(key) ?? []), e]);
+  };
+  for (const u of controlled) {
+    const kind = creatureName(u.creatureId);
+    const owner = u.ownerTeamId ? allTeams.get(u.ownerTeamId) : undefined;
+    addEntry(u.regionId!, u.x, u.y, {
+      id: u.id,
+      name: u.name || kind,
+      detail: kind,
+      owner: owner ?? view.team,
+      movable: Boolean(movable?.has(u.id)),
+      dead: u.status === "dead",
+      note: props.moving?.has(u.id) ? "Has a planned move (drag its ghost)" : lendLabel(u, view.team.id, teamName),
+    });
+  }
+  for (const u of view.otherUnits) {
+    addEntry(u.regionId, u.x, u.y, {
+      id: u.id,
+      name: u.creatureName,
+      detail: `${u.creatureName} · ${u.ownerTeamId ? teamName(u.ownerTeamId) : "wild"}`,
+      owner: u.ownerTeamId ? (allTeams.get(u.ownerTeamId) ?? null) : null,
+      movable: false,
+      dead: u.dead,
+    });
+  }
+  const radialOn = Boolean(onBadgeClick && props.onStackSelection);
+  const openEntries = openSpot ? entriesAt.get(openSpot) : undefined;
+  const selection = props.stackSelection ?? new Set<string>();
+  /** A badge was clicked: open its spot's menu (and tell the screen, which opens the side panel). */
+  const badgeClicked = (regionId: string, owner: string, spot: string) => {
+    if (radialOn && spot) setOpenSpot(spot);
+    onBadgeClick?.(regionId, owner);
+  };
   const ghostSpots = groupBadges(
-    (ghosts ?? []).map((g) => ({ id: g.id, regionId: g.regionId, x: g.at[0], y: g.at[1], ownerTeamId: view.team.id, dead: false })),
+    (ghosts ?? []).map((g) => ({ id: g.id, regionId: g.regionId, x: g.at[0], y: g.at[1], ownerTeamId: controlled.find((u) => u.id === g.id)?.ownerTeamId ?? view.team.id, dead: false })),
     () => undefined,
     (id) => allTeams.get(id),
   );
 
-  // Drag handles: "stack:<key>" (units that can still move), "ghost:<key>", "route:<id>".
-  const stacks = new Map<string, string[]>();
-  const stackHandle = (prefix: string) => (g: { key: string; owner: string; ids: string[] }) => {
-    if (!onStackDrag || g.owner !== view.team.id) return undefined;
-    const ids = prefix === "stack" ? g.ids.filter((id) => movable?.has(id)) : g.ids;
+  // Drag handles: "stack:<key>" (a pill with units that can still move), "ghost:<key>", "route:<id>".
+  // Dragging a stack moves the units ticked in its spot's menu, or every unit there that can move.
+  const stacks = new Map<string, { ids: string[]; regionId: string; owner: string; spot: string }>();
+  const stackHandle = (prefix: "stack" | "ghost") => (g: { key: string; spot: string; regionId: string; owner: string; ids: string[] }) => {
+    if (!onStackDrag) return undefined;
+    let ids = g.ids;
+    if (prefix === "stack") {
+      if (!g.ids.some((id) => movable?.has(id))) return undefined;
+      const here = (entriesAt.get(g.spot) ?? []).filter((e) => e.movable).map((e) => e.id);
+      const ticked = here.filter((id) => selection.has(id));
+      ids = ticked.length ? ticked : here;
+    }
     if (!ids.length) return undefined;
-    stacks.set(`${prefix}:${g.key}`, ids);
+    stacks.set(`${prefix}:${g.key}`, { ids, regionId: g.regionId, owner: g.owner, spot: g.spot });
     return `${prefix}:${g.key}`;
   };
   const ownHandle = stackHandle("stack");
   const ghostHandle = stackHandle("ghost");
   const onHandleMove = (id: string, p: Pt, done: boolean) => {
-    const ids = stacks.get(id);
-    if (ids) onStackDrag?.(ids, p, done);
+    const st = stacks.get(id);
+    if (st) onStackDrag?.(st.ids, p, done);
   };
   const onHandleClick = (id: string) => {
-    const ids = stacks.get(id);
+    const st = stacks.get(id);
     if (id.startsWith("route:")) props.onRouteClick?.(id.slice(6));
-    else if (id.startsWith("ghost:") && ids) props.onGhostClick?.(ids);
-    else if (ids) {
-      const u = view.ownUnits.find((x) => x.id === ids[0]);
-      if (u?.regionId) onBadgeClick?.(u.regionId, view.team.id);
-    }
+    else if (id.startsWith("ghost:") && st) props.onGhostClick?.(st.ids);
+    else if (st) badgeClicked(st.regionId, st.owner, st.spot);
   };
 
   const size2 = { width: size.width, height: size.height };
@@ -152,49 +217,71 @@ export function TeamMap(props: TeamMapProps) {
   });
 
   return (
-    <MapSurface
-      width={size.width}
-      height={size.height}
-      imageUrl={mapImage?.url}
-      nodes={nodes}
-      edges={edges}
-      terrain={terrainLayer(view.terrain, rules)}
-      selectedNodeId={selectedId}
-      onNodeClick={(id, e) => (e.badge && onBadgeClick ? onBadgeClick(id, e.badge) : onRegionClick?.(id))}
-      onBackgroundClick={onBackgroundClick && (() => onBackgroundClick())}
-      onPointClick={onPointClick}
-      onHandleMove={onStackDrag || props.onRouteClick ? onHandleMove : undefined}
-      onHandleClick={onStackDrag || props.onRouteClick ? onHandleClick : undefined}
-      onHover={props.onHover}
-      className={className}
-      bare={bare}
-      focus={focus}
-      fitToNodes
-      map3d={props.map3d}
-      overlay={(scale) => (
-        <>
-          {routeLines(scale)}
-          {spots.map((groups) => ownBadges(scale, groups))}
-          {ghostSpots.map((groups) => ghostBadges(scale, groups))}
-          {preview && <PreviewLine preview={preview} {...size2} scale={scale} />}
-        </>
+    <>
+      <MapSurface
+        width={size.width}
+        height={size.height}
+        imageUrl={mapImage?.url}
+        nodes={nodes}
+        edges={edges}
+        terrain={terrainLayer(view.terrain, rules)}
+        selectedNodeId={selectedId}
+        onNodeClick={(id, e) => {
+          if (e.badge && onBadgeClick) {
+            const b = parseBadge(e.badge);
+            return badgeClicked(id, b.owner, b.spot);
+          }
+          setOpenSpot(null);
+          onRegionClick?.(id);
+        }}
+        onBackgroundClick={() => {
+          setOpenSpot(null);
+          onBackgroundClick?.();
+        }}
+        onPointClick={onPointClick}
+        onHandleMove={onStackDrag || props.onRouteClick ? onHandleMove : undefined}
+        onHandleClick={onStackDrag || props.onRouteClick ? onHandleClick : undefined}
+        onHover={props.onHover}
+        className={className}
+        bare={bare}
+        focus={focus}
+        fitToNodes
+        map3d={props.map3d}
+        overlay={(scale) => (
+          <>
+            {routeLines(scale)}
+            {spots.map((groups) => ownBadges(scale, groups))}
+            {ghostSpots.map((groups) => ghostBadges(scale, groups))}
+            {preview && <PreviewLine preview={preview} {...size2} scale={scale} />}
+          </>
+        )}
+        three={{
+          drape: routeLines,
+          tokens: [
+            ...spots.map((groups) => token(groups[0].key, groups[0].at, ownBadges(1, groups, true))),
+            ...ghostSpots.map((groups) => token(`ghost:${groups[0].key}`, groups[0].at, ghostBadges(1, groups, true))),
+            ...(preview ? [previewLabel(preview)] : []),
+          ],
+          lines: preview
+            ? [
+                { key: "walked", points: preview.walked, colour: preview.forced ? "var(--map-forced)" : preview.ok ? "var(--map-path)" : "var(--danger)", dashed: !preview.forced },
+                { key: "rest", points: preview.rest, colour: "var(--danger)", dashed: true },
+              ]
+            : [],
+          hitLines: props.onRouteClick ? routes?.map((r) => ({ handle: `route:${r.id}`, points: r.points })) : undefined,
+        }}
+      />
+      {radialOn && openSpot && openEntries && (
+        <UnitRadial
+          spot={openSpot}
+          entries={openEntries}
+          selected={selection}
+          onToggle={(e) => props.onStackSelection?.(toggleUnit(selection, e))}
+          onOpen={(e) => props.onUnitOpen?.(controlled.some((u) => u.id === e.id) ? "unit" : "other", e.id)}
+          onClose={() => setOpenSpot(null)}
+        />
       )}
-      three={{
-        drape: routeLines,
-        tokens: [
-          ...spots.map((groups) => token(groups[0].key, groups[0].at, ownBadges(1, groups, true))),
-          ...ghostSpots.map((groups) => token(`ghost:${groups[0].key}`, groups[0].at, ghostBadges(1, groups, true))),
-          ...(preview ? [previewLabel(preview)] : []),
-        ],
-        lines: preview
-          ? [
-              { key: "walked", points: preview.walked, colour: preview.forced ? "var(--map-forced)" : preview.ok ? "var(--map-path)" : "var(--danger)", dashed: !preview.forced },
-              { key: "rest", points: preview.rest, colour: "var(--danger)", dashed: true },
-            ]
-          : [],
-        hitLines: props.onRouteClick ? routes?.map((r) => ({ handle: `route:${r.id}`, points: r.points })) : undefined,
-      }}
-    />
+    </>
   );
 }
 

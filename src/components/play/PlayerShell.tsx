@@ -15,8 +15,9 @@ import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button, IconButton } from "@/components/ui";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { Map3dInfo } from "@/engine/world/mapLook";
-import type { TeamView } from "@/engine/world/teamView";
+import { movableUnits, type TeamView } from "@/engine/world/teamView";
 import { ON_MAP_STATUSES } from "@/engine/world/types";
+import { isGreyed, pruneSelection, selectedAmong } from "@/components/map/unitStack";
 import { Countdown } from "./Countdown";
 import { regionTitle } from "./format";
 import { MapKey } from "./MapKey";
@@ -60,6 +61,8 @@ export interface ToolbarInfo {
   resources: { id: string; name: string; icon: string; amount: number }[];
   /** Messages not read yet: from the DM for players; from the team for the DM. */
   unreadMessages: number;
+  /** Teams this team has met (it can lend them units). */
+  contacts: EmblemTeam[];
 }
 
 interface ShellProps {
@@ -92,7 +95,19 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
     selectedRoute: selection?.kind === "route" ? selection.id : null,
     onSelectRoute: (id) => setSelection(id ? { kind: "route", id } : null),
   });
-  const panel = selection && sidePanelFor(selection, view, rules, info.ordersOpen, setSelection, moves, (id) => {
+  // Units ticked in the radial menu on the map, to move together. Units that have moved
+  // (or can't move any more) drop out.
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set());
+  const stackSelection = pruneSelection(ticked, (id) => moves.movable.has(id));
+  // In the side panel: units the team can't move, or left out of those ticked in the same region, are greyed out.
+  const controlled = movableUnits(view);
+  const regionOfUnit = (id: string) => controlled.find((u) => u.id === id)?.regionId ?? view.otherUnits.find((u) => u.id === id)?.regionId;
+  const greyed = (id: string) => {
+    const regionId = regionOfUnit(id);
+    const here = selectedAmong(stackSelection, controlled.filter((u) => u.regionId === regionId).map((u) => u.id));
+    return isGreyed({ id, movable: moves.movable.has(id) }, here);
+  };
+  const panel = selection && sidePanelFor(selection, view, rules, info.ordersOpen, setSelection, moves, greyed, (id) => {
     draft.reveal(id, false);
     router.push("/play/orders");
   });
@@ -101,20 +116,19 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
 
   // "Show on map" from a window: close the window, select the thing and centre the map on it.
   const showOnMap = (s: MapSelection) => {
-    const regionId = s.kind === "region" ? s.id : s.kind === "unit" ? view.ownUnits.find((u) => u.id === s.id)?.regionId : view.otherUnits.find((u) => u.id === s.id)?.regionId;
+    const regionId = s.kind === "region" ? s.id : s.kind === "unit" ? controlled.find((u) => u.id === s.id)?.regionId : view.otherUnits.find((u) => u.id === s.id)?.regionId;
     setSelection(s);
     if (regionId) setFocus((f) => ({ nodeId: regionId, key: (f?.key ?? 0) + 1 }));
     router.push("/play");
   };
 
-  // A unit badge: one unit opens that unit, several open the region (which lists them).
+  // A unit badge (the map also opens its radial menu): one unit opens that unit, several open
+  // the region (which lists them). Units lent to the team are in their owner's badge.
   const onBadge = (regionId: string, owner: string) => {
-    const units =
-      owner === view.team.id
-        ? view.ownUnits.filter((u) => u.regionId === regionId && ON_MAP_STATUSES.has(u.status)).map((u) => u.id)
-        : view.otherUnits.filter((u) => u.regionId === regionId && (u.ownerTeamId ?? "wild") === owner).map((u) => u.id);
-    if (units.length === 1) setSelection({ kind: owner === view.team.id ? "unit" : "other", id: units[0] });
-    else setSelection({ kind: "region", id: regionId });
+    const mine = controlled.filter((u) => u.regionId === regionId && ON_MAP_STATUSES.has(u.status) && (u.ownerTeamId ?? view.team.id) === owner).map((u) => u.id);
+    const theirs = view.otherUnits.filter((u) => u.regionId === regionId && (u.ownerTeamId ?? "wild") === owner).map((u) => u.id);
+    if (mine.length + theirs.length !== 1) setSelection({ kind: "region", id: regionId });
+    else setSelection(mine.length ? { kind: "unit", id: mine[0] } : { kind: "other", id: theirs[0] });
   };
 
   const toolbar = (
@@ -159,7 +173,7 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
   );
 
   return (
-    <ViewerInfoContext value={{ isDm: info.isDm, teamName: info.team.name }}>
+    <ViewerInfoContext value={{ isDm: info.isDm, teamName: info.team.name, contacts: info.contacts }}>
       <MapShell
         toolbar={
           <>
@@ -177,6 +191,9 @@ function Shell({ info, view, rules, mapImage, map3d, children }: ShellProps) {
             // While tapping out a move, clicks on the map are its stops.
             onRegionClick={moves.tapping ? undefined : (id) => setSelection({ kind: "region", id })}
             onBadgeClick={moves.tapping ? undefined : onBadge}
+            stackSelection={stackSelection}
+            onStackSelection={setTicked}
+            onUnitOpen={(kind, id) => setSelection({ kind, id })}
             onBackgroundClick={moves.tapping ? undefined : () => setSelection(null)}
             className="h-full"
             bare
@@ -238,6 +255,7 @@ function sidePanelFor(
   open: { open: boolean; reason: string },
   select: (s: MapSelection | null) => void,
   moves: MapMoves,
+  greyed: (unitId: string) => boolean,
   openOrder: (id: string) => void,
 ): { title: ReactNode; body: ReactNode; regionId: string | null } | null {
   const regionLink = (id: string | null) => {
@@ -258,7 +276,7 @@ function sidePanelFor(
       regionId: region.id,
       body: (
         <>
-          <RegionDetails region={region} view={view} rules={rules} showTitle={false} onUnitClick={(kind, id) => select({ kind, id })} />
+          <RegionDetails region={region} view={view} rules={rules} showTitle={false} onUnitClick={(kind, id) => select({ kind, id })} greyed={greyed} />
           <QuickOrders rules={rules} view={view} target={{ kind: "region", region }} open={open} />
         </>
       ),
@@ -310,21 +328,24 @@ function sidePanelFor(
   }
 
   if (sel.kind === "unit") {
-    const unit = view.ownUnits.find((u) => u.id === sel.id);
+    const unit = movableUnits(view).find((u) => u.id === sel.id);
     if (!unit) return null;
     const creature = rules.creatures.find((c) => c.id === unit.creatureId);
+    // A unit lent to the team: whose it is. The team's own unit: who it's lent to.
+    const lentBy = unit.ownerTeamId !== view.team.id ? (view.teams.find((t) => t.id === unit.ownerTeamId) ?? { id: unit.ownerTeamId ?? "", name: "another faction", colour: "#888888" }) : null;
+    const borrower = unit.lentToTeamId ? (view.teams.find((t) => t.id === unit.lentToTeamId) ?? null) : null;
     return {
       title: unit.name || creature?.statBlock.name || "Unit",
       regionId: unit.regionId,
       body: (
         <>
-          <UnitDetails unit={unit} rules={rules} regionLabel={regionLink(unit.regionId)} compact />
+          <UnitDetails unit={unit} rules={rules} regionLabel={regionLink(unit.regionId)} compact lentBy={lentBy} borrower={borrower} />
           {moves.canMove(unit) && (
             <Button className="mt-3 px-3! py-1.5! text-xs" onClick={() => moves.startTap([unit.id])}>
               <Icon name="map" size={14} /> Move on map
             </Button>
           )}
-          <QuickOrders rules={rules} view={view} target={{ kind: "unit", unit }} open={open} />
+          {!lentBy && <QuickOrders rules={rules} view={view} target={{ kind: "unit", unit }} open={open} />}
           <Link href="/play/units" className="mt-3 inline-block text-xs text-link underline">
             All your units →
           </Link>

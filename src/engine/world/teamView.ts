@@ -80,6 +80,11 @@ export interface TeamView {
   regions: ViewRegion[];
   connections: WorldConnection[];
   ownUnits: WorldUnit[];
+  /**
+   * Other teams' units lent to this team: in full, like its own. It can move
+   * them (only move them) and sees through them. Missing in older test views.
+   */
+  lentUnits?: WorldUnit[];
   otherUnits: ViewOtherUnit[];
   terrain: ViewTerrain[];
   map: MapScale;
@@ -134,6 +139,7 @@ export function buildTeamView(input: TeamViewInput): TeamView {
   }
 
   const ownUnits = input.units.filter((u) => vis.ownUnits.has(u.id));
+  const lentUnits = input.units.filter((u) => vis.lentUnits.has(u.id));
   const otherUnits: ViewOtherUnit[] = input.units
     .filter((u) => vis.otherUnits.has(u.id))
     .map((u) => ({
@@ -160,6 +166,9 @@ export function buildTeamView(input: TeamViewInput): TeamView {
   const teamIds = new Set<string>();
   for (const reg of regions) if (reg.ownerTeamId) teamIds.add(reg.ownerTeamId);
   for (const u of otherUnits) if (u.ownerTeamId) teamIds.add(u.ownerTeamId);
+  // Who lent the team units, and who it has lent units to.
+  for (const u of lentUnits) if (u.ownerTeamId) teamIds.add(u.ownerTeamId);
+  for (const u of ownUnits) if (u.lentToTeamId) teamIds.add(u.lentToTeamId);
   teamIds.delete(team.id);
   const teams = input.teams.filter((t) => teamIds.has(t.id)).map(({ id, name, colour, isNpc, emblem }) => ({ id, name, colour, isNpc, emblem }));
 
@@ -171,12 +180,18 @@ export function buildTeamView(input: TeamViewInput): TeamView {
       .filter((c) => vis.connections.has(c.id))
       .map(({ id, regionA, regionB, kind, blocked, miles, terrainId, hidden }) => ({ id, regionA, regionB, kind, blocked, miles, terrainId, hidden })),
     ownUnits,
+    lentUnits,
     otherUnits,
     terrain,
     map: input.map,
     inventory: input.inventory,
     round: input.round,
   };
+}
+
+/** The units a team can move: its own, and those lent to it. */
+export function movableUnits(view: Pick<TeamView, "ownUnits" | "lentUnits">): WorldUnit[] {
+  return [...view.ownUnits, ...(view.lentUnits ?? [])];
 }
 
 /** Memories to store for every region the team sees right now. */

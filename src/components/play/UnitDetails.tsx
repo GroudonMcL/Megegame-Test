@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TeamEmblem, type EmblemTeam } from "@/components/icons/TeamEmblem";
 import { StatBlockView } from "@/components/StatBlockView";
 import { unitEffects, unitUpkeep } from "@/engine/orders/economy";
 import { milesPerRound } from "@/engine/orders/movement";
@@ -7,10 +8,12 @@ import { describeEffect, fmtRes, namesFrom } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { WorldUnit } from "@/engine/world/types";
 import { unitMaxHp } from "./RegionDetails";
+import { LendUnit } from "./LendUnit";
 import { RenameUnit } from "./RenameUnit";
 
 // Everything about one of the team's own units: shown in the Units window and
-// in the side panel when the unit is clicked on the map.
+// in the side panel when the unit is clicked on the map. Units another team
+// has lent this team are shown in full too, saying whose they are.
 
 export const STATUS_LABEL: Record<string, string> = {
   active: "Active",
@@ -22,8 +25,26 @@ export const STATUS_LABEL: Record<string, string> = {
   disbanded: "Disbanded",
 };
 
-/** regionLabel: the unit's location as text (or a button, in the side panel). compact: a narrow panel. */
-export function UnitDetails({ unit: u, rules, regionLabel, compact = false }: { unit: WorldUnit; rules: Ruleset; regionLabel: ReactNode; compact?: boolean }) {
+/**
+ * regionLabel: the unit's location as text (or a button, in the side panel). compact: a narrow panel.
+ * lentBy: the team that lent this unit to the viewer's team (it can only move it).
+ * borrower: for the team's own unit, the team it's lent to.
+ */
+export function UnitDetails({
+  unit: u,
+  rules,
+  regionLabel,
+  compact = false,
+  lentBy,
+  borrower,
+}: {
+  unit: WorldUnit;
+  rules: Ruleset;
+  regionLabel: ReactNode;
+  compact?: boolean;
+  lentBy?: EmblemTeam | null;
+  borrower?: EmblemTeam | null;
+}) {
   const names = namesFrom(rules);
   const c = rules.creatures.find((x) => x.id === u.creatureId);
   const archetype = rules.archetypes.find((x) => x.id === u.archetypeId);
@@ -35,8 +56,16 @@ export function UnitDetails({ unit: u, rules, regionLabel, compact = false }: { 
   const upkeep = unitUpkeep(rules, u);
   return (
     <>
+      {lentBy && (
+        <p className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-raised px-2 py-1 text-sm">
+          <TeamEmblem team={lentBy} size={16} />
+          <span>
+            Lent to you by <strong>{lentBy.name}</strong>: you can move it (so can they) and see what it sees.
+          </span>
+        </p>
+      )}
       <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
-        <RenameUnit unitId={u.id} name={u.name} placeholder={c?.statBlock.name ?? "Unit"} />
+        {lentBy ? <span className="px-1 py-0.5 text-base font-medium">{u.name || c?.statBlock.name || "Unit"}</span> : <RenameUnit unitId={u.id} name={u.name} placeholder={c?.statBlock.name ?? "Unit"} />}
         <span className="text-sm text-muted">
           {[c?.statBlock.name ?? u.creatureId, archetype?.name, race?.name].filter(Boolean).join(" · ")}
           {u.isLeader ? " · Leader" : ""}
@@ -62,9 +91,12 @@ export function UnitDetails({ unit: u, rules, regionLabel, compact = false }: { 
         </div>
         <div>
           <dt className="text-muted">Upkeep</dt>
-          <dd>{u.isLeader ? "none (leader)" : fmtRes(upkeep, rules.resources)}</dd>
+          <dd>{lentBy ? `paid by ${lentBy.name}` : u.isLeader ? "none (leader)" : fmtRes(upkeep, rules.resources)}</dd>
         </div>
       </dl>
+      {!lentBy && (u.status === "active" || u.status === "hidden" || u.lentToTeamId) && (
+        <LendUnit unitId={u.id} lentToTeamId={u.lentToTeamId ?? null} borrower={borrower} unitName={u.name || c?.statBlock.name || "a unit"} />
+      )}
       {tags.length > 0 && <p className="mt-2 text-xs text-muted">Tags: {tags.join(", ")}</p>}
       <div className="mt-2 text-sm">
         <span className="font-medium">Augments: </span>

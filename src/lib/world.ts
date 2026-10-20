@@ -64,6 +64,8 @@ export function toWorldUnit(u: typeof schema.units.$inferSelect): WorldUnit {
     status: u.status,
     isLeader: u.isLeader,
     usesSpent: u.usesSpent,
+    // Missing from snapshots taken before units could be lent.
+    lentToTeamId: u.lentToTeamId ?? null,
   };
 }
 

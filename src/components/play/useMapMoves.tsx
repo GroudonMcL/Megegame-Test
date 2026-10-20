@@ -10,7 +10,7 @@ import type { PathStep, RouteResult } from "@/engine/orders/route";
 import { routeMapFromView } from "@/engine/orders/routeMap";
 import { validateOrders, type OrderDraft, type OrdersCheck } from "@/engine/orders/validate";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
-import type { TeamView } from "@/engine/world/teamView";
+import { movableUnits, type TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES, type WorldUnit } from "@/engine/world/types";
 import { findJoin, joinOrder, moveActionsFor, moveMode, moveStart, newOrder, orderUnits, previewMove, withPath, type MoveStart } from "./movePlan";
 import { useOrdersDraft } from "./ordersDraft";
@@ -61,6 +61,8 @@ export interface MapMoves {
   startTap: (unitIds: string[], editing?: string) => void;
   /** Can these units be given a move on the map now? */
   canMove: (unit: WorldUnit | undefined) => boolean;
+  /** Units that can be dragged now (own and lent, with no move planned yet). */
+  movable: Set<string>;
   /** Can the orders be changed now? */
   editable: boolean;
   check: OrdersCheck;
@@ -83,13 +85,15 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
     return () => clearTimeout(t);
   }, [toast]);
 
-  const unitsOf = (ids: string[]) => ids.map((id) => view.ownUnits.find((u) => u.id === id)).filter((u): u is WorldUnit => Boolean(u));
+  // The team's own units and those lent to it.
+  const controlled = movableUnits(view);
+  const unitsOf = (ids: string[]) => ids.map((id) => controlled.find((u) => u.id === id)).filter((u): u is WorldUnit => Boolean(u));
   const moving = new Set(orders.filter((o) => isMove(rules, o)).flatMap((o) => orderUnits(rules, o)));
   const canMove = (u: WorldUnit | undefined): u is WorldUnit => !!u && editable && ACTIVE_STATUSES.has(u.status) && !!u.regionId && moveActionsFor(rules, [u]).length > 0;
-  const movable = new Set(view.ownUnits.filter((u) => canMove(u) && !moving.has(u.id)).map((u) => u.id));
+  const movable = new Set(controlled.filter((u) => canMove(u) && !moving.has(u.id)).map((u) => u.id));
 
   // Where units with queued moves end up.
-  const ghosts = view.ownUnits.flatMap((u) => {
+  const ghosts = controlled.flatMap((u) => {
     const end = check.units[u.id];
     return moving.has(u.id) && canMove(u) && end?.at && end.regionId ? [{ id: u.id, regionId: end.regionId, at: end.at }] : [];
   });
@@ -313,7 +317,7 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
                     {miles(o.route)} of {left} mi
                   </span>
                   {o.action.description && <span className="mt-0.5 block text-xs text-muted">{o.action.description}</span>}
-                  <span className="mt-0.5 block text-xs">{o.join ? "Joins the move already going there (no extra action)." : choice.plan.editing ? "" : `Uses a numbered action (${check.slotsUsed + 1} of ${check.slotsTotal}).`}</span>
+                  <span className="mt-0.5 block text-xs">{o.join ? "Joins the move already going there." : choice.plan.editing ? "" : o.action.kind === "free" ? "A free action: it only uses movement." : `Uses a numbered action (${check.slotsUsed + 1} of ${check.slotsTotal}).`}</span>
                 </button>
               );
             })}
@@ -341,6 +345,7 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
         preview,
         ghosts,
         movable,
+        moving,
         onStackDrag: editable ? onStackDrag : undefined,
         onRouteClick: (id) => onSelectRoute(id),
         onGhostClick: (ids) => {
@@ -358,6 +363,7 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
       begin(ids, "tap", null, editing);
     },
     canMove,
+    movable,
     editable,
     check,
     cancelOrder,

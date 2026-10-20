@@ -259,6 +259,8 @@ export const units = pgTable(
     isLeader: boolean("is_leader").notNull().default(false),
     // Per-round ability uses spent, e.g. { "Fireball": 1 }.
     usesSpent: jsonb("uses_spent").$type<Record<string, number>>().notNull().default({}),
+    // Another team its owner lets move it (both can); null = not lent.
+    lentToTeamId: uuid("lent_to_team_id").references(() => teams.id, { onDelete: "set null" }),
     // Corpse: how much is left to harvest.
     harvestLeft: jsonb("harvest_left").$type<{ itemId: string; qty: number }[]>().notNull().default([]),
     notes: text("notes").notNull().default(""),

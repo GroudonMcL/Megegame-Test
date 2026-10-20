@@ -9,6 +9,7 @@ import { effectiveKind, OrderDraft, validateOrders } from "@/engine/orders/valid
 import { renameDescription } from "@/engine/dmEdits";
 import { audit } from "@/lib/audit";
 import { editInventory, editRecipes, ordersStateFor, undoDmChange, type OrdersState, type RenameState } from "@/lib/dmEdits";
+import { lendUnit } from "@/lib/lending";
 import { markRead, postMessage, sendDmNote, TeamNoteInput } from "@/lib/messages";
 import { loadTeamView, ordersOpen } from "@/lib/teamView";
 import { clearViewAs, getViewer } from "@/lib/viewer";
@@ -145,6 +146,21 @@ export async function renameUnitAction(unitId: string, name: string, note?: unkn
   if (error) return { ok: false, error };
   revalidatePath("/play", "layout");
   return { ok: true, value: clean.data };
+}
+
+/** Lend one of the team's units to a team it has met (toTeamId), or take it back (null). */
+export async function lendUnitAction(unitId: string, toTeamId: string | null, note?: unknown): Promise<ActionResult<null>> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: "Your session has ended." };
+  const id = z.uuid().safeParse(unitId);
+  const to = z.uuid().nullable().safeParse(toTeamId);
+  const parsedNote = TeamNoteInput.safeParse(note);
+  if (!id.success || !to.success || !parsedNote.success) return { ok: false, error: "That unit or team wasn't found." };
+  const error = await lendUnit(viewer.gameId, viewer.teamId, id.data, to.data, { isDm: viewer.isDm, displayName: viewer.displayName, note: parsedNote.data });
+  if (error) return { ok: false, error };
+  revalidatePath("/play", "layout");
+  revalidatePath(`/dm/games/${viewer.gameId}`, "layout");
+  return { ok: true, value: null };
 }
 
 // ——— The DM's extra powers in "view as team" ———

@@ -10,7 +10,8 @@ import { ACTIVE_STATUSES, ON_MAP_STATUSES, type RegionMemory, type TeamKnowledge
 // permanent vision of it, or it's within vision range of one of the team's
 // units or buildings that grant vision. Hidden regions and connections need to
 // have been discovered first. Stealthed units of other teams stay invisible
-// until this team has detected them.
+// until this team has detected them. Units another team has lent this team
+// count as its own for seeing (and it gets their full details).
 //
 // Around what it sees, a team gets two rings: regions next to a seen one are
 // glimpsed (the map and terrain in greyscale, and the name; nothing else), and
@@ -29,6 +30,8 @@ export interface Visibility {
   otherUnits: Set<string>;
   /** The team's own units. */
   ownUnits: Set<string>;
+  /** Other teams' units lent to this team (it can move them and sees through them). */
+  lentUnits: Set<string>;
 }
 
 function visionFromEffects(effects: Effect[]): number {
@@ -95,9 +98,11 @@ export function computeVisibility(
     if (knowledge.regions.get(reg.id)?.permanentVision) visible.add(reg.id);
   }
   const ownUnits = new Set<string>();
+  const lentUnits = new Set<string>();
   for (const u of world.units) {
-    if (u.ownerTeamId !== teamId) continue;
-    ownUnits.add(u.id);
+    if (u.ownerTeamId === teamId) ownUnits.add(u.id);
+    else if (u.ownerTeamId && u.lentToTeamId === teamId) lentUnits.add(u.id);
+    else continue;
     if (!u.regionId || !ACTIVE_STATUSES.has(u.status) || !regionById.has(u.regionId)) continue;
     visible.add(u.regionId);
     addSource(u.regionId, unitVisionRange(r, u));
@@ -153,13 +158,13 @@ export function computeVisibility(
 
   const otherUnits = new Set<string>();
   for (const u of world.units) {
-    if (u.ownerTeamId === teamId || !u.regionId || !ON_MAP_STATUSES.has(u.status)) continue;
+    if (u.ownerTeamId === teamId || lentUnits.has(u.id) || !u.regionId || !ON_MAP_STATUSES.has(u.status)) continue;
     if (!visible.has(u.regionId)) continue;
     if (u.status === "hidden" && !knowledge.detectedUnits.has(u.id)) continue;
     otherUnits.add(u.id);
   }
 
-  return { regions, connections, otherUnits, ownUnits };
+  return { regions, connections, otherUnits, ownUnits, lentUnits };
 }
 
 /** What a team will remember about a region it's looking at now. */

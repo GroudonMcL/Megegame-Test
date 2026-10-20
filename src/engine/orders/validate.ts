@@ -4,7 +4,7 @@ import { creatureCosts, unitTags } from "../ruleset/derive";
 import type { Effect } from "../ruleset/effects";
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
-import type { TeamView, ViewRegion } from "../world/teamView";
+import { movableUnits, type TeamView, type ViewRegion } from "../world/teamView";
 import { ACTIVE_STATUSES, type WorldUnit } from "../world/types";
 import { addTo, buildingTier, projectEconomy, unitEffects, type Economy, type EconomyLine } from "./economy";
 import type { Pt } from "../geo/polygon";
@@ -197,7 +197,10 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
   const regionById = new Map(view.regions.map((x) => [x.id, x]));
   // Built the first time a move needs it.
   let routeMap: RouteMap | undefined;
-  const unitById = new Map(view.ownUnits.map((u) => [u.id, u]));
+  // The team's own units, and units lent to it (which it can only move).
+  const controlled = movableUnits(view);
+  const lent = new Set((view.lentUnits ?? []).map((u) => u.id));
+  const unitById = new Map(controlled.map((u) => [u.id, u]));
   const unitName = (id: string) => {
     const u = unitById.get(id);
     return u ? u.name || r.creatures.find((c) => c.id === u.creatureId)?.statBlock.name || "Unit" : "an unknown unit";
@@ -216,16 +219,16 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
 
   const start: Sim = {
     res: { ...view.team.resources },
-    unitRegion: Object.fromEntries(view.ownUnits.map((u) => [u.id, u.regionId])),
+    unitRegion: Object.fromEntries(controlled.map((u) => [u.id, u.regionId])),
     unitPos: Object.fromEntries(
-      view.ownUnits.flatMap((u): [string, Pt][] => {
+      controlled.flatMap((u): [string, Pt][] => {
         if (u.x !== null && u.y !== null) return [[u.id, [u.x, u.y]]];
         const reg = view.regions.find((x) => x.id === u.regionId);
         return reg ? [[u.id, [reg.x, reg.y]]] : [];
       }),
     ),
     unitUsed: Object.fromEntries(
-      view.ownUnits.map((u) => {
+      controlled.map((u) => {
         const per = milesPerRound(r, u);
         return [u.id, per > 0 ? u.milesUsed / per : 1];
       }),
@@ -309,6 +312,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     for (const id of unitIds) {
       const u = unitById.get(id);
       if (!u) problem("That unit isn't yours.");
+      else if (lent.has(id) && action.handler !== "move") problem(`${unitName(id)} is lent to you: you can only move it.`);
       else if (!ACTIVE_STATUSES.has(u.status) || !s.unitRegion[id]) problem(`${unitName(id)} can't act (it's ${u.status}).`);
       else if (s.disbanded.includes(id)) problem(`${unitName(id)} has been disbanded by an earlier order.`);
     }
@@ -839,7 +843,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     adhoc,
   });
 
-  const movement: MovementLine[] = view.ownUnits
+  const movement: MovementLine[] = controlled
     .filter((u) => ACTIVE_STATUSES.has(u.status) && u.regionId)
     .map((u) => {
       const per = milesPerRound(r, u);
@@ -866,7 +870,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     economy,
     movement,
     freeUses,
-    units: Object.fromEntries(view.ownUnits.map((u) => [u.id, { regionId: sim.unitRegion[u.id] ?? null, at: sim.unitPos[u.id] ?? null, used: sim.unitUsed[u.id] ?? 1 }])),
+    units: Object.fromEntries(controlled.map((u) => [u.id, { regionId: sim.unitRegion[u.id] ?? null, at: sim.unitPos[u.id] ?? null, used: sim.unitUsed[u.id] ?? 1 }])),
     ok: checks.every((c) => c.problems.length === 0),
   };
 }

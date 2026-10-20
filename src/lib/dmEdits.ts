@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { db, schema } from "@/db";
 import {
   applyRecipeChange,
@@ -12,6 +12,7 @@ import {
   type InventoryChange,
   type RecipeChange,
 } from "@/engine/dmEdits";
+import { movedSince, type UnitSpot } from "@/engine/dmMoves";
 import type { TeamNote } from "@/engine/messages";
 import { audit } from "./audit";
 import { sendDmNote } from "./messages";
@@ -180,6 +181,20 @@ async function undoOne(tx: Tx, gameId: string, teamId: string, kind: string, bef
     }
     case "dm.orders":
       return undoOrders(tx, teamId, before as OrdersState, after as OrdersState, since);
+    case "dm.move":
+      return revertUnitMove(tx, gameId, before as UnitSpot[], after as UnitSpot[]);
+    case "dm.lend": {
+      const b = before as { unitId: string; lentToTeamId: string | null };
+      const a = after as { unitId: string; lentToTeamId: string | null };
+      const [unit] = await tx
+        .select({ lent: schema.units.lentToTeamId })
+        .from(schema.units)
+        .where(and(eq(schema.units.id, a.unitId), eq(schema.units.gameId, gameId), eq(schema.units.ownerTeamId, teamId)))
+        .for("update");
+      if (!unit || unit.lent !== a.lentToTeamId) return `Who the unit is lent to ${since}`;
+      await tx.update(schema.units).set({ lentToTeamId: b.lentToTeamId }).where(eq(schema.units.id, a.unitId));
+      return null;
+    }
     case "dm.trade.propose":
     case "dm.trade.respond":
     case "dm.trade.cancel":
@@ -187,6 +202,25 @@ async function undoOne(tx: Tx, gameId: string, teamId: string, kind: string, bef
     default:
       return "This kind of change can't be undone.";
   }
+}
+
+/**
+ * Puts units moved by the DM back where they were ("dm.move"), if they are
+ * all still where the move left them.
+ */
+export async function revertUnitMove(tx: Tx, gameId: string, before: UnitSpot[], after: UnitSpot[]): Promise<string | null> {
+  const ids = after.map((a) => a.unitId);
+  const rows = ids.length
+    ? await tx
+        .select({ unitId: schema.units.id, regionId: schema.units.regionId, x: schema.units.x, y: schema.units.y })
+        .from(schema.units)
+        .where(and(eq(schema.units.gameId, gameId), inArray(schema.units.id, ids)))
+        .for("update")
+    : [];
+  const moved = movedSince(after, rows);
+  if (moved.length) return `${moved.length === ids.length ? "These units have" : "Some of these units have"} moved since, so this can't be undone. Move them back by hand instead.`;
+  for (const b of before) await tx.update(schema.units).set({ regionId: b.regionId, x: b.x, y: b.y }).where(and(eq(schema.units.id, b.unitId), eq(schema.units.gameId, gameId)));
+  return null;
 }
 
 async function undoOrders(tx: Tx, teamId: string, before: OrdersState, after: OrdersState, since: string): Promise<string | null> {

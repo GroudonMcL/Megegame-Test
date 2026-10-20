@@ -1,0 +1,2 @@
+ALTER TABLE "units" ADD COLUMN "lent_to_team_id" uuid;--> statement-breakpoint
+ALTER TABLE "units" ADD CONSTRAINT "units_lent_to_team_id_teams_id_fk" FOREIGN KEY ("lent_to_team_id") REFERENCES "public"."teams"("id") ON DELETE set null ON UPDATE no action;

@@ -20,7 +20,7 @@ export function applyChanges(world: World, changes: Change[]): World {
       }
       case "updateUnit": {
         const u = w.units.find((x) => x.id === c.unitId);
-        if (u) Object.assign(u, c.patch);
+        if (u) Object.assign(u, c.patch, "ownerTeamId" in c.patch ? { lentToTeamId: null } : {});
         break;
       }
       case "createUnit":
