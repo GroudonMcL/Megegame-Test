@@ -81,9 +81,9 @@ describe("planning moves on the map", () => {
     expect(ids).toContain("move-stealth");
   });
 
-  it("makes a filled-in move order, taking a numbered slot", () => {
+  it("makes a filled-in move order, as a free action", () => {
     const o = newOrder(rules, move, { unitIds: [g1.id, g2.id], path: [B] }, true, "o1");
-    expect(o).toMatchObject({ id: "o1", kind: "numbered", actionTypeId: "move", inputs: { "0": [g1.id, g2.id], "1": [B] } });
+    expect(o).toMatchObject({ id: "o1", kind: "free", actionTypeId: "move", inputs: { "0": [g1.id, g2.id], "1": [B] } });
     expect(validateOrders(rules, view, [o]).orders[0].problems).toEqual([]);
   });
 

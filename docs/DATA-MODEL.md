@@ -45,7 +45,7 @@ Building effects apply to the owning team's units in that region.
 | Table | Holds |
 |---|---|
 | `games` | name, status, preset, current round, map image, map scale (miles across the map), map kind (old node maps are converted to regions once by `scripts/convert-maps.ts`), the public Discord webhook |
-| `teams` | name, colour, emblem (an ID from `src/components/icons/emblems.ts`), join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook. NPC factions are teams with `is_npc`. |
+| `teams` | name, colour, emblem (an ID from `src/components/icons/emblems.ts`), join code, races, resource stockpiles, known recipes, monsters seen (for the rules reference), secret objectives, notes, Discord webhook, and when the team (any player on it) and the DM last opened their Messages conversation (`messages_read_at`, `dm_read_at`; newer messages count as unread). NPC factions are teams with `is_npc`. |
 | `players` | who joined each team |
 | `assets` | uploaded files (the map image), stored in the database and served only through the app |
 | `regions` | shapes on the map: outline and centre (fractions of the image), code, owner, settlement tier, buildings, ruins/dungeons, deposits, features |
@@ -56,9 +56,24 @@ Building effects apply to the owning team's units in that region.
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `trades` | trades between teams: what each side gives, status (proposed, accepted, declined, cancelled, executed, failed), and the result |
 | `rounds` | round lifecycle (open → locked → resolving → review → published), deadline, the state when resolution started (what players see until publishing), the end-of-round results, and the published snapshot; when the deadline reminder was sent |
-| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional), slot, the order a conditional backs up, action, inputs, notes, and during resolution its status and outcome (the app's proposal, rolls, the DM's text and adjustments) |
+| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional; moves are always free), slot, the order a conditional backs up, action, inputs, notes, and during resolution its status and outcome (the app's proposal, rolls, the DM's text and adjustments) |
 | `team_round_orders` | per team per round: who submitted the orders and when, and a version number so two teammates can't overwrite each other |
 | `roll_log` | every roll: expression, seed, breakdown, total, table result, overrides |
-| `audit_log` | every state change with before/after, for history and undo |
+| `audit_log` | every state change with before/after, for history and undo. Changes the DM makes while viewing as a team have a `dm.…` kind and the team in `team_id` (see below) |
+| `messages` | the conversation between the DM and each team: who wrote it (`from_dm`, the author's name at the time), the text, and its kind (`message`, or `note` for a note sent with a DM change) |
 
 Every table has Postgres row-level security switched on with no policies, so Supabase's public API can read nothing. The app connects from the server only. `src/db/rls.test.ts` fails if a new table forgets this.
+
+## DM changes from "view as team"
+
+While viewing as a team, the DM can do anything the team can, and also change its inventory and recipes. Each change is one `audit_log` row with `actor = "dm"`, the team in `team_id`, and enough `before`/`after` to undo it (`src/lib/dmEdits.ts`, with the pure parts in `src/engine/dmEdits.ts`):
+
+| Kind | `before` / `after` hold | Undo |
+|---|---|---|
+| `dm.inventory` | quantities of the items that changed (0 = none) | if each item still has its `after` quantity |
+| `dm.recipes` | for each recipe that changed, whether the team knew it | if the team still knows (or doesn't know) each one |
+| `dm.rename` | the unit and its name | if the unit still has the new name |
+| `dm.orders` | the round and order-list version; `before` also has the replaced order rows and who had submitted them | if nobody has saved the list since and the round is still open or locked |
+| `dm.trade.propose` / `respond` / `cancel` | the trade's id, status and answer time (`before` is null for a new proposal) | if the trade is still in the status the DM left it; undoing a proposal deletes it |
+
+Undo marks the row `undone` and adds an `undo` row. A change can send an optional **note** to the team (`sendDmNote` in `src/lib/messages.ts`, the tick box in `src/components/dm/TeamNoteOption.tsx`); it becomes a `messages` row with `kind = "note"`. Later DM tools can pass the same note along with their own changes.

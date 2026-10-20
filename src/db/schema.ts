@@ -104,6 +104,9 @@ export const teams = pgTable(
     secretObjectives: text("secret_objectives").notNull().default(""),
     notes: text("notes").notNull().default(""),
     discordWebhookUrl: text("discord_webhook_url").notNull().default(""),
+    // When the team (any player on it) and the DM last opened their conversation; newer messages are unread.
+    messagesReadAt: timestamp("messages_read_at", { withTimezone: true }),
+    dmReadAt: timestamp("dm_read_at", { withTimezone: true }),
     createdAt: created(),
   },
   (t) => [index("teams_game_idx").on(t.gameId)],
@@ -485,6 +488,8 @@ export const auditLog = pgTable(
     roundId: uuid("round_id").references(() => rounds.id, { onDelete: "set null" }),
     // "dm", "engine" or "team:<id>"
     actor: text("actor").notNull(),
+    // The team a DM change was made for (view as team), so it can be listed and undone there.
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
     kind: text("kind").notNull(),
     description: text("description").notNull(),
     // Enough to undo: the affected rows before and after.
@@ -494,4 +499,27 @@ export const auditLog = pgTable(
     createdAt: created(),
   },
   (t) => [index("audit_log_game_idx").on(t.gameId)],
+);
+
+/** The conversation between the DM and one team: messages, and the DM's notes about changes. */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    // true = written by the DM; false = by a player on the team.
+    fromDm: boolean("from_dm").notNull(),
+    // "DM" or the player's display name when it was sent.
+    authorName: text("author_name").notNull(),
+    body: text("body").notNull(),
+    // message = typed in Messages; note = sent with a DM change ("The DM gave you…").
+    kind: text("kind").notNull().default("message"),
+    createdAt: created(),
+  },
+  (t) => [index("messages_team_idx").on(t.teamId, t.createdAt), index("messages_game_idx").on(t.gameId)],
 );

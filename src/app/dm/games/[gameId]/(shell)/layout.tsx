@@ -4,16 +4,17 @@ import { WorldMap } from "@/components/map/WorldMap";
 import type { ConnectionData, RegionData, TerrainAreaData, UnitData } from "@/components/map/mapData";
 import { db, schema } from "@/db";
 import { loadMapState } from "@/lib/map";
+import { dmUnreadTotal } from "@/lib/messages";
 import { loadRuleset } from "@/lib/rulesets";
 import { loadGame } from "../game";
 
-// Teams, Resolve, Diplomacy and the World map share this screen: the World map
+// Teams, Resolve, Diplomacy, Messages and the World map share this screen: the World map
 // underneath, and the page open as a window over it.
 
 export default async function DmShellLayout({ children, params }: LayoutProps<"/dm/games/[gameId]">) {
   const { gameId } = await params;
   const game = await loadGame(gameId);
-  const [state, { ruleset }, [round]] = await Promise.all([
+  const [state, { ruleset }, [round], unreadMessages] = await Promise.all([
     loadMapState(gameId),
     loadRuleset(gameId),
     db
@@ -21,12 +22,14 @@ export default async function DmShellLayout({ children, params }: LayoutProps<"/
       .from(schema.rounds)
       .where(and(eq(schema.rounds.gameId, gameId), eq(schema.rounds.number, game.currentRound)))
       .limit(1),
+    dmUnreadTotal(gameId),
   ]);
   return (
     <DmShell
       gameId={gameId}
       gameName={game.name}
       round={round ?? null}
+      unreadMessages={unreadMessages}
       map={
         <WorldMap
           gameId={gameId}

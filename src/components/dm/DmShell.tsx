@@ -8,7 +8,7 @@ import { WindowSlot } from "@/components/shell/WindowSlot";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 // The DM's game screen: the World map (god view) is always there; Teams,
-// Resolve and Diplomacy open as windows over it. The big editors (map editor,
+// Resolve, Diplomacy and Messages open as windows over it. The big editors (map editor,
 // ruleset, history, settings) are still full pages, linked from the dock.
 
 export function dmTools(gameId: string): Tool[] {
@@ -17,6 +17,7 @@ export function dmTools(gameId: string): Tool[] {
     { id: "teams", href: base, exact: true, label: "Teams", icon: "units", width: 920 },
     { id: "resolve", href: `${base}/resolve`, label: "Resolve", icon: "resolve", width: 1120 },
     { id: "diplomacy", href: `${base}/diplomacy`, label: "Diplomacy", icon: "diplomacy", width: 900 },
+    { id: "messages", href: `${base}/messages`, label: "Messages", icon: "messages", width: 860 },
     { id: "map", href: `${base}/map`, label: "Map editor", icon: "edit", page: true },
     { id: "ruleset", href: `${base}/ruleset`, label: "Ruleset", icon: "rules", page: true },
     { id: "history", href: `${base}/history`, label: "History", icon: "history", page: true },
@@ -25,7 +26,22 @@ export function dmTools(gameId: string): Tool[] {
   ];
 }
 
-export function DmShell({ gameId, gameName, round, map, children }: { gameId: string; gameName: string; round: { number: number; status: string } | null; map: ReactNode; children: ReactNode }) {
+export function DmShell({
+  gameId,
+  gameName,
+  round,
+  unreadMessages,
+  map,
+  children,
+}: {
+  gameId: string;
+  gameName: string;
+  round: { number: number; status: string } | null;
+  /** Messages from teams the DM hasn't read. */
+  unreadMessages: number;
+  map: ReactNode;
+  children: ReactNode;
+}) {
   const tools = dmTools(gameId);
   const closeHref = `/dm/games/${gameId}/world`;
   return (
@@ -51,7 +67,7 @@ export function DmShell({ gameId, gameName, round, map, children }: { gameId: st
           </div>
         </Toolbar>
       }
-      dock={<Dock tools={tools} closeHref={closeHref} />}
+      dock={<Dock tools={tools} closeHref={closeHref} badges={{ messages: unreadMessages }} />}
       map={map}
     >
       <WindowSlot tools={tools} closeHref={closeHref}>

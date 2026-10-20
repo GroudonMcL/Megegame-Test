@@ -11,8 +11,14 @@ import { ACTIVE_STATUSES, ON_MAP_STATUSES, type RegionMemory, type TeamKnowledge
 // units or buildings that grant vision. Hidden regions and connections need to
 // have been discovered first. Stealthed units of other teams stay invisible
 // until this team has detected them.
+//
+// Around what it sees, a team gets two rings: regions next to a seen one are
+// glimpsed (the map and terrain in greyscale, and the name; nothing else), and
+// regions next to those are unexplored ("?" and the outline). Regions seen
+// before stay remembered instead. Anything further isn't sent at all.
 
-export type RegionState = "visible" | "remembered" | "frontier";
+/** visible = seen now; remembered = seen before; glimpsed = ring 1; frontier = ring 2 (unexplored). */
+export type RegionState = "visible" | "remembered" | "glimpsed" | "frontier";
 
 export interface Visibility {
   /** Every region the team gets sent, and how much of it they see. */
@@ -122,19 +128,27 @@ export function computeVisibility(
       if (!regions.has(id) && k.lastSeen && knownRegion(id)) regions.set(id, "remembered");
     }
   }
-  // Regions next to a visible one show up as unexplored, so the team can plan moves into them.
-  for (const id of visible) {
-    for (const n of neighbours.get(id) ?? []) if (!regions.has(n) && knownRegion(n)) regions.set(n, "frontier");
-  }
+  // The rings: next to what the team sees, then next to those. A region seen before stays remembered.
+  const ringOut = (from: Iterable<string>, inside: Set<string>) => {
+    const out = new Set<string>();
+    for (const id of from) for (const n of neighbours.get(id) ?? []) if (!inside.has(n) && knownRegion(n)) out.add(n);
+    return out;
+  };
+  const ring1 = ringOut(visible, visible);
+  const ring2 = ringOut(ring1, new Set([...visible, ...ring1]));
+  for (const id of ring1) if (!regions.has(id)) regions.set(id, "glimpsed");
+  for (const id of ring2) if (!regions.has(id)) regions.set(id, "frontier");
 
-  // Sent to the team: the ways it knows about, and blocked borders it can see (to draw them).
+  // Sent to the team: the ways it knows about next to what it sees or remembers (blocked
+  // borders too, to draw them), and the open ways through the rings, to plan moves.
   const connections = new Set<string>();
+  const seen = (s: RegionState | undefined) => s === "visible" || s === "remembered";
   for (const c of world.connections) {
     if (!known(c)) continue;
     const a = regions.get(c.regionA);
     const b = regions.get(c.regionB);
-    if (!a || !b || (a === "frontier" && b === "frontier")) continue;
-    connections.add(c.id);
+    if (!a || !b) continue;
+    if (seen(a) || seen(b) || (!c.blocked && (a === "glimpsed" || b === "glimpsed"))) connections.add(c.id);
   }
 
   const otherUnits = new Set<string>();

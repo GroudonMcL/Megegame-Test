@@ -1,9 +1,15 @@
 import type { Proposal, World } from "./types";
 import { ACTIVE_STATUSES } from "../world/types";
 
-// The resolution queue: every team's action 1, then every team's action 2,
-// and so on. Free actions resolve alongside the numbered action before them;
-// a backup (conditional) order sits with the order it backs up.
+// The resolution queue: every team's moves, then every team's action 1, then
+// moves again, then action 2, and so on, ending with a last round of moves.
+// A team's moves listed before its action 1 go in the first move step, those
+// between action 1 and action 2 in the second, and so on. Other free actions
+// resolve alongside the numbered action before them; a backup (conditional)
+// order sits with the order it backs up.
+//
+// Steps are numbered so the server can name one: moves before action n are
+// step 2n − 1, action n is step 2n.
 
 export interface QueueOrder {
   id: string;
@@ -16,35 +22,59 @@ export interface QueueOrder {
 
 export interface QueueStep<T extends QueueOrder> {
   step: number;
+  /** moves = a move step; action = everyone's numbered action N. */
+  kind: "moves" | "action";
+  /** The numbered action this step is, or comes before. */
+  action: number;
+  label: string;
   items: T[];
 }
 
-export function stepOf(order: QueueOrder, teamOrders: QueueOrder[]): number {
-  if (order.kind === "numbered" && order.slot) return order.slot;
+/** Is this order a move? (Older games may have saved moves as numbered actions.) */
+export type IsMove = (order: QueueOrder) => boolean;
+
+export function stepOf(order: QueueOrder, teamOrders: QueueOrder[], isMove: IsMove = () => false): number {
+  // Which numbered action this is, counted from the list (moves don't take one).
+  const numberedBefore = (position: number) => teamOrders.filter((o) => o.kind === "numbered" && !isMove(o) && o.position < position).length;
+  if (isMove(order)) return 2 * numberedBefore(order.position) + 1;
+  if (order.kind === "numbered") return 2 * (numberedBefore(order.position) + 1);
   if (order.kind === "conditional" && order.parentOrderId) {
     const parent = teamOrders.find((o) => o.id === order.parentOrderId);
-    if (parent) return stepOf(parent, teamOrders);
+    if (parent) return stepOf(parent, teamOrders, isMove);
   }
-  // A free action goes with the last numbered action before it, or the first step.
-  const before = teamOrders.filter((o) => o.position < order.position && o.kind === "numbered" && o.slot).sort((a, b) => b.position - a.position)[0];
-  return before?.slot ?? 1;
+  // A free action goes with the last numbered action before it, or action 1.
+  return 2 * Math.max(1, numberedBefore(order.position));
 }
 
-export function buildQueue<T extends QueueOrder>(orders: T[], teamOrder: string[]): QueueStep<T>[] {
+export function stepLabel(step: number, lastAction: number): string {
+  const n = Math.ceil(step / 2);
+  if (step % 2 === 0) return `Action ${n}`;
+  if (n <= lastAction) return `Moves before action ${n}`;
+  return n > 1 ? `Moves after action ${n - 1}` : "Moves";
+}
+
+export function buildQueue<T extends QueueOrder>(orders: T[], teamOrder: string[], isMove: IsMove = () => false): QueueStep<T>[] {
   const byTeam = new Map<string, T[]>();
   for (const o of orders) byTeam.set(o.teamId, [...(byTeam.get(o.teamId) ?? []), o]);
   const steps = new Map<number, T[]>();
   for (const o of orders) {
-    const s = stepOf(o, byTeam.get(o.teamId)!);
+    const s = stepOf(o, byTeam.get(o.teamId)!, isMove);
     steps.set(s, [...(steps.get(s) ?? []), o]);
   }
   const rank = (teamId: string) => {
     const i = teamOrder.indexOf(teamId);
     return i < 0 ? teamOrder.length : i;
   };
+  const lastAction = Math.max(0, ...[...steps.keys()].filter((s) => s % 2 === 0).map((s) => s / 2));
   return [...steps.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([step, items]) => ({ step, items: items.sort((a, b) => rank(a.teamId) - rank(b.teamId) || a.position - b.position) }));
+    .map(([step, items]) => ({
+      step,
+      kind: step % 2 === 0 ? ("action" as const) : ("moves" as const),
+      action: Math.ceil(step / 2),
+      label: stepLabel(step, lastAction),
+      items: items.sort((a, b) => rank(a.teamId) - rank(b.teamId) || a.position - b.position),
+    }));
 }
 
 export interface Flag {

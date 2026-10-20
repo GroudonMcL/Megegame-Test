@@ -11,6 +11,8 @@ import { fmtRes } from "@/engine/ruleset/effects";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
 import type { TeamView } from "@/engine/world/teamView";
 import { ACTIVE_STATUSES } from "@/engine/world/types";
+import { useTeamNote } from "@/components/dm/TeamNoteOption";
+import { ordersNote } from "@/engine/dmEdits";
 import { EconomyTable } from "./EconomyTable";
 import { useOrdersDraft } from "./ordersDraft";
 import { unitLabel } from "./RegionDetails";
@@ -47,6 +49,8 @@ export function OrderBuilder(props: OrderBuilderProps) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [bypass, setBypass] = useState(false);
   const [pending, startTransition] = useTransition();
+  // The DM editing as the team can tell it what changed.
+  const note = useTeamNote(ordersNote(orders.length, draft.roundNumber));
 
   const check = useMemo(() => validateOrders(rules, view, orders), [rules, view, orders]);
   const byId = new Map(check.orders.map((c) => [c.id, c]));
@@ -103,7 +107,9 @@ export function OrderBuilder(props: OrderBuilderProps) {
 
   const save = (submit: boolean) =>
     startTransition(async () => {
-      setMessage(await draft.save({ submit, bypass }));
+      const r = await draft.save({ submit, bypass, note: draft.isDm ? note.value : undefined });
+      if (r.ok) note.reset();
+      setMessage(r);
     });
 
   const numbered = rules.actionTypes.filter((a) => a.kind === "numbered" || a.kind === "numberedAndFree");
@@ -156,6 +162,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
                   props={props}
                   editable={editable}
                   orders={orders}
+                  allChecks={check.orders}
                   picking={picking === o.id}
                   onPick={(on) => setPicking(on ? o.id : null)}
                   onKind={(kind) => update(o.id, { kind })}
@@ -223,6 +230,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
               </label>
             )}
             {!check.ok && <span className="text-sm text-danger">Some orders have problems.</span>}
+            {draft.isDm && <div className="w-full">{note.ui}</div>}
             {pending && <span className="text-sm text-muted">Saving…</span>}
             {message && (
               <span role="status" className={`w-full text-sm ${message.ok ? "text-ok" : "text-danger"}`}>
@@ -273,6 +281,14 @@ export function OrderBuilder(props: OrderBuilderProps) {
   );
 }
 
+/** When a move happens: moves go between the numbered actions, before the next one listed after them. */
+function moveTiming(c: OrderCheck, all: OrderCheck[]): string {
+  const i = all.indexOf(c);
+  const next = all.slice(i + 1).find((x) => x.slot !== null)?.slot;
+  const before = all.slice(0, i).filter((x) => x.slot !== null).length;
+  return next ? `Move · before action ${next}` : before ? `Move · after action ${before}` : "Move";
+}
+
 function OrderCard(p: {
   order: OrderDraft;
   index: number;
@@ -282,6 +298,7 @@ function OrderCard(p: {
   props: OrderBuilderProps;
   editable: boolean;
   orders: OrderDraft[];
+  allChecks: OrderCheck[];
   picking: boolean;
   onPick: (on: boolean) => void;
   onKind: (k: OrderKind) => void;
@@ -292,7 +309,7 @@ function OrderCard(p: {
 }) {
   const { order: o, check: c, action, editable } = p;
   const { rules } = p.props;
-  const heading = o.kind === "numbered" ? `Action ${c.slot}` : o.kind === "free" ? "Free" : "Backup";
+  const heading = action?.handler === "move" ? moveTiming(p.check, p.allChecks) : o.kind === "numbered" ? `Action ${c.slot}` : o.kind === "free" ? "Free" : "Backup";
   const bad = c.problems.length > 0;
   return (
     <div className={`rounded-xl border bg-card p-3 ${bad ? "border-danger" : "border-border"}`}>

@@ -448,7 +448,7 @@ export const SECTION_CONFIG: Record<Exclude<RulesetSection, "creatures">, Sectio
       {
         kind: "select",
         key: "kind",
-        label: "Kind",
+        label: "Kind (moves are always free)",
         options: [
           { value: "numbered", label: "Numbered (uses an action slot)" },
           { value: "free", label: "Free" },

@@ -26,7 +26,7 @@ export function MapKey({ view }: { view: TeamView }) {
               <TeamEmblem team={null} size={16} /> Wild monsters
             </li>
           </ul>
-          <p className="mt-2 text-muted">Ring = settlement · faded = seen before · ? = unexplored · thick line = hard going · blue line = needs swimming or flying</p>
+          <p className="mt-2 text-muted">Ring = settlement · faded = seen before · grey = next to what you see (land only) · ? = unexplored · thick line = hard going · blue line = needs swimming or flying</p>
         </div>
       )}
       <button

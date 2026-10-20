@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Ruleset } from "@/engine/ruleset/ruleset";
-import type { OrderDraft } from "@/engine/orders/validate";
+import { effectiveKind, type OrderDraft } from "@/engine/orders/validate";
 import { buildTeamView, memoriesToRecord, playerRuleset, type TeamView } from "@/engine/world/teamView";
 import type { RegionMemory, TeamKnowledge } from "@/engine/world/types";
 import { fogHoles, fogKey } from "./fogImage";
@@ -149,7 +149,7 @@ export async function loadTeamView(gameId: string, teamId: string, opts: { recor
         .orderBy(asc(schema.orders.position)),
     ]);
     orderState = st;
-    orders = rows.map((o) => ({ id: o.id, kind: o.kind as OrderDraft["kind"], actionTypeId: o.actionTypeId, inputs: o.inputs, notes: o.notes }));
+    orders = rows.map((o) => ({ id: o.id, kind: effectiveKind(ruleset, o), actionTypeId: o.actionTypeId, inputs: o.inputs, notes: o.notes }));
   }
 
   return {

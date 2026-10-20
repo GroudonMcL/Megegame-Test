@@ -74,6 +74,7 @@ export function TeamMap(props: TeamMapProps) {
     fill: r.state === "frontier" ? undefined : r.ownerTeamId ? (allTeams.get(r.ownerTeamId)?.colour ?? "var(--map-unknown-owner)") : undefined,
     stroke: highlight?.has(r.id) ? "var(--map-path)" : undefined,
     ring: Boolean(r.settlementTierId),
+    // Glimpsed regions (next to what the team sees) show their code over the greyscale map.
     dashed: r.state === "frontier",
     dim: r.state === "remembered",
   }));

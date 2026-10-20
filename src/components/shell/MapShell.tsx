@@ -50,9 +50,9 @@ export function activeTool(tools: Tool[], path: string): Tool | undefined {
 
 /**
  * The tool buttons. The open tool is highlighted; pressing it again closes it
- * (goes to closeHref, the bare map).
+ * (goes to closeHref, the bare map). badges: a count to show on a tool (e.g. unread messages).
  */
-export function Dock({ tools, closeHref, extra }: { tools: Tool[]; closeHref: string; extra?: ReactNode }) {
+export function Dock({ tools, closeHref, extra, badges = {} }: { tools: Tool[]; closeHref: string; extra?: ReactNode; badges?: Record<string, number> }) {
   const path = usePathname();
   const active = activeTool(tools, path);
   return (
@@ -62,18 +62,25 @@ export function Dock({ tools, closeHref, extra }: { tools: Tool[]; closeHref: st
     >
       {tools.map((t) => {
         const on = active?.id === t.id;
+        const badge = badges[t.id] ?? 0;
         return (
           <Link
             key={t.id}
             href={on && !t.page ? closeHref : t.href}
             aria-current={on ? "page" : undefined}
-            title={on && !t.page ? `Close ${t.label}` : t.label}
-            className={`flex min-w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[0.7rem] leading-tight font-medium ${
+            title={on && !t.page ? `Close ${t.label}` : `${t.label}${badge ? ` (${badge} new)` : ""}`}
+            className={`relative flex min-w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[0.7rem] leading-tight font-medium ${
               on ? "bg-accent text-accent-foreground shadow-sm" : "text-muted hover:bg-raised hover:text-foreground"
             }`}
           >
             <Icon name={t.icon} size={20} />
             <span className="max-w-full truncate">{t.label}</span>
+            {badge > 0 && (
+              <span className="absolute top-0.5 right-1 min-w-4 rounded-full bg-accent px-1 text-center text-[0.65rem] leading-4 font-semibold text-accent-foreground tabular-nums ring-2 ring-background">
+                {badge > 99 ? "99+" : badge}
+                <span className="sr-only"> new</span>
+              </span>
+            )}
           </Link>
         );
       })}

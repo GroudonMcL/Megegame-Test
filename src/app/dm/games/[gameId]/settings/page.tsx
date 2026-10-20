@@ -32,7 +32,7 @@ export default async function SettingsPage({ params }: PageProps<"/dm/games/[gam
       </Card>
       <Card>
         <h2 className="text-lg font-medium">Export</h2>
-        <p className="mt-1 text-sm text-muted">A full backup of this game: rules, map, teams (with join codes), units, orders, rolls, trades, history and the audit log. Keep it private.</p>
+        <p className="mt-1 text-sm text-muted">A full backup of this game: rules, map, teams (with join codes), units, orders, rolls, trades, messages, history and the audit log. Keep it private.</p>
         <a href={`/api/dm/games/${gameId}/export`} className="mt-3 inline-block rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground" download>
           Download the whole game (JSON)
         </a>

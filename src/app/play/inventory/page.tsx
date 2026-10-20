@@ -1,4 +1,8 @@
+import { eq } from "drizzle-orm";
 import { Card } from "@/components/ui";
+import { DmInventoryEditor, DmRecipeEditor } from "@/components/dm/DmInventoryEditor";
+import { db, schema } from "@/db";
+import { recipeLabel } from "@/engine/dmEdits";
 import { describeEffect, fmtRes, namesFrom } from "@/engine/ruleset/effects";
 import { loadTeamView } from "@/lib/teamView";
 import { requireViewer } from "@/lib/viewer";
@@ -16,8 +20,33 @@ export default async function InventoryPage() {
   const craftable = (rec: (typeof known)[number]) =>
     rec.inputs.every((i) => (view.inventory[i.itemId] ?? 0) >= i.qty) && Object.entries(rec.resources).every(([k, v]) => (view.team.resources[k] ?? 0) >= v);
 
+  // The DM's editors work on the live game (players may be seeing the start-of-round picture during resolution).
+  const live = viewer.isDm ? await db.select().from(schema.inventory).where(eq(schema.inventory.teamId, viewer.teamId)) : [];
+
   return (
     <div className="grid gap-4 @3xl:grid-cols-2 [&>*]:min-w-0">
+      {viewer.isDm && (
+        <Card className="border-accent/60 @3xl:col-span-2">
+          <h2 className="text-lg font-medium">DM: edit items and recipes</h2>
+          <p className="mt-1 text-sm text-muted">Only you see this. Each save is logged in DM changes, where you can undo it.</p>
+          <div className="mt-3 grid gap-6 @3xl:grid-cols-2">
+            <section>
+              <h3 className="mb-2 font-medium">Items</h3>
+              <DmInventoryEditor
+                items={fullRuleset.items.map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
+                inventory={Object.fromEntries(live.map((r) => [r.itemId, r.qty]))}
+              />
+            </section>
+            <section>
+              <h3 className="mb-2 font-medium">Recipes</h3>
+              <DmRecipeEditor
+                recipes={fullRuleset.recipes.map((r) => ({ id: r.id, name: recipeLabel(r, (id) => fullRuleset.items.find((i) => i.id === id)?.name ?? id), atStart: r.knownAtStart }))}
+                known={viewer.team.knownRecipeIds}
+              />
+            </section>
+          </div>
+        </Card>
+      )}
       <Card>
         <h2 className="text-lg font-medium">Items</h2>
         {owned.length === 0 && <p className="mt-2 text-sm text-muted">Your inventory is empty.</p>}

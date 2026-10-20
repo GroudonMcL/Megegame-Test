@@ -293,9 +293,37 @@ describe("queue", () => {
       ["A", "B"],
     );
     expect(q.map((s) => [s.step, s.items.map((i) => i.id)])).toEqual([
-      [1, ["a1", "a2", "a3", "b1"]],
-      [2, ["a4", "a5"]],
+      [2, ["a1", "a2", "a3", "b1"]],
+      [4, ["a4", "a5"]],
     ]);
+  });
+
+  it("puts each team's moves in the move step before its next numbered action", () => {
+    const moves = new Set(["a1", "a3", "a5", "b1", "b3"]);
+    const isMove = (x: { id: string }) => moves.has(x.id);
+    const q = buildQueue(
+      [
+        o("a1", "A", 0, "free", null), // move, then attack
+        o("a2", "A", 1, "numbered", 1),
+        o("a3", "A", 2, "free", null),
+        o("a4", "A", 3, "numbered", 2),
+        o("a5", "A", 4, "free", null), // after the last action
+        // An old order: a move saved as numbered action 1. It doesn't count as an action.
+        o("b1", "B", 0, "numbered", 1),
+        o("b2", "B", 1, "numbered", 2),
+        o("b3", "B", 2, "free", null),
+      ],
+      ["A", "B"],
+      isMove,
+    );
+    expect(q.map((s) => [s.label, s.items.map((i) => i.id)])).toEqual([
+      ["Moves before action 1", ["a1", "b1"]],
+      ["Action 1", ["a2", "b2"]],
+      ["Moves before action 2", ["a3", "b3"]],
+      ["Action 2", ["a4"]],
+      ["Moves after action 2", ["a5"]],
+    ]);
+    expect(q.map((s) => s.kind)).toEqual(["moves", "action", "moves", "action", "moves"]);
   });
 
   it("flags teams meeting in a region", () => {
