@@ -1,4 +1,5 @@
 import { ResolveClient, type ResolveItem } from "@/components/resolve/ResolveClient";
+import { lootNoteText } from "@/engine/combat/fight";
 import { effectiveKind } from "@/engine/orders/validate";
 import { describeChange, describeInputs } from "@/engine/resolve/describe";
 import { lastAuditEntry, loadQueue, type EndOfRoundState } from "@/lib/resolution";
@@ -10,6 +11,7 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
   const { round, steps, ruleset, world } = await loadQueue(gameId);
   const last = round ? await lastAuditEntry(gameId, round.id) : null;
   const actionName = (id: string) => ruleset.actionTypes.find((a) => a.id === id)?.name ?? id;
+  const itemName = (id: string) => ruleset.items.find((x) => x.id === id)?.name ?? id;
   const regionName = (id: string | null) => {
     const reg = world.regions.find((x) => x.id === id);
     return reg ? (reg.name ? `${reg.code} ${reg.name}` : reg.code) : "?";
@@ -59,6 +61,16 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                       units: f.units.map((u) => ({ unitId: u.unitId, sideId: u.sideId, label: u.label, startHp: u.startHp, hp: u.hp, maxHp: u.maxHp, outcome: u.outcome, raised: Boolean(u.raised) })),
                       warnings: f.warnings,
                       log: f.log,
+                      loot: f.loot
+                        ? {
+                            mode: f.loot.mode,
+                            items: f.loot.items.map((x) => ({ ...x, name: itemName(x.itemId) })),
+                            teams: f.loot.teamIds.map((id) => ({ id, name: world.teams.find((t) => t.id === id)?.name ?? "?" })),
+                            shares: f.loot.shares,
+                            suggestedNote: lootNoteText(world, f.loot, f.regionId, itemName),
+                            note: f.loot.note ?? null,
+                          }
+                        : null,
                     })),
                   }
                 : null,
@@ -67,6 +79,7 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                 byHand: Boolean(i.outcome.combat?.byHand),
                 shareLog: i.outcome.combat?.shareLog !== false,
                 overrides: i.outcome.combat?.overrides ?? {},
+                loot: i.outcome.combat?.loot ?? {},
               },
               odds: i.outcome.odds ?? null,
             }

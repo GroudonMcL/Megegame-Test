@@ -37,8 +37,8 @@ interface PendingMove {
 }
 
 function unitFields(u: UnitData) {
-  const { name, creatureId, ownerTeamId, raceId, archetypeId, regionId, status, isLeader, academyBonus, augmentIds, notes } = u;
-  return { name, creatureId, ownerTeamId, raceId, archetypeId, regionId, status, isLeader, academyBonus, augmentIds, notes };
+  const { name, creatureId, ownerTeamId, raceId, archetypeId, regionId, status, isLeader, academyBonus, equippedItemIds, notes } = u;
+  return { name, creatureId, ownerTeamId, raceId, archetypeId, regionId, status, isLeader, academyBonus, equippedItemIds, carried: u.carried ?? [], notes };
 }
 
 export function WorldMap(props: {
@@ -539,6 +539,15 @@ function UnitRow(p: {
           <label className="col-span-2 flex items-center gap-2">
             <input type="checkbox" checked={draft.isLeader} onChange={(e) => set("isLeader", e.target.checked)} /> Faction leader (pays no upkeep)
           </label>
+          {draft.equippedItemIds.length > 0 && (
+            <p className="col-span-2">
+              Equipped: {draft.equippedItemIds.map((id) => ruleset.items.find((x) => x.id === id)?.name ?? id).join(", ")}
+              {draft.ownerTeamId ? " (change it from View as team › Units › Edit)" : ""}
+            </p>
+          )}
+          <div className="col-span-2">
+            <CarriedItems ruleset={ruleset} value={draft.carried} onChange={(v) => set("carried", v)} />
+          </div>
           <label className="col-span-2">
             Notes
             <textarea className={input} rows={2} value={draft.notes} onChange={(e) => set("notes", e.target.value)} />
@@ -560,6 +569,55 @@ function UnitRow(p: {
   );
 }
 
+/** What a unit carries (a monster's hoard, a courier's cargo): items and how many. It all becomes loot if the unit dies in a fight. */
+function CarriedItems({ ruleset, value, onChange, note }: { ruleset: Ruleset; value: UnitData["carried"]; onChange: (v: UnitData["carried"]) => void; note?: string }) {
+  const name = (id: string) => ruleset.items.find((x) => x.id === id)?.name ?? id;
+  const setQty = (itemId: string, qty: number) => onChange(value.map((x) => (x.itemId === itemId ? { ...x, qty: Math.max(1, Math.floor(qty) || 1) } : x)));
+  return (
+    <fieldset className="space-y-1">
+      <legend className="font-medium">Carries (loot if it dies in a fight)</legend>
+      {value.length === 0 && <p className="text-muted">Nothing.</p>}
+      <ul className="space-y-1">
+        {value.map((x) => (
+          <li key={x.itemId} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{name(x.itemId)}</span>
+            <input
+              className="w-16 rounded border border-border bg-background px-1"
+              type="number"
+              min={1}
+              aria-label={`How many ${name(x.itemId)}`}
+              value={x.qty}
+              onChange={(e) => setQty(x.itemId, Number(e.target.value))}
+            />
+            <button type="button" className="text-danger" aria-label={`Remove ${name(x.itemId)}`} onClick={() => onChange(value.filter((y) => y.itemId !== x.itemId))}>
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+      <select
+        className={input}
+        aria-label="Add an item it carries"
+        value=""
+        onChange={(e) => {
+          const id = e.target.value;
+          if (id && !value.some((x) => x.itemId === id)) onChange([...value, { itemId: id, qty: 1 }]);
+        }}
+      >
+        <option value="">Add an item…</option>
+        {ruleset.items
+          .filter((i) => !value.some((x) => x.itemId === i.id))
+          .map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+      </select>
+      {note && <p className="text-muted">{note}</p>}
+    </fieldset>
+  );
+}
+
 function SpawnForm({ ruleset, teams, pending, onSpawn }: { ruleset: Ruleset; teams: TeamData[]; pending: boolean; onSpawn: (fields: Record<string, unknown>, count: number) => void }) {
   const recruitable = ruleset.creatures.filter((c) => c.recruitable);
   const monsters = ruleset.creatures.filter((c) => !c.recruitable);
@@ -570,6 +628,7 @@ function SpawnForm({ ruleset, teams, pending, onSpawn }: { ruleset: Ruleset; tea
   const [status, setStatus] = useState("active");
   const [count, setCount] = useState(1);
   const [name, setName] = useState("");
+  const [carried, setCarried] = useState<UnitData["carried"]>([]);
   const category = ruleset.creatures.find((c) => c.id === creatureId)?.category;
   const archetypes = ruleset.archetypes.filter((a) => !category || a.categories.includes(category));
   // An archetype chosen for a previous creature may not suit this one.
@@ -646,17 +705,19 @@ function SpawnForm({ ruleset, teams, pending, onSpawn }: { ruleset: Ruleset; tea
           <input className={input} type="number" min={1} max={20} value={count} onChange={(e) => setCount(Math.max(1, Math.min(20, Number(e.target.value))))} />
         </label>
       </div>
+      <CarriedItems ruleset={ruleset} value={carried} onChange={setCarried} note={count > 1 ? "Each unit placed carries all of these." : undefined} />
       <button
         type="button"
         disabled={!creatureId || pending}
         className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
         onClick={() => {
           onSpawn(
-            { name, creatureId, ownerTeamId: owner || null, raceId: raceId || null, archetypeId: archetype || null, status, isLeader: false, academyBonus: {}, augmentIds: [], notes: "" },
+            { name, creatureId, ownerTeamId: owner || null, raceId: raceId || null, archetypeId: archetype || null, status, isLeader: false, academyBonus: {}, equippedItemIds: [], carried, notes: "" },
             count,
           );
           setCount(1);
           setName("");
+          setCarried([]);
         }}
       >
         Place

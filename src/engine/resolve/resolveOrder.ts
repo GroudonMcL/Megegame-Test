@@ -4,14 +4,15 @@ import type { Ability, ResourceAmounts } from "../ruleset/common";
 import { deriveStats, unitBonuses } from "../ruleset/derive";
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
+import { unitItems } from "../equipment";
 import { addTo, buildingTier, unitEffects } from "../orders/economy";
 import { milesPerRound, type MoveMode } from "../orders/movement";
 import { isDmMove, validateOrders, type OrderDraft } from "../orders/validate";
 import type { TeamView } from "../world/teamView";
 import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types";
-import { defendersOf, fightChanges, fightSummary, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
+import { defendersOf, fightChanges, fightLoot, fightSummary, lootLogText, lootSentence, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
 import { summariseOdds } from "../combat/simulate";
-import type { CombatOdds, CombatSideInput } from "../combat/types";
+import type { CombatOdds, CombatSideInput, LootChoice } from "../combat/types";
 import { passivePerception, searchCheck, stealthCheck, watchers } from "../stealth/stealth";
 import { rollOnTable, type Modifier } from "./rollTable";
 import type { Proposal, World } from "./types";
@@ -81,6 +82,8 @@ export interface CombatOptions {
   byHand?: boolean;
   /** unitId → the DM's own result for that unit, replacing the simulated one. */
   overrides?: Record<string, { hp?: number; outcome?: "standing" | "dead" | "retreated" }>;
+  /** Fight number (0 = the order's first fight) → how its loot is handed out when several teams won it. */
+  loot?: Record<string, LootChoice>;
 }
 
 function newUnitId() {
@@ -180,13 +183,26 @@ export function resolveOrder(input: ResolveInput): Proposal {
       u.retreatTo = u.outcome === "retreated" && unit ? (u.retreatTo ?? retreatRegion(world, unit, where)) : null;
       res.log.push({ round: res.rounds, kind: "info", text: `The DM set ${u.label} to ${u.outcome === "standing" ? "standing" : u.outcome}${u.outcome === "dead" ? "" : ` with ${u.hp}/${u.maxHp} HP`}.` });
     }
+    const fightNo = (p.combats ?? []).length;
+    res.loot = fightLoot(r, world, res, input.combat?.loot?.[fightNo]);
+    const itemName = (id: string) => r.items.find((x) => x.id === id)?.name ?? id;
+    if (res.loot) res.log.push({ round: res.rounds, kind: "loot", text: lootLogText(world, res.loot, itemName) });
     (p.combats ??= []).push(res);
     p.changes.push(...fightChanges(r, world, res, { reveal: extra.reveal }));
-    lines.push(fightSummary(world, res, teamId));
+    lines.push(fightSummary(world, res, teamId, r));
     for (const other of enemyTeams) {
       if (!other) continue;
-      (p.reports ??= []).push({ teamId: other, text: `Your units were attacked by ${team.name}. ${fightSummary(world, res, other)}` });
+      (p.reports ??= []).push({ teamId: other, text: `Your units were attacked by ${team.name}. ${fightSummary(world, res, other, r)}` });
     }
+    // Teams that won loot without being one of the fight's sides (their lent units fought).
+    for (const t of res.loot?.teamIds ?? []) {
+      if (t === teamId || enemyTeams.includes(t)) continue;
+      const text = lootSentence(world, res.loot, t, itemName);
+      if (text) (p.reports ??= []).push({ teamId: t, text: `Your units fought alongside ${team.name} in ${regionName(where)}. ${text}` });
+    }
+    if (res.loot?.mode === "note") for (const t of res.loot.teamIds) (p.teamNotes ??= []).push({ teamId: t, text: res.loot.note ?? "" });
+    if (res.loot?.splitReset) review("The fight changed, so your loot split no longer matched; all the loot went to one team. Split it again.");
+    else if (res.loot && res.loot.teamIds.length > 1 && !input.combat?.loot?.[fightNo]) review("Several teams won this fight: split the loot between them, or send them a note to share it out.");
     review(`A fight was simulated${res.warnings.length ? `; some abilities aren't automated (see the fight log)` : ""}. Check the log, re-roll it, or resolve it by hand.`);
   };
 
@@ -346,7 +362,7 @@ export function resolveOrder(input: ResolveInput): Proposal {
         raceId,
         archetypeId,
         academyBonus,
-        augmentIds: [],
+        equippedItemIds: [],
         hp: 0,
         regionId: region.id,
         x: null,
@@ -453,20 +469,10 @@ export function resolveOrder(input: ResolveInput): Proposal {
       lines.push(`${action.name}: ${fmtRes(check.cost, r.resources)} → ${fmtRes(check.gain, r.resources)}.`);
       break;
 
-    case "applyAugment": {
-      const item = r.items.find((x) => x.id === str(value("item")));
-      const u = units[0];
-      if (!item || !u) break;
-      p.changes.push({ type: "inventory", teamId, itemId: item.id, delta: -1 });
-      p.changes.push({ type: "updateUnit", unitId: u.id, patch: { augmentIds: [...u.augmentIds, item.id] } });
-      lines.push(`${name(u)} equipped ${item.name}.`);
-      break;
-    }
-
     case "disband": {
       for (const u of units) {
-        p.changes.push({ type: "updateUnit", unitId: u.id, patch: { status: "disbanded", augmentIds: [] } });
-        for (const id of u.augmentIds) p.changes.push({ type: "inventory", teamId, itemId: id, delta: 1 });
+        p.changes.push({ type: "updateUnit", unitId: u.id, patch: { status: "disbanded", equippedItemIds: [], carried: [] } });
+        for (const x of unitItems(u)) p.changes.push({ type: "inventory", teamId, itemId: x.itemId, delta: x.qty });
         const refund = action.config.refundIfAboveHalfHp as ResourceAmounts | undefined;
         if (refund && u.hp > maxHpOf(r, u) / 2) {
           addTo(net, refund);
@@ -701,7 +707,7 @@ export function applyTableResults(
             raceId: null,
             archetypeId: null,
             academyBonus: {},
-            augmentIds: [],
+            equippedItemIds: [],
             hp: creature.statBlock.hp,
             regionId: where,
             x: null,

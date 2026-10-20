@@ -511,10 +511,7 @@ function InputField({ input, index, p }: { input: Input; index: number; p: Param
       return select(rules.settlementTiers.map((t) => ({ value: t.id, label: t.name })));
     case "item": {
       const owned = Object.entries(view.inventory).filter(([, q]) => q > 0);
-      const augmentsOnly = action.handler === "applyAugment";
-      const list = owned
-        .map(([id, q]) => ({ item: rules.items.find((x) => x.id === id), q, id }))
-        .filter((x) => !augmentsOnly || x.item?.slotId);
+      const list = owned.map(([id, q]) => ({ item: rules.items.find((x) => x.id === id), q, id }));
       return select(list.map((x) => ({ value: x.id, label: `${x.item?.name ?? x.id} (×${x.q})` })), list.length ? "Choose an item…" : "Nothing suitable in your inventory");
     }
     case "recipe":

@@ -17,7 +17,7 @@ function unit(creatureId: string, extra: Partial<WorldUnit> = {}): WorldUnit {
     raceId: null,
     archetypeId: null,
     academyBonus: {},
-    augmentIds: [],
+    equippedItemIds: [],
     hp: c.statBlock.hp,
     regionId: "a",
     x: null,

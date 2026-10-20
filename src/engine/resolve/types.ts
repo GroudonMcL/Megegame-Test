@@ -39,7 +39,7 @@ export type Change =
   | { type: "resources"; teamId: string; delta: ResourceAmounts }
   /** x, y: where in the region it stops (fractions of the map); missing = the region's centre. */
   | { type: "moveUnit"; unitId: string; regionId: string; milesUsed: number; x?: number; y?: number }
-  | { type: "updateUnit"; unitId: string; patch: Partial<Pick<WorldUnit, "hp" | "status" | "augmentIds" | "academyBonus" | "milesUsed" | "usesSpent" | "ownerTeamId">> }
+  | { type: "updateUnit"; unitId: string; patch: Partial<Pick<WorldUnit, "hp" | "status" | "equippedItemIds" | "carried" | "academyBonus" | "milesUsed" | "usesSpent" | "ownerTeamId">> }
   | { type: "createUnit"; unit: Omit<WorldUnit, "id"> & { id: string } }
   | { type: "updateRegion"; regionId: string; patch: Partial<Pick<WorldRegion, "ownerTeamId" | "settlementTierId" | "buildings">> }
   | { type: "inventory"; teamId: string; itemId: string; delta: number }
@@ -89,4 +89,6 @@ export interface Proposal {
   combats?: CombatResult[];
   /** What other teams are told (e.g. "your units in A3 were attacked"). */
   reports?: { teamId: string; text: string }[];
+  /** DM notes sent to teams' Messages when the order is accepted (e.g. loot for them to share out). */
+  teamNotes?: { teamId: string; text: string }[];
 }

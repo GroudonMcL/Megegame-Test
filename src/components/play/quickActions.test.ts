@@ -15,7 +15,7 @@ function unit(creatureId: string): WorldUnit {
     raceId: null,
     archetypeId: null,
     academyBonus: {},
-    augmentIds: [],
+    equippedItemIds: [],
     hp: 10,
     regionId: "r1",
     x: null,

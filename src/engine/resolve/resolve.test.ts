@@ -39,7 +39,7 @@ const conn = (a: string, b: string): WorldConnection => ({ id: `${a}-${b}`, regi
 let n = 0;
 const uid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 function unit(extra: Partial<WorldUnit>): WorldUnit {
-  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, augmentIds: [], hp: 11, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {}, ...extra } as WorldUnit;
+  return { id: uid(), ownerTeamId: ME, creatureId: "guard", name: "", raceId: null, archetypeId: null, academyBonus: {}, equippedItemIds: [], hp: 11, regionId: "a", x: null, y: null, milesUsed: 0, status: "active", isLeader: false, usesSpent: {}, ...extra } as WorldUnit;
 }
 function world(units: WorldUnit[], resources = { gold: 20, food: 5, growth: 50 }): World {
   return {

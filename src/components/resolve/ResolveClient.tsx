@@ -20,7 +20,7 @@ import {
 } from "@/app/dm/games/[gameId]/(shell)/resolve/actions";
 import { EconomyTable } from "@/components/play/EconomyTable";
 import { FightLog } from "@/components/combat/FightLog";
-import type { CombatOdds, LogEntry } from "@/engine/combat/types";
+import type { CombatOdds, LogEntry, LootChoice } from "@/engine/combat/types";
 import type { Economy } from "@/engine/orders/economy";
 
 // The DM's resolution queue: every team's action 1, then action 2… Each order
@@ -53,7 +53,7 @@ export interface ResolveItem {
       changes: string[];
       fights: FightView[];
     } | null;
-    fightSettings: { priority: Record<string, string>; byHand: boolean; shareLog: boolean; overrides: Overrides };
+    fightSettings: { priority: Record<string, string>; byHand: boolean; shareLog: boolean; overrides: Overrides; loot: Record<string, LootChoice> };
     odds: CombatOdds[] | null;
   } | null;
 }
@@ -69,6 +69,17 @@ export interface FightView {
   units: { unitId: string; sideId: string; label: string; startHp: number; hp: number; maxHp: number; outcome: string; raised: boolean }[];
   warnings: string[];
   log: LogEntry[];
+  loot: LootView | null;
+}
+
+/** What the units that died had on them, and who it goes to (see FightLoot). */
+export interface LootView {
+  mode: "auto" | "split" | "note" | "corpse";
+  items: { itemId: string; name: string; qty: number }[];
+  teams: { id: string; name: string }[];
+  shares: Record<string, { itemId: string; qty: number }[]>;
+  suggestedNote: string;
+  note: string | null;
 }
 
 type Resource = { id: string; name: string; icon: string; kind: string };
@@ -521,8 +532,11 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
   const [shareLog, setShareLog] = useState(o.fightSettings.shareLog);
   const [overrides, setOverrides] = useState<Overrides>(o.fightSettings.overrides);
   const [editing, setEditing] = useState(Object.keys(o.fightSettings.overrides).length > 0);
+  const [loot, setLoot] = useState<Record<string, LootChoice>>(o.fightSettings.loot);
   const sentOverrides = editing ? overrides : {};
+  const lootChanged = JSON.stringify(loot) !== JSON.stringify(o.fightSettings.loot);
   const changed =
+    lootChanged ||
     JSON.stringify(priority) !== JSON.stringify(o.fightSettings.priority) ||
     byHand !== o.fightSettings.byHand ||
     shareLog !== o.fightSettings.shareLog ||
@@ -605,6 +619,18 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
                 </ul>
               </details>
             )}
+            {f.loot && (
+              <LootPanel
+                loot={f.loot}
+                choice={loot[String(k)]}
+                onChange={(c) => {
+                  const next = { ...loot };
+                  if (c) next[String(k)] = c;
+                  else delete next[String(k)];
+                  setLoot(next);
+                }}
+              />
+            )}
             <FightLog log={f.log} />
             {odds && (
               <p className="text-xs">
@@ -651,8 +677,8 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
             <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} /> edit results by hand
           </label>
         )}
-        <button type="button" className={btn} disabled={busy || !changed} onClick={() => act(() => fightSettingsAction(props.gameId, i.id, { priority, byHand, shareLog, overrides: sentOverrides }))}>
-          Apply these settings
+        <button type="button" className={btn} disabled={busy || !changed} onClick={() => act(() => fightSettingsAction(props.gameId, i.id, { priority, byHand, shareLog, overrides: sentOverrides, loot }))}>
+          {lootChanged ? "Apply these settings and the loot" : "Apply these settings"}
         </button>
         {fights.length > 0 && (
           <button type="button" className={btn} disabled={busy} onClick={() => act(() => oddsAction(props.gameId, i.id))}>
@@ -660,6 +686,108 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The loot of one fight. With one winning team it goes straight to that team;
+ * with several, the DM splits it between them or sends them a note to share
+ * it out (then nobody's inventory changes).
+ */
+function LootPanel({ loot, choice, onChange }: { loot: LootView; choice: LootChoice | undefined; onChange: (c: LootChoice | undefined) => void }) {
+  const list = loot.items.map((x) => `${x.qty > 1 ? `${x.qty}× ` : ""}${x.name}`).join(", ");
+  if (loot.mode === "corpse") return <p className="text-xs text-muted">💰 Nobody won the fallen&apos;s gear, so it stays with them: {list}.</p>;
+  if (loot.teams.length < 2) return <p className="text-xs">💰 Loot for {loot.teams[0]?.name}: {list}. It goes to their inventory when you accept.</p>;
+  const mode = choice?.mode ?? "split";
+  // The split shown: the DM's own, else the one the app used (everything to the first team).
+  const shares = choice?.mode === "split" ? choice.shares : loot.shares;
+  const qty = (teamId: string, itemId: string) => shares[teamId]?.find((x) => x.itemId === itemId)?.qty ?? 0;
+  const setQty = (teamId: string, itemId: string, n: number) => {
+    const next: Record<string, { itemId: string; qty: number }[]> = {};
+    for (const t of loot.teams) {
+      const row = loot.items
+        .map((it) => ({ itemId: it.itemId, qty: t.id === teamId && it.itemId === itemId ? Math.max(0, Math.floor(n) || 0) : qty(t.id, it.itemId) }))
+        .filter((x) => x.qty > 0);
+      if (row.length) next[t.id] = row;
+    }
+    onChange({ mode: "split", shares: next });
+  };
+  const short = loot.items.filter((it) => loot.teams.reduce((s, t) => s + qty(t.id, it.itemId), 0) !== it.qty);
+  return (
+    <div className="space-y-1 rounded-md border border-border p-2 text-xs">
+      <p className="font-medium">
+        💰 Loot for {loot.teams.map((t) => t.name).join(" and ")}: {list}
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <label className="flex items-center gap-1">
+          <input type="radio" checked={mode === "split"} onChange={() => onChange(undefined)} /> split it between them now
+        </label>
+        <label className="flex items-center gap-1">
+          <input type="radio" checked={mode === "note"} onChange={() => onChange({ mode: "note" })} /> send them a note to share it out themselves
+        </label>
+      </div>
+      {mode === "split" ? (
+        <>
+          <div className="overflow-x-auto">
+            <table className="text-xs">
+              <thead>
+                <tr>
+                  <th className="pr-2 text-left font-normal text-muted">Item</th>
+                  {loot.teams.map((t) => (
+                    <th key={t.id} className="px-1 text-left font-normal text-muted">
+                      {t.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loot.items.map((it) => (
+                  <tr key={it.itemId}>
+                    <td className="pr-2">
+                      {it.name} ×{it.qty}
+                    </td>
+                    {loot.teams.map((t) => (
+                      <td key={t.id} className="px-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={it.qty}
+                          aria-label={`${it.name} for ${t.name}`}
+                          className="w-14 rounded border border-border bg-background px-1"
+                          value={qty(t.id, it.itemId)}
+                          onChange={(e) => setQty(t.id, it.itemId, Number(e.target.value))}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {short.length > 0 ? (
+            <p className="text-danger">
+              Each item&apos;s shares must add up to how many there are ({short.map((x) => x.name).join(", ")}). Until they do, everything goes to {loot.teams[0].name}.
+            </p>
+          ) : (
+            <p className="text-muted">Goes into their inventories when you accept. Apply the settings below to save the split.</p>
+          )}
+        </>
+      ) : (
+        <>
+          <label className="block">
+            <span className="sr-only">Note to the teams</span>
+            <textarea
+              rows={3}
+              maxLength={2000}
+              className="w-full rounded border border-border bg-background px-2 py-1"
+              value={choice?.mode === "note" && choice.text !== undefined ? choice.text : (loot.note ?? loot.suggestedNote)}
+              onChange={(e) => onChange({ mode: "note", text: e.target.value })}
+            />
+          </label>
+          <p className="text-muted">Sent to each of these teams&apos; Messages when you accept. The loot isn&apos;t added to anyone&apos;s inventory: give it out by hand once they agree.</p>
+        </>
+      )}
     </div>
   );
 }

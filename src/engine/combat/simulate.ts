@@ -83,7 +83,7 @@ interface Fighter {
   creature: Creature;
   sb: StatBlock;
   stats: EffectiveStats;
-  /** The unit's own effects (race, archetype, augments, creature). */
+  /** The unit's own effects (race, archetype, equipped items, creature). */
   effects: Effect[];
   /** Effects from the region (buildings, settlement, features), multipliers applied. */
   regionEffects: Effect[];
@@ -1033,7 +1033,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
         raceId: null,
         archetypeId: null,
         academyBonus: {},
-        augmentIds: [],
+        equippedItemIds: [],
         hp: r.creatures.find((c) => c.id === p.creatureId)!.statBlock.hp,
         regionId: region?.id ?? null,
         x: null,

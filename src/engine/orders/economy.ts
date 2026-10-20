@@ -43,7 +43,7 @@ function nonZero(a: ResourceAmounts) {
 /** Units in these states cost upkeep. */
 const UPKEEP_STATUSES = new Set(["active", "hidden", "tamed", "captured"]);
 
-/** All effects that apply to a unit: its creature's, plus race, archetype and augments. */
+/** All effects that apply to a unit: its creature's, plus race, archetype and equipped items. */
 export function unitEffects(r: Ruleset, u: WorldUnit): Effect[] {
   const creature = r.creatures.find((c) => c.id === u.creatureId);
   return [...(creature?.effects ?? []), ...unitBonuses(r, u).flatMap((b) => b.effects ?? [])];

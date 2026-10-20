@@ -3,7 +3,7 @@ import { Ability, Condition, DamageType, DiceExpr, Size } from "./common";
 
 // A full D&D 5e stat block. Each action keeps its original text (what players
 // read) plus a structured "profile" (what the engine automates). Numbers that
-// depend on ability scores store *which* ability they use, so a race or augment
+// depend on ability scores store *which* ability they use, so a race or an equipped item
 // that changes STR also changes STR-based to-hit and damage.
 
 export const ToHit = z.object({

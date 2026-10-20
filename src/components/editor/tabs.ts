@@ -11,7 +11,7 @@ export const RULESET_TABS: { slug: string; label: string; section?: RulesetSecti
   { slug: "archetypes", label: "Archetypes", section: "archetypes" },
   { slug: "spells", label: "Spells", section: "spells" },
   { slug: "item-categories", label: "Item categories", section: "itemCategories" },
-  { slug: "augment-slots", label: "Augment slots", section: "augmentSlots" },
+  { slug: "equip-slots", label: "Equipment slots", section: "equipSlots" },
   { slug: "items", label: "Items", section: "items" },
   { slug: "recipes", label: "Recipes", section: "recipes" },
   { slug: "actions", label: "Actions", section: "actionTypes" },

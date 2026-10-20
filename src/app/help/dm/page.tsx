@@ -46,8 +46,8 @@ export default function DmGuide() {
               </li>
               <li>
                 <B>World map</B>: the screen behind <B>Teams</B>, <B>Resolve</B>, <B>Diplomacy</B> and <B>Messages</B>, which open as windows over it (move, resize or maximise them; × or <B>Esc</B> closes
-                them). Click a region and use <B>Place units here</B> to add team units and wild monsters. Click a unit to change its HP, status, owner,
-                race or notes. Click a unit badge to open a menu of every unit standing there; tick units in it, then drag the badge to move them (with none ticked, the whole
+                them). Click a region and use <B>Place units here</B> to add team units and wild monsters, with their archetype and anything they <B>carry</B> (items and
+                how many: loot for whoever kills them). Click a unit to change its HP, status, owner, race, archetype, what it carries, or notes. Click a unit badge to open a menu of every unit standing there; tick units in it, then drag the badge to move them (with none ticked, the whole
                 stack goes). You can drop units anywhere: borders never stop your moves. Wild monsters move straight away. For a team&apos;s units you choose <B>Instant change</B>
                 (moved now, no miles used, no fight; logged and undoable from the message on the map or the team&apos;s DM log) or <B>Add as a move order</B> (added to the team&apos;s
                 orders for this round and resolved like its own moves; borders don&apos;t stop it, but it only goes as far as the units&apos; miles allow, and the team can&apos;t make
@@ -185,7 +185,13 @@ export default function DmGuide() {
                   <B>show the log to the teams</B>: share the full fight log, or keep it to yourself.
                 </li>
                 <li>
-                  Press <B>Apply these settings</B> after changing any of these. <B>Show odds</B> runs the fight many times to show how likely each result is.
+                  <B>Loot</B> (💰): whatever the units that died carried or had equipped goes to the teams with a unit still standing on the winning side. With one team, it goes into
+                  its inventory when you accept. With several (a lent unit fought), choose <B>split it between them now</B> and set each team&apos;s share, or <B>send them a note to
+                  share it out themselves</B>: the note goes to their Messages when you accept and nobody&apos;s inventory changes. If nobody wins, it stays on the fallen. It&apos;s
+                  listed in the fight log and the teams&apos; results.
+                </li>
+                <li>
+                  Press <B>Apply these settings</B> after changing any of these (the loot too). <B>Show odds</B> runs the fight many times to show how likely each result is.
                 </li>
               </ul>
             </>
@@ -221,6 +227,10 @@ export default function DmGuide() {
                 your screens.
               </p>
               <ul>
+                <li>
+                  On <B>Units</B>, <B>Edit</B> on a unit also lets you change its <B>archetype</B> (teams only choose it when recruiting), and equip or unequip items at any time and
+                  anywhere. If the unit doesn&apos;t meet an item&apos;s needs, <B>Equip anyway (DM)</B> skips them; the item still has to be in the team&apos;s inventory.
+                </li>
                 <li>
                   On <B>Inventory</B>, the <B>DM: edit items and recipes</B> panel lets you add or remove items, change quantities, and teach or make the team forget recipes. It shows the
                   live game, even during resolution when players still see the start-of-round picture.

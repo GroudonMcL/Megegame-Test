@@ -1,5 +1,5 @@
 import type { Ruleset } from "../ruleset/ruleset";
-import type { WorldRegion, WorldUnit } from "../world/types";
+import type { ItemQty, WorldRegion, WorldUnit } from "../world/types";
 
 // The inputs and results of one simulated fight. A fight is pure: the same
 // input and seed always give the same result, so it can be shown to the DM,
@@ -30,7 +30,7 @@ export interface CombatInput {
   capture?: { sideId: string; targetId: string };
 }
 
-export type LogKind = "round" | "initiative" | "attack" | "save" | "heal" | "buff" | "condition" | "death" | "retreat" | "capture" | "info";
+export type LogKind = "round" | "initiative" | "attack" | "save" | "heal" | "buff" | "condition" | "death" | "retreat" | "capture" | "loot" | "info";
 
 export interface LogEntry {
   round: number;
@@ -69,7 +69,34 @@ export interface CombatResult {
   units: CombatUnitResult[];
   /** Abilities and traits the simulation doesn't understand, for the DM to check. */
   warnings: string[];
+  /** What the units that died had on them, and who gets it (set after the fight; missing = nothing). */
+  loot?: FightLoot;
 }
+
+/**
+ * Everything the units that died in a fight carried or had equipped. It goes
+ * to the teams with units still standing on the winning side: to the only one
+ * straight away, or (several) split by the DM or left for them to share out.
+ */
+export interface FightLoot {
+  /** All of it, added up. */
+  items: ItemQty[];
+  /** What each unit that died had. */
+  from: { unitId: string; label: string; items: ItemQty[] }[];
+  /** Teams with a unit still standing on the winning side. Empty = nobody won it, so it stays on the fallen. */
+  teamIds: string[];
+  /** auto = the one winning team gets it; split = shared out by the DM; note = the teams share it out themselves; corpse = left on the fallen. */
+  mode: "auto" | "split" | "note" | "corpse";
+  /** teamId → what it receives (auto and split). */
+  shares: Record<string, ItemQty[]>;
+  /** note: the text sent to each winning team. */
+  note?: string;
+  /** The DM's split no longer matched the loot (the fight changed), so it all went to one team instead. */
+  splitReset?: boolean;
+}
+
+/** How the DM hands out loot when several teams won a fight. */
+export type LootChoice = { mode: "split"; shares: Record<string, ItemQty[]> } | { mode: "note"; text?: string };
 
 export interface CombatOdds {
   runs: number;

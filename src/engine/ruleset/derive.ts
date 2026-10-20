@@ -3,7 +3,7 @@ import type { Effect } from "./effects";
 import type { Creature, Ruleset } from "./ruleset";
 import { SKILL_ABILITY, type StatAction, type StatBlock } from "./statblock";
 
-// Turns a base stat block plus layered bonuses (race, academy, augments) into
+// Turns a base stat block plus layered bonuses (race, archetype, academy, equipped items) into
 // the numbers the game uses, keeping a breakdown of where each number came from.
 
 export interface Part {
@@ -172,10 +172,10 @@ export interface UnitLoadout {
   raceId?: string | null;
   archetypeId?: string | null;
   academyBonus?: Partial<Record<Ability, number>>;
-  augmentIds?: string[];
+  equippedItemIds?: string[];
 }
 
-/** The race, archetype, academy and augment bonuses for a unit, ready for deriveStats. */
+/** The race, archetype, academy and equipped-item bonuses for a unit, ready for deriveStats. */
 export function unitBonuses(r: Ruleset, u: UnitLoadout): Bonus[] {
   const out: Bonus[] = [];
   const race = r.races.find((x) => x.id === u.raceId);
@@ -183,7 +183,7 @@ export function unitBonuses(r: Ruleset, u: UnitLoadout): Bonus[] {
   const archetype = r.archetypes.find((x) => x.id === u.archetypeId);
   if (archetype) out.push({ source: archetype.name, effects: archetype.effects });
   if (u.academyBonus && Object.keys(u.academyBonus).length) out.push({ source: "Academy", abilities: u.academyBonus });
-  for (const id of u.augmentIds ?? []) {
+  for (const id of u.equippedItemIds ?? []) {
     const item = r.items.find((x) => x.id === id);
     if (item) out.push({ source: item.name, effects: item.effects });
   }

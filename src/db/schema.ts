@@ -246,7 +246,12 @@ export const units = pgTable(
     archetypeId: text("archetype_id"),
     // e.g. { "str": 2 } from an Academy.
     academyBonus: jsonb("academy_bonus").$type<Record<string, number>>().notNull().default({}),
-    augmentIds: jsonb("augment_ids").$type<string[]>().notNull().default([]),
+    // Items equipped on the unit (their effects count); each one came out of a team's inventory.
+    equippedItemIds: jsonb("equipped_item_ids").$type<string[]>().notNull().default([]),
+    // Items the unit carries without using them (a monster's hoard); loot when it dies in a fight.
+    carried: jsonb("carried").$type<{ itemId: string; qty: number }[]>().notNull().default([]),
+    // Items unequipped from this unit in that round (for the equipSwapLock setting).
+    unequipped: jsonb("unequipped").$type<{ round: number; itemIds: string[] } | null>(),
     hp: integer("hp").notNull(),
     regionId: uuid("region_id").references(() => regions.id, { onDelete: "set null" }),
     // Where in the region it stands (fractions of the map); null = the region's centre.

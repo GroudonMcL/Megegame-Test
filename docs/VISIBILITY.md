@@ -31,7 +31,7 @@ Borders and links are sent when one side is seen now or seen before (blocked one
 ## Units
 
 - The team's own units: everything.
-- Other teams' units and wild monsters in a region the team sees: **only the type and the owner** (e.g. "Knight · Iron Clan"). No names, HP, augments or stats.
+- Other teams' units and wild monsters in a region the team sees: **only the type and the owner** (e.g. "Knight · Iron Clan"). No names, HP, equipment, carried items or stats.
 - Stealthed units of other teams stay invisible until this team has detected them.
 - The first time a team sees a monster type, its stat block appears in the team's rules reference.
 - **Lent units**: a team can lend some of its units to a team it has met (and take them back at any time). While lent, the borrower gets the unit **in full**, like its own, and the unit gives it **vision** like its own units (its region, plus its vision range). Both teams can move it; only the owner can give it other orders. A third team still sees only its type and owner, and nothing says it is lent. Taking it back ends the borrower's view of it and through it straight away (regions it saw are then remembered as usual).

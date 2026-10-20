@@ -54,7 +54,8 @@ export default async function InventoryPage() {
           {owned.map(([id, qty]) => {
             const it = item(id);
             const category = rules.itemCategories.find((c) => c.id === it?.categoryId);
-            const slot = rules.augmentSlots.find((s) => s.id === it?.slotId);
+            const equippable = rules.itemCategories.find((c) => c.id === it?.categoryId)?.equippable;
+            const slot = rules.equipSlots.find((s) => s.id === it?.slotId);
             const into = known.filter((rec) => rec.inputs.some((i) => i.itemId === id));
             const unknown = fullRuleset.recipes.filter((rec) => !knownIds.has(rec.id) && rec.inputs.some((i) => i.itemId === id)).length;
             return (
@@ -63,7 +64,7 @@ export default async function InventoryPage() {
                   <strong>{it?.name ?? id}</strong>
                   <span className="tabular-nums">×{qty}</span>
                   <span className="text-muted">
-                    {[category?.name, slot ? `${slot.name} augment` : "", it?.rarity].filter(Boolean).join(" · ")}
+                    {[category?.name, equippable ? (slot ? `equipment: ${slot.name}` : "equipment") : "", it?.rarity].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 {it?.description && <p className="mt-1">{it.description}</p>}

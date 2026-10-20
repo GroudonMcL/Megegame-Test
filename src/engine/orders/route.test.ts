@@ -55,7 +55,7 @@ const unit = (creatureId = "guard"): WorldUnit => ({
   raceId: null,
   archetypeId: null,
   academyBonus: {},
-  augmentIds: [],
+  equippedItemIds: [],
   hp: 10,
   regionId: "A",
   x: null,

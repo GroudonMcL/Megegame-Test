@@ -21,7 +21,8 @@ The **spell list** has all 29 spells from the sheet. Combat spells that can be a
 - **Settlements:** Gold and Growth costs, Food upkeep, Gold and Growth production, building slots, and the "for every settlement you need N outposts" requirements. Only one Capital is allowed.
 - **Buildings:** every cost, upkeep and production figure. Hunter's Post, Tavern, Temple (Respite, Divine Intervention), Smithy (Craft) and Portal grant their free actions.
 - **Actions:** the full list from the sheet, including Cast Spell, Claim (replaces Annex), Explore (replaces Search), Extract (deposit with STR/CON or corpse with INT/WIS), Train in Academy and Train Population.
-- **Free actions:** the full list from the sheet. A setting allows one free action per unit per turn, not counting moves.
+- **Free actions:** the full list from the sheet, except Apply Augment. A setting allows one free action per unit per turn, not counting moves.
+- **Augments** are equippable items (the Augment category, with the sheet's slots: Armour, Consumable ×3, Equipment ×2, Shield, Weapon or Tool; 3 per unit, 4 for an Artificer). Teams equip them from the unit's **Edit** window instead of with Apply Augment, straight away, while the round is open and the unit is in a region they own. The sheet's "you can't unequip an item and equip it on another unit in the same turn" is the **swap lock** setting, which is on.
 - **Moves:** Move Units, Move Units – Stealth (half the miles) and Move Units – Force March (double the miles, disadvantage in fights) are free actions, unlike the sheet: a unit can move as often as its movement for the round allows. This stops one numbered Move from carrying a whole stack while spreading out costs extra actions.
 - **Population** is a new resource. Train Population turns 100 Growth into +1 Population, and disbanding a healthy unit refunds 1.
 - **Diplomatic agreements** are in the rules text.

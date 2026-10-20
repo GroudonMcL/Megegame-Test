@@ -15,6 +15,7 @@ import {
 import { movedSince, type UnitSpot } from "@/engine/dmMoves";
 import type { TeamNote } from "@/engine/messages";
 import { audit } from "./audit";
+import { undoArchetype, undoEquip, type ArchetypeState, type EquipState } from "./equipment";
 import { sendDmNote } from "./messages";
 import { loadRuleset } from "./rulesets";
 
@@ -195,6 +196,10 @@ async function undoOne(tx: Tx, gameId: string, teamId: string, kind: string, bef
       await tx.update(schema.units).set({ lentToTeamId: b.lentToTeamId }).where(eq(schema.units.id, a.unitId));
       return null;
     }
+    case "dm.equip":
+      return undoEquip(tx, gameId, teamId, before as EquipState, after as EquipState, since);
+    case "dm.archetype":
+      return undoArchetype(tx, gameId, teamId, before as ArchetypeState, after as ArchetypeState, since);
     case "dm.trade.propose":
     case "dm.trade.respond":
     case "dm.trade.cancel":

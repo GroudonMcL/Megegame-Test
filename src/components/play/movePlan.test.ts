@@ -45,7 +45,7 @@ const unit = (id: string): WorldUnit => ({
   raceId: null,
   archetypeId: null,
   academyBonus: {},
-  augmentIds: [],
+  equippedItemIds: [],
   hp: 10,
   regionId: "a",
   x: null,

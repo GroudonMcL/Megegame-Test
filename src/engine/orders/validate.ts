@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ResourceAmounts } from "../ruleset/common";
 import { creatureCosts, unitTags } from "../ruleset/derive";
+import { unitItems } from "../equipment";
 import type { Effect } from "../ruleset/effects";
 import { fmtRes } from "../ruleset/effects";
 import type { Ruleset } from "../ruleset/ruleset";
@@ -134,7 +135,6 @@ interface Sim {
   unitUsed: Record<string, number>;
   regions: Record<string, SimRegion>;
   inventory: Record<string, number>;
-  augments: Record<string, string[]>;
   heroesRecruited: number;
   /** Units recruited by these orders, for the upkeep projection. */
   recruits: WorldUnit[];
@@ -248,7 +248,6 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
       view.regions.map((x) => [x.id, { ownerTeamId: x.ownerTeamId, settlementTierId: x.settlementTierId, buildings: x.buildings.map((b) => ({ ...b })), builtThisRound: [] }]),
     ),
     inventory: { ...view.inventory },
-    augments: Object.fromEntries(view.ownUnits.map((u) => [u.id, [...u.augmentIds]])),
     heroesRecruited: 0,
     recruits: [],
     settlementsBuilt: {},
@@ -552,7 +551,7 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           raceId,
           archetypeId: archetype?.id ?? null,
           academyBonus: {},
-          augmentIds: [],
+          equippedItemIds: [],
           hp: 1,
           regionId: regionId ?? null,
           x: null,
@@ -762,40 +761,10 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
         break;
       }
 
-      case "applyAugment": {
-        const itemId = asString(value("item"));
-        const item = r.items.find((x) => x.id === itemId);
-        const u = units[0];
-        if (!itemId) {
-          problem("Choose the augment.");
-          break;
-        }
-        if (!item || !item.slotId) {
-          problem("That item isn't an augment.");
-          break;
-        }
-        if (!u) break;
-        if ((s.inventory[item.id] ?? 0) <= 0) problem(`You don't have a ${item.name}.`);
-        const tags = tagsOf(u);
-        for (const t of item.requiresUnitTags) if (!tags.includes(t)) problem(`${item.name} needs a ${t} unit.`);
-        if (item.requiresRaces.length && !item.requiresRaces.includes(u.raceId ?? "")) problem(`${item.name} can't be used by ${unitName(u.id)}'s race.`);
-        const current = s.augments[u.id] ?? [];
-        const limitEffect = unitEffects(r, u).find((e) => e.type === "augmentLimit");
-        const max = limitEffect?.type === "augmentLimit" ? limitEffect.max : r.settings.maxAugmentsPerUnit;
-        if (current.length + 1 > max) problem(`${unitName(u.id)} can carry at most ${max} augments.`);
-        const slot = r.augmentSlots.find((x) => x.id === item.slotId);
-        const inSlot = current.filter((id) => r.items.find((x) => x.id === id)?.slotId === item.slotId).length;
-        if (slot && inSlot + 1 > slot.maxPerUnit) problem(`${unitName(u.id)} already has ${slot.maxPerUnit === 1 ? "a" : slot.maxPerUnit} ${slot.name} augment${slot.maxPerUnit === 1 ? "" : "s"}.`);
-        s.augments[u.id] = [...current, item.id];
-        s.inventory[item.id] = (s.inventory[item.id] ?? 0) - 1;
-        check.summary = `${action.name} · ${item.name} → ${unitName(u.id)}`;
-        break;
-      }
-
       case "disband":
         for (const u of units) {
           s.disbanded.push(u.id);
-          for (const id of s.augments[u.id] ?? []) s.inventory[id] = (s.inventory[id] ?? 0) + 1;
+          for (const x of unitItems(u)) s.inventory[x.itemId] = (s.inventory[x.itemId] ?? 0) + x.qty;
         }
         break;
 

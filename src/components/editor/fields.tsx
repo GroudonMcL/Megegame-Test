@@ -21,7 +21,7 @@ export type RefSection =
   | "archetypes"
   | "spells"
   | "itemCategories"
-  | "augmentSlots"
+  | "equipSlots"
   | "items"
   | "recipes"
   | "actionTypes"
@@ -696,10 +696,10 @@ export const effectVariants: Record<Effect["type"], Variant> = {
     fields: [{ kind: "multiselect", key: "resourceIds", label: "Resources", options: { ref: "resources" } }],
     template: () => ({ type: "waiveUpkeep", resourceIds: [] }),
   },
-  augmentLimit: {
-    label: "Augment limit",
-    fields: [{ kind: "number", key: "max", label: "Max augments", min: 0 }],
-    template: () => ({ type: "augmentLimit", max: 4 }),
+  equipLimit: {
+    label: "Equipped item limit",
+    fields: [{ kind: "number", key: "max", label: "Max equipped items", min: 0 }],
+    template: () => ({ type: "equipLimit", max: 4 }),
   },
   text: { label: "Text only (DM handles it)", fields: [{ kind: "textarea", key: "text", label: "Text" }], template: () => ({ type: "text", text: "" }) },
 };

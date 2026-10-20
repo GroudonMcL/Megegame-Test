@@ -55,7 +55,10 @@ export function toWorldUnit(u: typeof schema.units.$inferSelect): WorldUnit {
     raceId: u.raceId,
     archetypeId: u.archetypeId,
     academyBonus: u.academyBonus,
-    augmentIds: u.augmentIds,
+    // Snapshots taken before augments became equipped items call them augmentIds.
+    equippedItemIds: u.equippedItemIds ?? (u as { augmentIds?: string[] }).augmentIds ?? [],
+    carried: u.carried ?? [],
+    unequipped: u.unequipped ?? null,
     hp: u.hp,
     regionId: u.regionId,
     x: u.x ?? null,

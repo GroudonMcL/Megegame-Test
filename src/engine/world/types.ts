@@ -53,6 +53,11 @@ export interface MapScale {
   milesAcross: number;
 }
 
+export interface ItemQty {
+  itemId: string;
+  qty: number;
+}
+
 export interface WorldUnit {
   id: string;
   ownerTeamId: string | null;
@@ -61,7 +66,12 @@ export interface WorldUnit {
   raceId: string | null;
   archetypeId: string | null;
   academyBonus: Record<string, number>;
-  augmentIds: string[];
+  /** Items equipped on the unit; their effects change its stats. */
+  equippedItemIds: string[];
+  /** Items it carries without using them (missing = none). Loot when it dies in a fight. */
+  carried?: ItemQty[];
+  /** Items unequipped from it in that round (for the equipSwapLock setting). */
+  unequipped?: { round: number; itemIds: string[] } | null;
   hp: number;
   regionId: string | null;
   /** Where in the region it stands (fractions of the map); null = the region's centre. */

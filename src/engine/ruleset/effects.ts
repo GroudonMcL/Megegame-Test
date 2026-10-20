@@ -103,8 +103,8 @@ export const Effect = z.discriminatedUnion("type", [
   z.object({ type: z.literal("spells"), spellIds: z.array(Id).min(1), uses: Uses.default({ type: "perCombat", times: 1 }) }),
   /** The unit doesn't pay this upkeep (e.g. a self-sufficient scout needs no Food). */
   z.object({ type: z.literal("waiveUpkeep"), resourceIds: z.array(Id).min(1) }),
-  /** Changes how many augments this unit can carry. */
-  z.object({ type: z.literal("augmentLimit"), max: z.number().int().min(0) }),
+  /** Changes how many items this unit can have equipped (instead of the game setting). */
+  z.object({ type: z.literal("equipLimit"), max: z.number().int().min(0) }),
   z.object({ type: z.literal("text"), text: z.string().min(1) }),
 ]);
 export type Effect = z.infer<typeof Effect>;
@@ -282,8 +282,8 @@ export function describeEffect(e: Effect, names: EffectNames = {}): string {
     }
     case "waiveUpkeep":
       return `Pays no ${e.resourceIds.map((id) => names.resource?.(id) ?? id).join(" or ")} upkeep`;
-    case "augmentLimit":
-      return `Can equip up to ${e.max} augments`;
+    case "equipLimit":
+      return `Can equip up to ${e.max} item${e.max === 1 ? "" : "s"}`;
     case "text":
       return e.text;
   }

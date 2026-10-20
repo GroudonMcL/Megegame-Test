@@ -35,7 +35,8 @@ const metaFields: FieldSpec[] = [
 const settingsFields: FieldSpec[] = [
   { kind: "number", key: "actionSlots", label: "Numbered actions per round", min: 1 },
   { kind: "number", key: "conditionalLimit", label: "Conditional actions per round", min: 0 },
-  { kind: "number", key: "maxAugmentsPerUnit", label: "Augments per unit (total)", min: 0 },
+  { kind: "number", key: "maxEquippedPerUnit", label: "Equipped items per unit (total)", min: 0 },
+  { kind: "checkbox", key: "equipSwapLock", label: "An item unequipped this round can only go back on the unit it came from until next round" },
   { kind: "number", key: "demolishRefund", label: "Demolish refund (0–1)", step: 0.05 },
   {
     kind: "select",

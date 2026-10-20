@@ -98,7 +98,7 @@ export async function exportCsv(gameId: string, table: CsvTable): Promise<string
     case "units": {
       const units = await db.select().from(schema.units).where(eq(schema.units.gameId, gameId));
       return csv(
-        ["Owner", "Name", "Type", "Race", "Archetype", "HP", "Region", "Status", "Augments"],
+        ["Owner", "Name", "Type", "Race", "Archetype", "HP", "Region", "Status", "Equipped", "Carries"],
         units.map((u) => [
           u.ownerTeamId ? teamName(u.ownerTeamId) : "wild",
           u.name,
@@ -108,7 +108,8 @@ export async function exportCsv(gameId: string, table: CsvTable): Promise<string
           u.hp,
           regionCode(u.regionId),
           u.status,
-          u.augmentIds.map((id) => ruleset.items.find((i) => i.id === id)?.name ?? id).join("; "),
+          u.equippedItemIds.map((id) => ruleset.items.find((i) => i.id === id)?.name ?? id).join("; "),
+          u.carried.map((x) => `${x.qty}× ${ruleset.items.find((i) => i.id === x.itemId)?.name ?? x.itemId}`).join("; "),
         ]),
       );
     }

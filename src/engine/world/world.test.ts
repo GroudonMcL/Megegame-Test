@@ -44,7 +44,7 @@ function unit(extra: Partial<WorldUnit>): WorldUnit {
     raceId: null,
     archetypeId: null,
     academyBonus: {},
-    augmentIds: [],
+    equippedItemIds: [],
     hp: 10,
     regionId: "a",
     x: null,
@@ -253,7 +253,7 @@ describe("team view", () => {
   });
 
   it("sends other units as type and owner only, and nothing about unseen regions", () => {
-    const enemy = unit({ ownerTeamId: THEM, name: "Secret Name", regionId: "a", augmentIds: ["x"] });
+    const enemy = unit({ ownerTeamId: THEM, name: "Secret Name", regionId: "a", equippedItemIds: ["x"] });
     const view = buildTeamView({
       ruleset: r,
       regions,
@@ -352,7 +352,7 @@ describe("orders", () => {
       order(1, "move", { "0": [g.id], "1": [centre("b")] }, "free"),
       ...Array.from({ length: 6 }, (_, i) => order(i + 2, "improvise", { "0": "x" })),
       order(8, "move", { "0": [g.id], "1": [centre("a")] }),
-      order(9, "apply-augment", { "0": g.id, "1": "x" }, "free"),
+      order(9, "disband", { "0": g.id }, "free"),
     ]);
     expect(check.slotsUsed).toBe(6);
     expect(check.orders[0].slot).toBeNull();
