@@ -69,8 +69,9 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                 <li>
                   <B>The map</B>: tap a region, or a unit badge, to see what you know about it in a panel on the right (<B>Esc</B> or × closes it). Your own units show
                   everything; other sides&apos; units show only their type and owner. Under <B>Give an order</B>, pick an order (for a unit: <B>Move</B> and the rest) and your
-                  Orders window opens with it already filled in, ready to finish and save. <B>Show on map</B> in the Units and Regions windows takes you to that place. <B>Map key</B> in the corner explains the symbols. <B>Terrain</B> in the bottom corner shows or hides difficult ground; hover over an area to see its type and what it does to movement. <B>2D / 3D</B> in the bottom corner shows the map as terrain you can turn and tilt (drag to move, right-drag or two fingers to turn, scroll or pinch to zoom); everything works the same in both. If 3D runs slowly on your device it switches back to 2D. Regions you can see now are clear; regions you&apos;ve only seen before are greyed and show what was there last time;
-                  the rest is hidden. Each team has a colour and an emblem (a shield, crown, tower…), so you can tell teams apart without relying on colour. Unit badges show the owner&apos;s
+                  Orders window opens with it already filled in, ready to finish and save. <B>Show on map</B> in the Units and Regions windows takes you to that place. <B>Map key</B> in the corner explains the symbols. <B>Terrain</B> in the bottom corner shows or hides difficult ground; hover over an area to see its type and what it does to movement. <B>2D / 3D</B> in the bottom corner shows the map as terrain you can turn and tilt (drag to move, right-drag or two fingers to turn, scroll or pinch to zoom); everything works the same in both. If 3D runs slowly on your device it switches back to 2D. Regions you can see now are clear; regions you&apos;ve only seen before are faded and show what was there last time.
+                  Regions next to the ones you see are shown in greyscale with their name and terrain, but not who owns them or what&apos;s there; one region further out shows only a
+                  &ldquo;?&rdquo; and its outline; the rest is hidden. Each team has a colour and an emblem (a shield, crown, tower…), so you can tell teams apart without relying on colour. Unit badges show the owner&apos;s
                   emblem and how many units are there; your own have square corners.
                 </li>
                 <li>
@@ -109,7 +110,7 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
                   <B>Numbered actions</B> use one of your action slots for the round (shown at the top, e.g. 4/6). They happen in the order you list them.
                 </li>
                 <li>
-                  <B>Free actions</B> don&apos;t use a slot. They happen where you put them in the list.
+                  <B>Free actions</B> don&apos;t use a slot. They happen where you put them in the list. Moving is always a free action.
                 </li>
                 <li>
                   <B>Backups</B> only happen if the action just above them fails, for example &ldquo;if the attack fails, retreat&rdquo;.
@@ -117,10 +118,16 @@ export function PlayerGuideContent({ embedded = false }: { embedded?: boolean })
               </ul>
               <h3>Moving</h3>
               <p>
+                Moves (normal, stealthy or forced march) are free: they don&apos;t use a numbered action. Each unit can move as often as you like in a round, as long as it has
+                miles left (see <B>Movement left</B> in the Orders window); every move uses up miles from the units in it. Moving a unit to another spot in the same region is a
+                move too. Moves happen between your numbered actions: the ones you list before action 1 happen before everyone&apos;s action 1, the ones between action 1 and action 2
+                before everyone&apos;s action 2, and so on, so &ldquo;move, then attack&rdquo; works. Everyone&apos;s moves at the same point happen at the same time.
+              </p>
+              <p>
                 The quickest way is on the map: drag one of your unit badges to where it should go (press <B>Shift</B> on the way to add a bend). The line shows the miles it uses
                 out of what&apos;s left, and turns red with the reason if the move can&apos;t happen; letting go then does nothing. If it&apos;s too far for a normal move but a
                 forced march would make it, the line turns into an orange double line showing the forced-march distance, and letting go queues a forced march. Otherwise it queues a Move order (asking which kind of
-                move if there&apos;s a choice) and saves your draft. Drop units where a move of yours from the same region already ends and they join it, without using another action.
+                move if there&apos;s a choice) and saves your draft. Drop units where a move of yours from the same region already ends and they join it.
                 On a phone, or to move one unit out of a stack, tap the unit and choose <B>Move on map</B>, tap the stops, then <B>Done</B>. Planned moves are drawn on the map, with a
                 see-through badge where the units will end up (drag that to plan their next move); tap a route to redraw or cancel it.
               </p>

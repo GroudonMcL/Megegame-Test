@@ -76,7 +76,7 @@ type Resource = { id: string; name: string; icon: string; kind: string };
 interface Props {
   gameId: string;
   round: { number: number; status: string } | null;
-  steps: { step: number; pending: number; flags: { kind: string; text: string; orderIds: string[] }[]; items: ResolveItem[] }[];
+  steps: { step: number; kind: "moves" | "action"; label: string; pending: number; flags: { kind: string; text: string; orderIds: string[] }[]; items: ResolveItem[] }[];
   resources: Resource[];
   lastUndo: string | null;
   endOfRound: {
@@ -252,12 +252,12 @@ export function ResolveClient(props: Props) {
               <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show decided orders
             </label>
             <label className="flex items-center gap-1">
-              Action
+              Step
               <select className="rounded-md border border-border bg-background px-2 py-1" value={stepFilter} onChange={(e) => setStepFilter(Number(e.target.value))}>
                 <option value={0}>All</option>
                 {props.steps.map((s) => (
                   <option key={s.step} value={s.step}>
-                    {s.step}
+                    {s.label}
                   </option>
                 ))}
               </select>
@@ -309,8 +309,8 @@ const SHORTCUTS: [string, string][] = [
   ["s", "Skip it"],
   ["r", "Re-roll it"],
   ["e", "Edit its outcome text (Esc to leave the box)"],
-  ["Shift + A", "Accept all ready orders in this action"],
-  ["p", "Prepare the next action"],
+  ["Shift + A", "Accept all ready orders in this step"],
+  ["p", "Prepare the next step (moves or action)"],
   ["?", "Show or hide this list"],
 ];
 
@@ -331,14 +331,14 @@ function Step({ step: s, props, filter: { team, showDone, onlyFlagged }, focusId
   return (
     <section className="glass rounded-xl border border-border shadow-panel p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-medium">Action {s.step}</h3>
+        <h3 className="font-medium">{s.label}</h3>
         <span className="text-sm text-muted">
           {s.pending ? `${s.pending} to decide` : "all decided ✓"} · {s.items.length} order{s.items.length === 1 ? "" : "s"}
         </span>
         <span className="ml-auto flex gap-2">
           {unprepared && (
             <button type="button" className={primary} data-shortcut="prepare" disabled={busy} onClick={() => act(() => prepareStepAction(props.gameId, s.step))}>
-              Prepare action {s.step}
+              Prepare {s.kind === "moves" ? "moves" : `action ${Math.ceil(s.step / 2)}`}
             </button>
           )}
           {ready > 0 && (
@@ -348,6 +348,7 @@ function Step({ step: s, props, filter: { team, showDone, onlyFlagged }, focusId
           )}
         </span>
       </div>
+      {s.kind === "moves" && <p className="mt-1 text-xs text-muted">Every team&apos;s moves in this step happen at the same time.</p>}
       {s.flags.length > 0 && (
         <ul className="mt-2 space-y-1 text-sm">
           {s.flags.map((f, i) => (

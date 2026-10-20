@@ -147,7 +147,7 @@ export function useMapMoves({ view, rules, selectedRoute, onSelectRoute }: { vie
       const joined = o.join;
       void save(
         orders.map((x) => (x.id === joined.id ? joinOrder(rules, x, p.unitIds) : x)),
-        `Joined the ${o.action.name.toLowerCase()} already going to ${where}, so no extra action is used.`,
+        `Joined the ${o.action.name.toLowerCase()} already going to ${where}.`,
       );
     } else {
       const order = newOrder(rules, o.action, { unitIds: p.unitIds, path: steps }, check.slotsUsed < check.slotsTotal, crypto.randomUUID());

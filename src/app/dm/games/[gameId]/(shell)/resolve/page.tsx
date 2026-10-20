@@ -1,4 +1,5 @@
 import { ResolveClient, type ResolveItem } from "@/components/resolve/ResolveClient";
+import { effectiveKind } from "@/engine/orders/validate";
 import { describeChange, describeInputs } from "@/engine/resolve/describe";
 import { lastAuditEntry, loadQueue, type EndOfRoundState } from "@/lib/resolution";
 import { requireDm } from "@/lib/session";
@@ -16,6 +17,8 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
 
   const data = steps.map((s) => ({
     step: s.step,
+    kind: s.kind,
+    label: s.label,
     pending: s.pending,
     flags: s.flags.map((f) => ({ kind: f.kind, text: f.text, orderIds: f.orderIds })),
     items: s.items.map(
@@ -24,8 +27,9 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
         teamId: i.order.teamId,
         teamName: i.teamName,
         teamColour: i.teamColour,
-        kind: i.order.kind,
-        slot: i.order.slot,
+        // Older games saved moves as numbered actions; the queue's count is the real slot.
+        kind: effectiveKind(ruleset, i.order),
+        slot: i.order.kind === "numbered" && s.kind === "action" ? s.action : null,
         status: i.order.status,
         submitted: i.submitted,
         backup: i.backup,

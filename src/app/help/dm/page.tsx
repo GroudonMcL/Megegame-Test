@@ -93,7 +93,9 @@ export default function DmGuide() {
           body: (
             <>
               <p>
-                Orders are grouped by action number: every team&apos;s action 1, then action 2, and so on, with free actions and backups in their places. Press <B>Prepare action 1</B>: the
+                Orders are grouped into steps: every team&apos;s moves listed before its action 1, then every team&apos;s action 1, then the moves listed before action 2, then action 2, and so
+                on, ending with the moves listed after the last action. Moving is a free action, so it never uses an action slot; other free actions and backups sit in their places.
+                Moves in one step happen at the same time. Press <B>Prepare moves</B> (or <B>Prepare action 1</B>): the
                 app checks each order against the world as it is now, moves units, rolls dice, looks up tables, runs fights and drafts the outcome text.
               </p>
               <ul>
@@ -253,7 +255,7 @@ export default function DmGuide() {
           title: "What players can and can't see",
           body: (
             <ul>
-              <li>A team sees the regions it owns, regions where it has units, and regions its scouts and watchtowers can see. Regions it saw before stay on its map, dimmed, as they were.</li>
+              <li>A team sees the regions it owns, regions where it has units, and regions its scouts and watchtowers can see. Regions it saw before stay on its map, dimmed, as they were. Regions next to the ones it sees show in greyscale with their name and terrain only; one further out shows as &ldquo;?&rdquo;; the rest isn&apos;t sent.</li>
               <li>Other factions&apos; units show only their type and owner, never HP or names. Hidden units stay invisible until spotted.</li>
               <li>Players never see roll tables&apos; contents, the monster library (except monsters they&apos;ve met), other teams&apos; resources, or your notes.</li>
               <li>The map image is fogged on the server, so nothing hidden ever reaches a player&apos;s device.</li>

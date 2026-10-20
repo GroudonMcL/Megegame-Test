@@ -784,8 +784,8 @@ export function utterdarkPreset() {
       {
         id: "move",
         name: "Move Units",
-        description: "Move any number of units from the same region, up to the lowest movement among them. Moving into hostiles starts combat unless you say how you avoid it (not every combat can be avoided).",
-        kind: "numbered",
+        description: "Free action. Move any number of units from the same region, up to the lowest movement left among them. Each unit can move several times a round, as long as it has movement left. Moving into hostiles starts combat unless you say how you avoid it (not every combat can be avoided).",
+        kind: "free",
         handler: "move",
         config: { mode: "normal" },
         requirements: [{ type: "unitHasMovement" }],
@@ -794,8 +794,8 @@ export function utterdarkPreset() {
       {
         id: "move-stealth",
         name: "Move Units – Stealth",
-        description: "Units moving stealthily travel up to half their movement. Each time they enter a region with units not owned by your faction, they make a DEX check against the highest passive Perception there.",
-        kind: "numbered",
+        description: "Free action. Units moving stealthily travel up to half their movement. Each time they enter a region with units not owned by your faction, they make a DEX check against the highest passive Perception there.",
+        kind: "free",
         handler: "move",
         config: { mode: "stealth" },
         requirements: [{ type: "unitHasMovement" }],
@@ -804,8 +804,8 @@ export function utterdarkPreset() {
       {
         id: "move-force-march",
         name: "Move Units – Force March",
-        description: "Move units up to double the lowest movement among them. Any combat during this move is made at disadvantage for the force-marching units.",
-        kind: "numbered",
+        description: "Free action. Move units up to double the lowest movement among them. Any combat during this move is made at disadvantage for the force-marching units.",
+        kind: "free",
         handler: "move",
         config: { mode: "forceMarch" },
         requirements: [{ type: "unitHasMovement" }],
@@ -961,7 +961,7 @@ export function utterdarkPreset() {
       {
         id: "overview",
         title: "How a round works",
-        body: "A round usually lasts a real-life week. Roleplay with teams you've met on Discord and submit your orders here. At the end of the week the DMs resolve every team's actions, slot by slot, and the next round begins.",
+        body: "A round usually lasts a real-life week. Roleplay with teams you've met on Discord and submit your orders here. At the end of the week the DMs resolve every team's actions, slot by slot (with everyone's moves in between), and the next round begins.",
       },
       {
         id: "goal",
@@ -971,7 +971,7 @@ export function utterdarkPreset() {
       {
         id: "units",
         title: "Units",
-        body: "These stats represent a unit in its base form. The race of the unit, its archetype, its level of experience, and any items equipped may adjust its stats. Each unit can use a maximum of 1 free action per turn. You can recruit 1 additional hero per city in your empire; your starting hero isn't included in this rule.",
+        body: "These stats represent a unit in its base form. The race of the unit, its archetype, its level of experience, and any items equipped may adjust its stats. Each unit can use a maximum of 1 free action per turn, not counting moves: moving is free and limited only by the unit's movement. You can recruit 1 additional hero per city in your empire; your starting hero isn't included in this rule.",
       },
       {
         id: "economy",

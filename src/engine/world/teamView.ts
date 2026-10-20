@@ -13,7 +13,10 @@ export interface ViewRegion {
   code: string;
   x: number;
   y: number;
-  /** visible = seen now; remembered = last-known info; frontier = known to exist, never seen. */
+  /**
+   * visible = seen now; remembered = last-known info; glimpsed = next to a seen
+   * region (outline, name and terrain only); frontier = one further out (outline only).
+   */
   state: RegionState;
   /** The outline (unexplored regions too: their shape, but nothing about them). */
   polygon: Polygon;
@@ -44,11 +47,13 @@ export interface ViewOtherUnit {
   dead: boolean;
 }
 
-/** Difficult ground, cut down to the parts inside regions the team sees or remembers. */
+/** Difficult ground, cut down to the parts inside regions the team sees, remembers or glimpses. */
 export interface ViewTerrain {
   id: string;
   terrainId: string;
   pieces: Piece[];
+  /** In a glimpsed region: drawn in greyscale. */
+  grey?: boolean;
 }
 
 export interface ViewTeam {
@@ -114,7 +119,8 @@ export function buildTeamView(input: TeamViewInput): TeamView {
     } else {
       regions.push({
         ...base,
-        name: "",
+        // A glimpsed region shows its name; an unexplored one nothing.
+        name: state === "glimpsed" ? reg.name : "",
         description: "",
         settleable: null,
         ownerTeamId: null,
@@ -141,9 +147,15 @@ export function buildTeamView(input: TeamViewInput): TeamView {
       dead: u.status === "dead",
     }));
 
-  // Terrain only where the team can see (or remembers seeing), so nothing about unseen ground leaks.
-  const seen = regions.filter((r) => r.state !== "frontier" && r.polygon.length >= 3).map((r) => r.polygon);
-  const terrain = input.terrain.map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: clipToAreas(a.polygon, seen) })).filter((a) => a.pieces.length);
+  // Terrain only where the team can see (or remembers seeing), so nothing about unseen ground
+  // leaks; in glimpsed regions too, but marked to be drawn in greyscale.
+  const outlines = (states: RegionState[]) => regions.filter((r) => states.includes(r.state) && r.polygon.length >= 3).map((r) => r.polygon);
+  const seen = outlines(["visible", "remembered"]);
+  const glimpsed = outlines(["glimpsed"]);
+  const terrain: ViewTerrain[] = [
+    ...input.terrain.map((a) => ({ id: a.id, terrainId: a.terrainId, pieces: clipToAreas(a.polygon, seen) })),
+    ...input.terrain.map((a) => ({ id: `${a.id}:grey`, terrainId: a.terrainId, pieces: clipToAreas(a.polygon, glimpsed), grey: true })),
+  ].filter((a) => a.pieces.length);
 
   const teamIds = new Set<string>();
   for (const reg of regions) if (reg.ownerTeamId) teamIds.add(reg.ownerTeamId);

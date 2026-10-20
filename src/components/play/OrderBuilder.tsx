@@ -162,6 +162,7 @@ export function OrderBuilder(props: OrderBuilderProps) {
                   props={props}
                   editable={editable}
                   orders={orders}
+                  allChecks={check.orders}
                   picking={picking === o.id}
                   onPick={(on) => setPicking(on ? o.id : null)}
                   onKind={(kind) => update(o.id, { kind })}
@@ -280,6 +281,14 @@ export function OrderBuilder(props: OrderBuilderProps) {
   );
 }
 
+/** When a move happens: moves go between the numbered actions, before the next one listed after them. */
+function moveTiming(c: OrderCheck, all: OrderCheck[]): string {
+  const i = all.indexOf(c);
+  const next = all.slice(i + 1).find((x) => x.slot !== null)?.slot;
+  const before = all.slice(0, i).filter((x) => x.slot !== null).length;
+  return next ? `Move · before action ${next}` : before ? `Move · after action ${before}` : "Move";
+}
+
 function OrderCard(p: {
   order: OrderDraft;
   index: number;
@@ -289,6 +298,7 @@ function OrderCard(p: {
   props: OrderBuilderProps;
   editable: boolean;
   orders: OrderDraft[];
+  allChecks: OrderCheck[];
   picking: boolean;
   onPick: (on: boolean) => void;
   onKind: (k: OrderKind) => void;
@@ -299,7 +309,7 @@ function OrderCard(p: {
 }) {
   const { order: o, check: c, action, editable } = p;
   const { rules } = p.props;
-  const heading = o.kind === "numbered" ? `Action ${c.slot}` : o.kind === "free" ? "Free" : "Backup";
+  const heading = action?.handler === "move" ? moveTiming(p.check, p.allChecks) : o.kind === "numbered" ? `Action ${c.slot}` : o.kind === "free" ? "Free" : "Backup";
   const bad = c.problems.length > 0;
   return (
     <div className={`rounded-xl border bg-card p-3 ${bad ? "border-danger" : "border-border"}`}>

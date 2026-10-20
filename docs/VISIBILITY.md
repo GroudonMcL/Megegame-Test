@@ -15,12 +15,18 @@ Regions are shapes on the map; regions that touch (along an edge or at a corner)
 
 Hidden regions and hidden connections stay invisible until the team has discovered them (the DM marks this; Phase 5 does it from Excavate and Explore results).
 
-Other regions a team may get:
+Around the regions it sees, a team gets two rings, so players can plan moves into them:
 
-- **Seen before**: shown dimmed, with what the team last saw (owner, settlement, buildings, ruins, deposits) and the round it saw it. Units are never remembered. The DM can switch this off in **Ruleset → Game settings → Fog of war**.
-- **Unexplored**: a region next to one the team sees, shown as "?" with its outline but no name or details, so players can plan moves into it.
+- **Ring 1, glimpsed**: a region next to one the team sees (but not seen itself). The map image and terrain areas show in greyscale, with the region's code and name. No owner, settlement, buildings, ruins, deposits or units.
+- **Ring 2, unexplored**: a region next to ring 1. Shown as "?" with its outline only.
 
-Anything else is not sent at all.
+Neighbours here follow the same rules as everywhere: a blocked border counts as no border, and hidden borders and links only count once the team has discovered them. Vision range (Scouts, Watchtowers…) gives full vision, which pushes both rings outward. The rings are counted only from regions the team sees now, not from regions it has seen before.
+
+- **Seen before**: shown dimmed, in colour, with what the team last saw (owner, settlement, buildings, ruins, deposits) and the round it saw it. Units are never remembered. A region that is both seen before and in ring 1 shows as seen before. The DM can switch this off in **Ruleset → Game settings → Fog of war** (then those regions are treated like any other: in a ring or not sent).
+
+Anything further out is full fog: not sent at all.
+
+Borders and links are sent when one side is seen now or seen before (blocked ones too, so they can be drawn), and open ones between ring 1 and ring 1 or ring 2. Nothing is sent between two ring-2 regions.
 
 ## Units
 
@@ -31,11 +37,11 @@ Anything else is not sent at all.
 
 ## The map image
 
-The server paints fog onto the map image before sending it: solid fog everywhere except the regions the team sees (cleared to their outline) and the regions it has seen before (dimmed). A region without a shape yet gets a circle instead; its size, and an option to turn image fogging off, are in **Game settings → Fog of war**.
+The server paints fog onto the map image before sending it (`src/lib/fogImage.ts`): solid fog everywhere except the regions the team sees (cleared to their outline), the regions it has seen before (dimmed, in colour) and ring-1 regions (a greyscale copy of the image under light fog). Ring 2 and beyond are solid fog. A region without a shape yet gets a circle instead; its size, and an option to turn image fogging off, are in **Game settings → Fog of war**. The 2D and 3D maps both use this image. The 3D height map is flattened outside the regions seen now, seen before and in ring 1, so ring-1 ground keeps its hills.
 
 ## Terrain
 
-Terrain areas (forest, swamp, water…) are cut down on the server to the parts inside regions the team sees or remembers, so nothing about unseen ground is sent.
+Terrain areas (forest, swamp, water…) are cut down on the server to the parts inside regions the team sees or remembers, and separately to the parts inside ring-1 regions (marked to be drawn in grey), so nothing about ground further out is sent. Move checks use all the terrain the team gets, ring 1 included.
 
 ## Moves into the unknown
 

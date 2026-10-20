@@ -279,7 +279,10 @@ export const ActionType = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   /** For check-based actions: which abilities may be used (best is taken) and the outcome table. */
   check: z.object({ abilities: z.array(Ability).min(1), tableId: Id }).nullable().default(null),
-});
+})
+  // Moving is always a free action, limited only by each unit's movement. Older
+  // rulesets had numbered moves; they load as free ones.
+  .transform((a) => (a.handler === "move" && a.kind !== "free" ? { ...a, kind: "free" as const } : a));
 
 export const TableResult = z.discriminatedUnion("type", [
   z.object({ type: z.literal("gainResource"), resourceId: Id, amount: DiceExpr }),

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { OrderDraft, validateOrders } from "@/engine/orders/validate";
+import { effectiveKind, OrderDraft, validateOrders } from "@/engine/orders/validate";
 import { renameDescription } from "@/engine/dmEdits";
 import { audit } from "@/lib/audit";
 import { editInventory, editRecipes, ordersStateFor, undoDmChange, type OrdersState, type RenameState } from "@/lib/dmEdits";
@@ -73,7 +73,7 @@ export async function saveOrdersAction(input: z.input<typeof SaveInput>): Promis
           roundId: round.id,
           teamId: viewer.teamId,
           position: i,
-          kind: o.kind,
+          kind: effectiveKind(loaded.rules, o),
           slot: check.orders[i].slot,
           parentOrderId: check.orders[i].parentId,
           actionTypeId: o.actionTypeId,

@@ -56,7 +56,7 @@ Building effects apply to the owning team's units in that region.
 | `team_region_knowledge`, `team_connection_knowledge`, `team_unit_detections`, `team_contacts` | what each team has discovered, seen, detected, and who has met whom |
 | `trades` | trades between teams: what each side gives, status (proposed, accepted, declined, cancelled, executed, failed), and the result |
 | `rounds` | round lifecycle (open → locked → resolving → review → published), deadline, the state when resolution started (what players see until publishing), the end-of-round results, and the published snapshot; when the deadline reminder was sent |
-| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional), slot, the order a conditional backs up, action, inputs, notes, and during resolution its status and outcome (the app's proposal, rolls, the DM's text and adjustments) |
+| `orders` | each team's ordered list for a round: position, kind (numbered / free / conditional; moves are always free), slot, the order a conditional backs up, action, inputs, notes, and during resolution its status and outcome (the app's proposal, rolls, the DM's text and adjustments) |
 | `team_round_orders` | per team per round: who submitted the orders and when, and a version number so two teammates can't overwrite each other |
 | `roll_log` | every roll: expression, seed, breakdown, total, table result, overrides |
 | `audit_log` | every state change with before/after, for history and undo. Changes the DM makes while viewing as a team have a `dm.…` kind and the team in `team_id` (see below) |

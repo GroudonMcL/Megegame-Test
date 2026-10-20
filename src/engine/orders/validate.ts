@@ -93,6 +93,12 @@ export function allowedKinds(kind: Ruleset["actionTypes"][number]["kind"]): Orde
   }
 }
 
+/** Moving is always free; older orders may have saved a move as a numbered action. */
+export function effectiveKind(r: Ruleset, d: { kind: string; actionTypeId: string }): OrderKind {
+  const isMove = r.actionTypes.find((a) => a.id === d.actionTypeId)?.handler === "move";
+  return isMove && d.kind === "numbered" ? "free" : (d.kind as OrderKind);
+}
+
 // ---------------------------------------------------------------------------
 // Simulated state while walking down the order list.
 
@@ -239,6 +245,8 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
   };
 
   const sim = start;
+  // Movement used before these orders (sim changes as the orders are walked through).
+  const usedAtStart = { ...start.unitUsed };
   let beforeParent: Sim = clone(start);
   let parentId: string | null = null;
   let slot = 0;
@@ -246,8 +254,10 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
   const checks: OrderCheck[] = [];
   const adhoc: EconomyLine[] = [];
 
-  for (const d of drafts) {
-    const action = r.actionTypes.find((a) => a.id === d.actionTypeId);
+  for (const draft of drafts) {
+    const action = r.actionTypes.find((a) => a.id === draft.actionTypeId);
+    const isMove = action?.handler === "move";
+    const d: OrderDraft = { ...draft, kind: effectiveKind(r, draft) };
     const check: OrderCheck = { id: d.id, slot: null, parentId: null, problems: [], notes: [], cost: {}, gain: {}, summary: action?.name ?? "Unknown action" };
     checks.push(check);
     const problem = (msg: string) => check.problems.push(msg);
@@ -430,7 +440,8 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
       const have = s.freeGranted[action.id] ?? 0;
       if (s.counts[key] > have) problem(have === 0 ? `You have no uses of ${action.name} (they come from buildings or units).` : `You only have ${have} use${have === 1 ? "" : "s"} of ${action.name} this round.`);
     }
-    if (isFree && r.settings.freeActionsPerUnit !== null) {
+    // Moves don't count: they're limited by each unit's movement instead.
+    if (isFree && !isMove && r.settings.freeActionsPerUnit !== null) {
       for (const id of unitIds) {
         s.freePerUnit[id] = (s.freePerUnit[id] ?? 0) + 1;
         if (s.freePerUnit[id] > r.settings.freeActionsPerUnit) problem(`${unitName(id)} can only take ${r.settings.freeActionsPerUnit} free action${r.settings.freeActionsPerUnit === 1 ? "" : "s"} per round.`);
@@ -468,7 +479,8 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
           group.forEach((g, i) => {
             const per = milesPerRound(r, g.unit) * modeMultiplier(r, mode);
             const left = Math.max(0, (1 - g.used) * per);
-            if (route.used[i] >= 1 - MOVE_EPSILON) problem(`${unitName(g.unit.id)} has only ${Math.floor(left)} miles of movement left; this path needs more.`);
+            const earlier = g.used > (usedAtStart[g.unit.id] ?? 0) + MOVE_EPSILON ? " after its earlier moves" : "";
+            if (route.used[i] >= 1 - MOVE_EPSILON) problem(`${unitName(g.unit.id)} has only ${Math.floor(left)} miles of movement left${earlier}; this path needs more.`);
           });
         }
         check.route = { unitIds: units.map((u) => u.id), startRegion: from, endRegion: route.endRegion, walked: route.walked, blocked: route.blocked };
@@ -831,13 +843,13 @@ export function validateOrders(r: Ruleset, view: TeamView, drafts: OrderDraft[])
     .filter((u) => ACTIVE_STATUSES.has(u.status) && u.regionId)
     .map((u) => {
       const per = milesPerRound(r, u);
-      const usedBefore = start.unitUsed[u.id] ?? 0;
+      const usedBefore = usedAtStart[u.id] ?? 0;
       const used = Math.min(1, sim.unitUsed[u.id] ?? usedBefore);
       return { unitId: u.id, name: unitName(u.id), milesPerRound: per, usedBefore, used, milesLeft: Math.max(0, (1 - used) * per) };
     });
 
   const freeUses: FreeUseLine[] = r.actionTypes
-    .filter((a) => a.kind === "free" || a.kind === "numberedAndFree")
+    .filter((a) => (a.kind === "free" || a.kind === "numberedAndFree") && a.handler !== "move")
     .map((a) => {
       const used = drafts.filter((d) => d.actionTypeId === a.id && d.kind === "free").length;
       return { actionTypeId: a.id, name: a.name, used, available: grantedSomewhere(r, a.id) ? (freeGranted[a.id] ?? 0) : null };

@@ -54,6 +54,17 @@ export function RegionDetails({
   const own = view.ownUnits.filter((u) => u.regionId === region.id && ON_MAP_STATUSES.has(u.status));
   const others = view.otherUnits.filter((u) => u.regionId === region.id);
 
+  if (region.state === "glimpsed") {
+    return (
+      <div>
+        {showTitle && <h3 className="font-medium">{regionTitle(region)}</h3>}
+        <p className="mt-1 text-sm text-muted">
+          This region is next to one you can see, so you can make out the land, but not who holds it or what&apos;s there. Send a unit there, or one that can see further.
+        </p>
+      </div>
+    );
+  }
+
   if (region.state === "frontier") {
     return (
       <div>

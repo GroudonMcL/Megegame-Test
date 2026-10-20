@@ -328,6 +328,10 @@ export interface QueueItem {
 
 export interface QueueStepView {
   step: number;
+  kind: "moves" | "action";
+  /** The numbered action this step is, or comes before. */
+  action: number;
+  label: string;
   items: QueueItem[];
   flags: Flag[];
   pending: number;
@@ -343,7 +347,8 @@ export async function loadQueue(gameId: string): Promise<{ round: RoundRow | nul
   ]);
   const teamOrder = rows.teams.map((t) => t.id);
   const byId = new Map(orders.map((o) => [o.id, o]));
-  const steps = buildQueue(orders, teamOrder).map((s) => {
+  const isMove = (o: { id: string }) => ruleset.actionTypes.find((a) => a.id === byId.get(o.id)?.actionTypeId)?.handler === "move";
+  const steps = buildQueue(orders, teamOrder, isMove).map((s) => {
     const items: QueueItem[] = s.items.map((o) => {
       const team = rows.teams.find((t) => t.id === o.teamId);
       const parent = o.parentOrderId ? byId.get(o.parentOrderId) : undefined;
@@ -364,7 +369,7 @@ export async function loadQueue(gameId: string): Promise<{ round: RoundRow | nul
     );
     const sceneOf = scenes(flags);
     for (const i of items) i.scene = sceneOf.get(i.order.id) ?? null;
-    return { step: s.step, items, flags, pending: items.filter((i) => !DONE.has(i.order.status) && i.backup !== "notNeeded").length };
+    return { step: s.step, kind: s.kind, action: s.action, label: s.label, items, flags, pending: items.filter((i) => !DONE.has(i.order.status) && i.backup !== "notNeeded").length };
   });
   return { round, steps, ruleset, world };
 }
