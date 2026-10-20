@@ -6,6 +6,8 @@ import { combatOdds, simulateCombat } from "./simulate";
 import type { CombatInput } from "./types";
 
 const r = utterdarkPreset();
+/** The same rules, but fights always start in melee. */
+const inMelee = { ...r, settings: { ...r.settings, combat: { ...r.settings.combat, maxStartFt: 0 } } };
 let n = 0;
 function unit(creatureId: string, extra: Partial<WorldUnit> = {}): WorldUnit {
   const c = r.creatures.find((x) => x.id === creatureId)!;
@@ -124,7 +126,8 @@ describe("simulateCombat", () => {
 
   it("a priority target is attacked first", () => {
     const big = unit("giant-spider", { id: "big" });
-    const res = simulateCombat(fight([unit("knight")], [unit("giant-bat"), big], { seed: "prio", priority: { red: "big" } }));
+    // Everyone starts in melee, so both bat and spider are in reach.
+    const res = simulateCombat(fight([unit("knight")], [unit("giant-bat"), big], { seed: "prio", priority: { red: "big" }, ruleset: inMelee }));
     const first = res.log.find((l) => l.kind === "attack" && l.text.startsWith("Knight"));
     expect(first?.text).toMatch(/→ Giant Spider/);
   });

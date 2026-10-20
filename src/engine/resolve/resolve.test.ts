@@ -6,7 +6,7 @@ import type { WorldConnection, WorldRegion, WorldUnit } from "../world/types";
 import { applyChanges } from "./apply";
 import { endOfRound } from "./endOfRound";
 import { buildQueue, interactionFlags, scenes } from "./queue";
-import { resolveOrder } from "./resolveOrder";
+import { orderCombatOdds, resolveOrder } from "./resolveOrder";
 import { rollOnTable } from "./rollTable";
 import { watchers } from "../stealth/stealth";
 import { EMPTY_BUNDLE, executeTrade } from "../trades";
@@ -134,6 +134,35 @@ describe("resolving orders", () => {
     expect(firstHit?.text).toContain(`→ Guard ${res.units.find((u) => u.unitId === target.id)!.label.match(/Guard (\d)/)![1]}`);
     expect(p.reports?.[0].teamId).toBe(THEM);
     expect(p.reports?.[0].text).toMatch(/attacked by Me/);
+  });
+
+  it("hidden attackers start at range or in melee, whichever is better for them, unless the DM says", () => {
+    const scouts = [unit({ creatureId: "scout", hp: 16, regionId: "c", status: "hidden" }), unit({ creatureId: "scout", hp: 16, regionId: "c", status: "hidden" })];
+    const target = unit({ ownerTeamId: THEM, creatureId: "warrior-infantry", hp: 9, regionId: "c" });
+    const w = world([...scouts, target]);
+    const attack = order("attack", { "0": scouts.map((u) => u.id), "1": target.id });
+    // Archers attacking unseen do better shooting as the defenders close in.
+    const auto = resolve(w, attack).combats![0];
+    expect(auto.surpriseStart).toEqual({ choice: "range", auto: true });
+    expect(auto.approach!.rounds).toBeGreaterThan(0);
+    expect(auto.log.some((e) => /starts at range, 150 ft away \(chosen as better for them/.test(e.text))).toBe(true);
+    // The DM can make them close in unseen instead: no approach rounds.
+    const input = { ruleset: r, world: w, teamId: ME, order: attack, round: 1, seed: "s", combat: { start: { "0": "melee" as const } } };
+    const melee = resolveOrder(input).combats![0];
+    expect(melee.surpriseStart).toEqual({ choice: "melee", auto: false });
+    expect(melee.approach).toMatchObject({ startFt: 0, rangeFt: 150, rounds: 0 });
+    // Odds use the same start.
+    const odds = orderCombatOdds(input, 20);
+    expect(odds[0].runs).toBe(20);
+    expect(odds[0].rounds).toBeGreaterThan(0);
+  });
+
+  it("an open attack has no surprise choice", () => {
+    const scouts = [unit({ creatureId: "scout", hp: 16, regionId: "c" })];
+    const target = unit({ ownerTeamId: THEM, creatureId: "warrior-infantry", hp: 9, regionId: "c" });
+    const res = resolve(world([...scouts, target]), order("attack", { "0": scouts.map((u) => u.id), "1": target.id })).combats![0];
+    expect(res.surpriseStart).toBeUndefined();
+    expect(res.approach!.startFt).toBe(150);
   });
 
   it("the DM can set a unit's result by hand", () => {

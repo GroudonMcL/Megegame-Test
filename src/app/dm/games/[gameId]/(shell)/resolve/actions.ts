@@ -67,6 +67,7 @@ const FightSettings = z.object({
       ]),
     )
     .optional(),
+  start: z.record(z.string().regex(/^\d{1,3}$/), z.enum(["melee", "range"])).optional(),
 });
 export const fightSettingsAction = async (gameId: string, orderId: string, settings: z.input<typeof FightSettings>) =>
   run(gameId, (id) => setFightSettings(id, OrderId.parse(orderId), FightSettings.parse(settings)));

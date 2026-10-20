@@ -8,7 +8,7 @@ import { CREATURE_CATEGORIES, type Creature, type Ruleset } from "@/engine/rules
 import { REVIEW_STATES, SKILLS, type StatBlock } from "@/engine/ruleset/statblock";
 import type { SrdSummary } from "@/engine/srd/library";
 import { StatBlockView } from "../StatBlockView";
-import { Fields, type FieldContext, type FieldSpec } from "./fields";
+import { Fields, rangeField, type FieldContext, type FieldSpec } from "./fields";
 import { abilityBonusesField } from "./sections";
 import { SectionEditor, type SaveSection } from "./SectionEditor";
 
@@ -92,6 +92,7 @@ const actionList = (key: string, label: string): FieldSpec => ({
         { value: "text", label: "Text only (DM handles it)" },
       ].filter((o) => (REVIEW_STATES as readonly string[]).includes(o.value)),
     },
+    rangeField,
     { kind: "json", key: "profile", label: "Combat profile (advanced)", rows: 8 },
   ],
 });

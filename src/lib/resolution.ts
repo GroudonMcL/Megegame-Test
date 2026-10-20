@@ -447,7 +447,7 @@ export async function setFightSettings(gameId: string, orderId: string, settings
   const live = new Set(world.units.map((u) => u.id));
   const priority = Object.fromEntries(Object.entries(settings.priority ?? {}).filter(([, id]) => live.has(id)));
   const overrides = Object.fromEntries(Object.entries(settings.overrides ?? {}).filter(([id]) => live.has(id)));
-  const combat: FightSettings = { priority, byHand: Boolean(settings.byHand), shareLog: settings.shareLog !== false, overrides, loot: settings.loot };
+  const combat: FightSettings = { priority, byHand: Boolean(settings.byHand), shareLog: settings.shareLog !== false, overrides, loot: settings.loot, start: settings.start };
   const proposal = resolveOrder({ ruleset, world, teamId: order.teamId, order: toDraft(order), round: round.number, seed: previous.seed, combat });
   // Keep the DM's own wording unless it was the drafted text.
   const text = previous.text === previous.proposal.text ? proposal.text : previous.text;

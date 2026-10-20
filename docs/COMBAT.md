@@ -8,14 +8,14 @@ Fights are simulated by the app and shown to you on the **Resolve round** tab, w
 - **Stealthy moves** only fight monsters that spot them (see STEALTH.md). Searching for hidden units can also start a fight with hidden monsters.
 - **Teams only fight each other through an Attack order.** Units of different teams can share a region peacefully. The Attack order names one target; its whole team's units in that region (those out in the open) defend together.
 - **Capture Monster** is an Attack on a monster that tries to capture it instead of killing it (see below).
-- Attacking with units that are all **hidden** is a surprise attack: advantage on initiative and on each unit's first attack. The attackers are revealed.
+- Attacking with units that are all **hidden** is a surprise attack: advantage on initiative and on each unit's first attack. The attackers are revealed. Monsters that ambush units walking in attack by surprise in the same way.
 - Hidden defenders stay out of the fight.
 
 Only the units named in the order fight on the attacking side.
 
 ## How a fight runs
 
-1. **Initiative:** d20 + DEX modifier (+ initiative bonuses). Units act in that order each combat round.
+1. **Initiative:** d20 + DEX modifier (+ initiative bonuses). Units act in that order each combat round, approach rounds included (below).
 2. **On its turn** a unit does one thing:
    - **Heal** an ally below half HP (or bring back a fallen one), if it can.
    - On its **first turn**, **buff** its strongest ally, if it can.
@@ -28,6 +28,24 @@ Only the units named in the order fight on the attacking side.
    - You can pin a **focus target** for each side ("Blue Team focus on…"). An Attack or Capture order automatically focuses on its target.
 4. **Attacks:** d20 + to-hit against AC. A natural 20 is a critical hit (dice doubled); a natural 1 misses. Resistance halves damage, vulnerability doubles it, immunity cancels it.
 5. **Saving throws:** d20 + save bonus against the DC, for full, half or no damage as the stat block says. "Con/Dex save" uses the better of the two.
+
+## Ranges and approach rounds
+
+Ranged attacks have a **normal and long range** in feet ("range 150/600 ft"). So do melee-or-ranged attacks (thrown weapons) when they're thrown, and ranged spells, save effects and breath weapons where a range applies: "within 30 feet", or the length of a cone, line or emanation that starts at the creature. Spells aimed at enemies can have one too. A profile with no range can only be used in melee. You set ranges in the creature editor (**Range (ft)** on each action) and the spell editor. SRD monsters get them from their stat block text when you import them.
+
+- **Starting distance:** the longest normal range of anything any unit in the fight can use (over 5 ft), up to **Maximum starting distance** in Game settings (default 300 ft; 0 = always start in melee). If nobody has a ranged attack, there are no approach rounds.
+- **Approach rounds** come before round 1, in initiative order. Each unit tracks its own distance to the enemy, so fast units arrive first:
+  - A unit that can reach an enemy with something, or has an ally to heal, does that and then **moves at its normal speed** toward the enemy. If moving first would bring an enemy into reach, it moves first.
+  - Units that can't reach anyone (melee units) **dash at double speed**.
+  - Speed is the unit's best speed (walk, fly, swim, climb or burrow); everyone can close. Restrained or grappled units can't move.
+  - A unit that reaches an enemy is **in melee** and fights from then on. When everyone is in melee (or nobody can get any closer), round 1 starts.
+  - The log shows them as "Round −1 (distance 120 ft)", "Round 0 (60 ft)" (or "30–60 ft" when units are at different distances).
+- **Range penalties:** beyond normal range and within long range, attacks have disadvantage (against a save effect, the target has advantage on its save). Beyond long range (or beyond normal range if there's no long range) they can't be made.
+- **In melee** (an enemy next to the unit, and in every normal round): a ranged attack has disadvantage; a melee-or-ranged attack is used as a melee attack. A unit uses whichever of its options is expected to do more damage: its melee attack, or its ranged attack at disadvantage. Save effects have no penalty.
+- **The round limit** counts only normal rounds. Uses, recharges, conditions, regeneration and retreats work in approach rounds as usual; "first round" effects mean round 1.
+- **Surprise:** when the attackers are all hidden, or monsters ambush, the attacking side chooses whether to **start in melee** (close in unseen: no approach rounds) or **at range** (use them). The app runs 30 trial fights each way (with dice that don't depend on the order's, so a re-roll doesn't change it) and picks whichever the attackers win more often (then: keep more HP). The log says which it chose and why, and you can switch it on the fight card. **Surprised defenders make no attacks during the approach rounds**: they only close in.
+
+Fliers kiting ground units isn't simulated: everyone is treated as able to close.
 
 ## Area effects
 
@@ -78,7 +96,7 @@ Anything else (an ability with only text, or a trait the app doesn't recognise) 
 
 - **Retreat:** a team's unit below **25%** of its max HP retreats at the start of its turn: back to the region it came from, or a neighbouring region its team owns, or any neighbour. Monsters fight to the death. The threshold is in Settings (0 = never retreat).
 - **Capture:** in a Capture Monster fight, once the monster is below a quarter of its HP and is the only enemy left, each attacking unit tries to capture it instead of attacking: the monster makes a STR or DEX save (its better one) against 8 + the unit's STR modifier + proficiency. A unit with advantage on capture checks (the Beastmaster) gives the monster disadvantage. A captured monster belongs to the capturing team, with the status **captured**, in that region.
-- The fight also ends when one side has nobody left, or after the **maximum number of rounds** (Settings, default 10), with no winner.
+- The fight also ends when one side has nobody left, or after the **maximum number of rounds** (Settings, default 10; approach rounds don't count), with no winner.
 - Units at 0 HP **die** and stay on the map as corpses that can be harvested.
 
 ## Loot
@@ -97,8 +115,9 @@ When a unit dies in a fight, everything it **carries** (the DM gives monsters it
 ## Your controls on each fight
 
 - **The fight card** shows every unit's HP before and after, what happened to it, the abilities that aren't automated, and the round-by-round log.
-- **Re-roll** runs the whole order again with new dice.
-- **Show odds** runs the fight 200 times (Settings) and shows each side's chance of winning, the units it tends to lose and the HP it keeps.
+- **Re-roll** runs the whole order again with new dice, approach rounds included. Your focus targets and surprise-start choices stay.
+- **Show odds** runs the fight 200 times (Settings) and shows each side's chance of winning, the units it tends to lose and the HP it keeps. The runs include the approach rounds, and surprise attackers start the way the fight on the card does.
+- **The surprise attackers start** (surprise attacks and ambushes only): at range or in melee. "Whichever is better for them" shows what the app picked.
 - **Focus on** pins a target for a side. **Resolve by hand** skips the simulation: the move still happens, and you set HP and statuses on the World map.
 - **Edit results by hand** lets you set any unit's final HP and whether it's standing, retreated or dead. The log notes your change. A re-roll clears these edits.
 - **Show the log to the teams** (on by default): both sides see the round-by-round log on their Results page. The defending team gets an "Attacked" report even though it gave no order.

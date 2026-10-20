@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { parseConnectionString } from "../src/db/connectionString";
 import * as schema from "../src/db/schema";
 import { convertMaps } from "./convert-maps";
+import { fillRangesInGames } from "./fill-ranges";
 import { untagActions } from "./untag-actions";
 
 config({ path: ".env.local" });
@@ -32,6 +33,7 @@ async function main() {
   // One-off data changes that need app code, not just SQL.
   await convertMaps(drizzle(client, { schema }));
   await untagActions(drizzle(client, { schema }));
+  await fillRangesInGames(drizzle(client, { schema }));
   await client.end();
   console.log("Migrations complete.");
 }

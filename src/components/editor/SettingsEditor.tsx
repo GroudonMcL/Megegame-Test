@@ -75,6 +75,14 @@ const settingsFields: FieldSpec[] = [
       { kind: "number", key: "retreatBelow", label: "Team units retreat below this share of max HP", help: "0.25 = 25%; 0 = never; monsters fight on", step: 0.05, min: 0 },
       { kind: "number", key: "oddsRuns", label: "Fights simulated for “Show odds”", min: 10 },
       {
+        kind: "number",
+        key: "maxStartFt",
+        label: "Maximum starting distance (ft)",
+        help: "Fights start as far apart as the longest normal range of any unit in them, up to this. 0 = always start in melee",
+        min: 0,
+        step: 5,
+      },
+      {
         kind: "object",
         key: "footprintFt",
         label: "Width one unit takes up, by creature size (ft, for area effects)",

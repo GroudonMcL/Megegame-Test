@@ -503,7 +503,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -1374,7 +1378,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -2888,7 +2896,10 @@
         }
        ],
        "onSuccess": "none",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 60
+       }
       },
       "review": "needsReview"
      }
@@ -3090,7 +3101,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -3328,7 +3343,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -3790,7 +3809,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -4769,7 +4792,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }
@@ -6936,7 +6963,11 @@
         }
        ],
        "onSuccess": "half",
-       "targets": 1
+       "targets": 1,
+       "range": {
+        "normal": 20,
+        "long": 60
+       }
       },
       "review": "needsReview"
      }

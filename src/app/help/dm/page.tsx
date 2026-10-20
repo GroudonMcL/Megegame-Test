@@ -171,7 +171,18 @@ export default function DmGuide() {
                 Area spells hit more units the bigger the area is compared to each unit&apos;s size, and units retreat when badly hurt. Anything the simulator can&apos;t handle is listed under
                 <B> Not automated</B>, so check whether it would change the result.
               </p>
+              <p>
+                If anyone in the fight has a ranged attack, the sides start as far apart as the longest normal range (at most the <B>Maximum starting distance</B> in Game settings,
+                300 ft by default). In the <B>approach rounds</B> before round 1 (logged as &ldquo;Round −1 (distance 120 ft)&rdquo;, &ldquo;Round 0 (60 ft)&rdquo;), melee units
+                dash toward the enemy at double speed, and ranged units shoot at whoever is in range and walk on at normal speed, so archers get a few free volleys. Beyond normal range
+                attacks have disadvantage; beyond long range they can&apos;t be made. Next to an enemy, a unit uses its melee attack or its ranged attack at disadvantage, whichever is
+                expected to do more. Ranges are on each attack in the creature editor (<B>Range (ft)</B>).
+              </p>
               <ul>
+                <li>
+                  <B>The surprise attackers start</B> (a surprise attack or a monster ambush only): at range, shooting while the surprised close in without fighting back, or in melee,
+                  closing in unseen. The app picks whichever wins more often in trial fights; switch it here.
+                </li>
                 <li>
                   <B>… focus on</B>: tell a side which enemy to attack first.
                 </li>

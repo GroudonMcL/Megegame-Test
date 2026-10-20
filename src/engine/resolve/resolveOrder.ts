@@ -12,7 +12,7 @@ import type { TeamView } from "../world/teamView";
 import { ACTIVE_STATUSES, ON_MAP_STATUSES, type WorldUnit } from "../world/types";
 import { defendersOf, fightChanges, fightLoot, fightSummary, lootLogText, lootSentence, retreatRegion, runFight, sideFor, wildIn } from "../combat/fight";
 import { summariseOdds } from "../combat/simulate";
-import type { CombatOdds, CombatSideInput, LootChoice } from "../combat/types";
+import type { CombatOdds, CombatResult, CombatSideInput, LootChoice, SurpriseStart } from "../combat/types";
 import { passivePerception, searchCheck, stealthCheck, watchers } from "../stealth/stealth";
 import { rollOnTable, type Modifier } from "./rollTable";
 import type { Proposal, World } from "./types";
@@ -84,6 +84,27 @@ export interface CombatOptions {
   overrides?: Record<string, { hp?: number; outcome?: "standing" | "dead" | "retreated" }>;
   /** Fight number (0 = the order's first fight) → how its loot is handed out when several teams won it. */
   loot?: Record<string, LootChoice>;
+  /** Fight number → whether surprise attackers start in melee or at range (missing = whichever is expected to be better for them). */
+  start?: Record<string, SurpriseStart>;
+}
+
+/** Trial fights each way when choosing how surprise attackers start. */
+const AUTO_START_RUNS = 30;
+
+/**
+ * Whether surprise attackers do better starting in melee or at range, from
+ * trial fights both ways. Their seeds don't depend on the order's, so a
+ * re-roll doesn't change the choice. Null = there's no range to start at.
+ */
+export function autoSurpriseStart(run: (start: SurpriseStart, seed: string) => CombatResult, attackerId: string): { choice: SurpriseStart; note: string } | null {
+  if (!run("range", "start:probe").approach?.rangeFt) return null;
+  const trials = (start: SurpriseStart) => summariseOdds(Array.from({ length: AUTO_START_RUNS }, (_, i) => run(start, `start:${i}`)));
+  const range = trials("range");
+  const melee = trials("melee");
+  const diff = range.wins[attackerId] - melee.wins[attackerId] || range.hpLeft[attackerId] - melee.hpLeft[attackerId];
+  const choice: SurpriseStart = diff >= 0 ? "range" : "melee";
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  return { choice, note: `chosen as better for them: they won ${pct(range.wins[attackerId])} of trial fights at range and ${pct(melee.wins[attackerId])} in melee` };
 }
 
 function newUnitId() {
@@ -168,10 +189,15 @@ export function resolveOrder(input: ResolveInput): Proposal {
       return;
     }
     const priority = { ...(extra.focus ? { [teamId]: extra.focus } : {}), ...(input.combat?.priority ?? {}) };
-    const res = runFight(r, world, where, sides, `${input.seed}:fight:${(p.combats ?? []).length}`, {
-      priority,
-      capture: extra.capture ? { sideId: teamId, targetId: extra.capture } : undefined,
-    });
+    const fightNo = (p.combats ?? []).length;
+    const opts = { priority, capture: extra.capture ? { sideId: teamId, targetId: extra.capture } : undefined };
+    // Surprise attackers choose whether to close in unseen or open fire from range.
+    const surpriser = sides.find((x) => x.surprising);
+    const chosen = input.combat?.start?.[String(fightNo)];
+    const auto = surpriser && !chosen ? autoSurpriseStart((start, seed) => runFight(r, world, where, sides, seed, { ...opts, start }), surpriser.id) : null;
+    const start = chosen ?? auto?.choice;
+    const res = runFight(r, world, where, sides, `${input.seed}:fight:${fightNo}`, { ...opts, start, startNote: auto?.note });
+    if (surpriser && start && res.approach?.rangeFt) res.surpriseStart = { choice: start, auto: !chosen };
     for (const u of res.units) {
       const o = input.combat?.overrides?.[u.unitId];
       if (!o) continue;
@@ -183,7 +209,6 @@ export function resolveOrder(input: ResolveInput): Proposal {
       u.retreatTo = u.outcome === "retreated" && unit ? (u.retreatTo ?? retreatRegion(world, unit, where)) : null;
       res.log.push({ round: res.rounds, kind: "info", text: `The DM set ${u.label} to ${u.outcome === "standing" ? "standing" : u.outcome}${u.outcome === "dead" ? "" : ` with ${u.hp}/${u.maxHp} HP`}.` });
     }
-    const fightNo = (p.combats ?? []).length;
     res.loot = fightLoot(r, world, res, input.combat?.loot?.[fightNo]);
     const itemName = (id: string) => r.items.find((x) => x.id === id)?.name ?? id;
     if (res.loot) res.log.push({ round: res.rounds, kind: "loot", text: lootLogText(world, res.loot, itemName) });
@@ -633,8 +658,11 @@ export function resolveOrder(input: ResolveInput): Proposal {
 /** Re-runs an order's fights many times with different dice: one summary per fight. */
 export function orderCombatOdds(input: ResolveInput, runs = input.ruleset.settings.combat.oddsRuns): CombatOdds[] {
   const byFight: NonNullable<Proposal["combats"]>[] = [];
+  // Every run starts its surprise attacks the way the shown fight does, instead of choosing again.
+  const shown = resolveOrder(input).combats ?? [];
+  const start = { ...Object.fromEntries(shown.flatMap((c, k) => (c.surpriseStart ? [[String(k), c.surpriseStart.choice]] : []))), ...input.combat?.start };
   for (let i = 0; i < runs; i++) {
-    const p = resolveOrder({ ...input, seed: `${input.seed}:odds:${i}` });
+    const p = resolveOrder({ ...input, seed: `${input.seed}:odds:${i}`, combat: { ...input.combat, start } });
     (p.combats ?? []).forEach((c, k) => (byFight[k] ??= []).push(c));
   }
   return byFight.map(summariseOdds);

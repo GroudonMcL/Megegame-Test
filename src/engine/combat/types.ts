@@ -28,11 +28,21 @@ export interface CombatInput {
   priority?: Record<string, string>;
   /** A side trying to capture a monster instead of killing it. */
   capture?: { sideId: string; targetId: string };
+  /**
+   * When a side attacks by surprise: start in melee (no approach rounds) or at
+   * range (default). Ignored otherwise: an open fight always starts at range.
+   */
+  start?: SurpriseStart;
+  /** Why that start was chosen, for the log. */
+  startNote?: string;
 }
 
-export type LogKind = "round" | "initiative" | "attack" | "save" | "heal" | "buff" | "condition" | "death" | "retreat" | "capture" | "loot" | "info";
+export type SurpriseStart = "melee" | "range";
+
+export type LogKind = "round" | "initiative" | "move" | "attack" | "save" | "heal" | "buff" | "condition" | "death" | "retreat" | "capture" | "loot" | "info";
 
 export interface LogEntry {
+  /** Approach rounds before the first combat round are 0, −1, −2…; entries before them (initiative) are on the first one. */
   round: number;
   kind: LogKind;
   text: string;
@@ -71,6 +81,17 @@ export interface CombatResult {
   warnings: string[];
   /** What the units that died had on them, and who gets it (set after the fight; missing = nothing). */
   loot?: FightLoot;
+  /** Missing in fights simulated before approach rounds existed. */
+  approach?: {
+    /** Feet apart the sides started (0 = in melee). */
+    startFt: number;
+    /** Feet apart they would have started at range (more than startFt only when surprise attackers chose melee). */
+    rangeFt: number;
+    /** Approach rounds before round 1. */
+    rounds: number;
+  };
+  /** A surprise attack's choice to start in melee or at range, and whether the app made it. */
+  surpriseStart?: { choice: SurpriseStart; auto: boolean };
 }
 
 /**

@@ -115,6 +115,11 @@ SAVE_BOMB2 = re.compile(r"make an? (str|dex|con|int|wis|cha)\w* save,? taking (\
 SHIELD = re.compile(r"once per round when hit by an attack this unit may reduce the damage by (\d+)", re.I)
 
 
+def item_range(name):
+    """Bombs and flasks are thrown (20/60 ft, like an alchemist's flask); anything else reaches 60 ft, like the preset's spells."""
+    return {"normal": 20, "long": 60} if re.search(r"bomb|flask", name, re.I) else {"normal": 60}
+
+
 def ability_effects(name, text, consumable):
     """Effects the engine understands, from the ability text; plus whether text is left over."""
     effects = []
@@ -145,7 +150,7 @@ def ability_effects(name, text, consumable):
                     "name": name,
                     "text": text,
                     "uses": {"type": "perCombat", "times": 1},
-                    "profile": {"kind": "save", "dc": dc_obj, "damage": [{"dice": dmg, "ability": None, "flat": 0, "type": dtype}], "onSuccess": "half" if half else "none", "targets": 1},
+                    "profile": {"kind": "save", "dc": dc_obj, "damage": [{"dice": dmg, "ability": None, "flat": 0, "type": dtype}], "onSuccess": "half" if half else "none", "targets": 1, "range": item_range(name)},
                     "review": "needsReview",
                 },
             }

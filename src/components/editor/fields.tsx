@@ -472,9 +472,26 @@ function KeyValueField({ spec, value, onChange }: { spec: Extract<FieldSpec, { k
   );
 }
 
+function sameJson(text: string, value: unknown) {
+  try {
+    return JSON.stringify(JSON.parse(text)) === JSON.stringify(value ?? null);
+  } catch {
+    return false;
+  }
+}
+
 function JsonField({ spec, value, onChange }: { spec: Extract<FieldSpec, { kind: "json" }>; value: any; onChange: (v: any) => void }) {
   const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
   const [error, setError] = useState("");
+  // Another field changed the value (e.g. the range boxes): show it, unless it's what's typed here.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (!sameJson(text, value)) {
+      setText(JSON.stringify(value ?? null, null, 2));
+      setError("");
+    }
+  }
   return (
     <div>
       <FieldLabel spec={spec} />
@@ -496,6 +513,40 @@ function JsonField({ spec, value, onChange }: { spec: Extract<FieldSpec, { kind:
     </div>
   );
 }
+
+// ——— Ranges ———
+
+/**
+ * Normal and long range (ft) of an action's combat profile, for ranged and
+ * melee-or-ranged attacks, save effects and effects aimed at enemies. Its key
+ * is "profile": it edits profile.range.
+ */
+export const rangeField: FieldSpec = {
+  kind: "custom",
+  key: "profile",
+  label: "Range (ft)",
+  help: "beyond normal range: disadvantage (saves: the target has advantage); beyond long range: can't be used; empty = only in melee",
+  render: (p: Obj | undefined, onChange) => {
+    const ranged = p && ((p.kind === "attack" && p.attackType !== "melee") || p.kind === "save" || (p.kind === "buff" && p.target === "enemy"));
+    if (!ranged) return <p className="text-xs text-muted">Only ranged attacks, save effects and effects on enemies have a range (set the profile below).</p>;
+    const range = (p.range ?? {}) as { normal?: number; long?: number };
+    const set = (key: "normal" | "long", raw: string) => {
+      const n = Math.round(Number(raw));
+      const next = { ...range, [key]: raw === "" || !(n > 0) ? undefined : n };
+      if (key === "normal" && next.normal === undefined) next.long = undefined;
+      const rest = { ...p };
+      delete rest.range;
+      onChange(next.normal ? { ...rest, range: next.long ? { normal: next.normal, long: next.long } : { normal: next.normal } } : rest);
+    };
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <input type="number" min={5} step={5} className="w-24 rounded-md border border-border bg-background px-2 py-1.5" placeholder="normal" aria-label="Normal range (ft)" value={range.normal ?? ""} onChange={(e) => set("normal", e.target.value)} />
+        <span className="text-muted">/</span>
+        <input type="number" min={5} step={5} className="w-24 rounded-md border border-border bg-background px-2 py-1.5" placeholder="long" aria-label="Long range (ft)" value={range.long ?? ""} disabled={!range.normal} onChange={(e) => set("long", e.target.value)} />
+      </div>
+    );
+  },
+};
 
 // ——— Effects ———
 

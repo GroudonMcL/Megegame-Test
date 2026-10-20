@@ -20,7 +20,7 @@ import {
 } from "@/app/dm/games/[gameId]/(shell)/resolve/actions";
 import { EconomyTable } from "@/components/play/EconomyTable";
 import { FightLog } from "@/components/combat/FightLog";
-import type { CombatOdds, LogEntry, LootChoice } from "@/engine/combat/types";
+import type { CombatOdds, LogEntry, LootChoice, SurpriseStart } from "@/engine/combat/types";
 import type { Economy } from "@/engine/orders/economy";
 
 // The DM's resolution queue: every team's action 1, then action 2… Each order
@@ -53,7 +53,7 @@ export interface ResolveItem {
       changes: string[];
       fights: FightView[];
     } | null;
-    fightSettings: { priority: Record<string, string>; byHand: boolean; shareLog: boolean; overrides: Overrides; loot: Record<string, LootChoice> };
+    fightSettings: { priority: Record<string, string>; byHand: boolean; shareLog: boolean; overrides: Overrides; loot: Record<string, LootChoice>; start: Record<string, SurpriseStart> };
     odds: CombatOdds[] | null;
   } | null;
 }
@@ -66,6 +66,10 @@ export interface FightView {
   winner: string | null;
   endReason: string;
   rounds: number;
+  /** Rounds before round 1 while the sides closed in. */
+  approachRounds: number;
+  /** A surprise attack: whether the attackers started in melee or at range, and whether the app chose it. */
+  surpriseStart: { choice: SurpriseStart; auto: boolean } | null;
   units: { unitId: string; sideId: string; label: string; startHp: number; hp: number; maxHp: number; outcome: string; raised: boolean }[];
   warnings: string[];
   log: LogEntry[];
@@ -521,6 +525,8 @@ function OrderItem({ item: i, props, act, busy, focused, onFocus }: OrderItemPro
   );
 }
 
+const START_LABEL: Record<SurpriseStart, string> = { range: "at range (shooting as they close in)", melee: "in melee (closing in unseen)" };
+
 const OUTCOME_LABEL: Record<string, string> = { standing: "", dead: "dead", retreated: "retreated", captured: "captured" };
 
 /** A simulated fight: who was in it, how it went, the log, and the DM's controls. */
@@ -533,10 +539,12 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
   const [overrides, setOverrides] = useState<Overrides>(o.fightSettings.overrides);
   const [editing, setEditing] = useState(Object.keys(o.fightSettings.overrides).length > 0);
   const [loot, setLoot] = useState<Record<string, LootChoice>>(o.fightSettings.loot);
+  const [start, setStart] = useState<Record<string, SurpriseStart>>(o.fightSettings.start);
   const sentOverrides = editing ? overrides : {};
   const lootChanged = JSON.stringify(loot) !== JSON.stringify(o.fightSettings.loot);
   const changed =
     lootChanged ||
+    JSON.stringify(start) !== JSON.stringify(o.fightSettings.start) ||
     JSON.stringify(priority) !== JSON.stringify(o.fightSettings.priority) ||
     byHand !== o.fightSettings.byHand ||
     shareLog !== o.fightSettings.shareLog ||
@@ -550,6 +558,9 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
   const sides = [...new Map(fights.flatMap((f) => f.sides.map((x) => [x.id, x.name] as const))).entries()];
   const enemiesOf = (sideId: string) => fights.flatMap((f) => f.units.filter((u) => u.sideId !== sideId && !u.raised));
   const name = (f: FightView, id: string | null) => f.sides.find((x) => x.id === id)?.name ?? "nobody";
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const after = (f: FightView) =>
+    f.approachRounds ? (f.rounds ? `${plural(f.rounds, "round")} (and ${plural(f.approachRounds, "approach round")})` : plural(f.approachRounds, "approach round")) : plural(f.rounds, "round");
 
   return (
     <div className="space-y-2 rounded-lg border border-warn/40 p-2">
@@ -562,11 +573,30 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
               {f.endReason === "noFight"
                 ? "nobody to fight"
                 : f.endReason === "captured"
-                  ? `${name(f, f.winner)} captured the monster after ${f.rounds} round${f.rounds === 1 ? "" : "s"}`
+                  ? `${name(f, f.winner)} captured the monster after ${after(f)}`
                   : f.winner
-                    ? `${name(f, f.winner)} won after ${f.rounds} round${f.rounds === 1 ? "" : "s"}`
-                    : `undecided after ${f.rounds} rounds`}
+                    ? `${name(f, f.winner)} won after ${after(f)}`
+                    : `undecided after ${after(f)}`}
             </p>
+            {f.surpriseStart && !byHand && (
+              <label className="flex flex-wrap items-center gap-1 text-xs">
+                <span className="text-muted">The surprise attackers start</span>
+                <select
+                  className="rounded border border-border bg-background px-1 py-0.5"
+                  value={start[String(k)] ?? ""}
+                  onChange={(e) => {
+                    const next = { ...start };
+                    if (e.target.value) next[String(k)] = e.target.value as SurpriseStart;
+                    else delete next[String(k)];
+                    setStart(next);
+                  }}
+                >
+                  <option value="">{f.surpriseStart.auto ? `whichever is better for them (${START_LABEL[f.surpriseStart.choice]})` : "whichever is better for them"}</option>
+                  <option value="range">{START_LABEL.range}</option>
+                  <option value="melee">{START_LABEL.melee}</option>
+                </select>
+              </label>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <tbody>
@@ -677,7 +707,7 @@ function FightPanel({ item: i, props, act, busy }: { item: ResolveItem; props: P
             <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} /> edit results by hand
           </label>
         )}
-        <button type="button" className={btn} disabled={busy || !changed} onClick={() => act(() => fightSettingsAction(props.gameId, i.id, { priority, byHand, shareLog, overrides: sentOverrides, loot }))}>
+        <button type="button" className={btn} disabled={busy || !changed} onClick={() => act(() => fightSettingsAction(props.gameId, i.id, { priority, byHand, shareLog, overrides: sentOverrides, loot, start }))}>
           {lootChanged ? "Apply these settings and the loot" : "Apply these settings"}
         </button>
         {fights.length > 0 && (

@@ -46,7 +46,9 @@ type TableResult = z.input<typeof TableResultSchema>;
 const band = (min: number, max: number | null, text: string, results: TableResult[] = []) => ({ min, max, text, results });
 
 // Spells use the caster's DC: Intelligence for Arcane, Wisdom for Divine and Primal.
+// The sheet gives no ranges; spells aimed at enemies reach 60 ft.
 const DC_ABILITY = { Arcane: "int", Divine: "wis", Primal: "wis" } as const;
+const SPELL_RANGE = { normal: 60 };
 type Tradition = keyof typeof DC_ABILITY;
 
 function spell(
@@ -69,6 +71,7 @@ function saveDamage(tradition: Tradition, save: "str" | "dex" | "con" | "int" | 
     damage: [{ dice: String(amount), ability: null, flat: 0, type }],
     onSuccess: "none",
     targets: 1,
+    range: SPELL_RANGE,
     ...extra,
   };
 }
@@ -88,6 +91,7 @@ const SPELLS: SpellInput[] = [
     onSuccess: "none",
     targets: 1,
     condition: { condition: "charmed", durationRounds: 1, repeatSave: false },
+    range: SPELL_RANGE,
   }),
   spell("Sleep", "Arcane", "Any Arcane", "combat", "Hostile target must make either a Con/Wis save or lose up to four subsequent turns of combat. Any damage taken removes this effect. Targets with more than 40 hit points are immune.", {
     kind: "save",
@@ -96,6 +100,7 @@ const SPELLS: SpellInput[] = [
     onSuccess: "none",
     targets: 1,
     condition: { condition: "unconscious", durationRounds: 4, repeatSave: false },
+    range: SPELL_RANGE,
   }),
   spell("Entangle", "Primal", "Any Primal", "combat", "Hostile target must make a Str/Dex save or be locked into combat. Upon failing, the entangled target cannot flee from combat unless it uses its action to repeat the save."),
   spell("Faerie Fire", "Arcane", "Any Arcane", "combat", "Hostile target must make a Dex/Con save or be coated in Faerie Fire. Upon failing, all attacks made against the target have advantage for the subsequent 2 turns.", {
@@ -105,6 +110,7 @@ const SPELLS: SpellInput[] = [
     amount: 0,
     save: { save: "dex", orSave: "con", ability: "int", flat: 0 },
     durationRounds: 2,
+    range: SPELL_RANGE,
   }, "auto"),
   spell("Ray of Enfeeblement", "Arcane", "Archmage", "combat", "Hostile target must make either a Con/Int save or have disadvantage for their two subsequent turns.", {
     kind: "buff",
@@ -113,6 +119,7 @@ const SPELLS: SpellInput[] = [
     amount: 0,
     save: { save: "con", orSave: "int", ability: "int", flat: 0 },
     durationRounds: 2,
+    range: SPELL_RANGE,
   }),
   spell("Slow", "Arcane", "Any Arcane", "combat", "Hostile target must make either a Wis/Cha saving throw. If it fails, it can only make 1 attack per turn for the subsequent two turns."),
   spell("Bless", "Divine", "War Priest", "combat", "Friendly target gains advantage on attacks and saves for their two subsequent turns.", {

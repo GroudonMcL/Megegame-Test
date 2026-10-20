@@ -2,7 +2,7 @@
 
 import { ABILITIES, ABILITY_NAMES } from "@/engine/ruleset/common";
 import { ACTION_HANDLERS, CREATURE_CATEGORIES, type RulesetSection } from "@/engine/ruleset/ruleset";
-import type { FieldSpec, Variant } from "./fields";
+import { rangeField, type FieldSpec, type Variant } from "./fields";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -368,7 +368,9 @@ export const SECTION_CONFIG: Record<Exclude<RulesetSection, "creatures">, Sectio
       },
       { kind: "textarea", key: "description", label: "What it does", rows: 3 },
       { kind: "resources", key: "cost", label: "Cost to cast" },
-      { kind: "json", key: "profile", label: "Combat profile (advanced)", rows: 8 },
+      rangeField,
+      rangeField,
+    { kind: "json", key: "profile", label: "Combat profile (advanced)", rows: 8 },
     ],
     newItem: (id) => ({ id, name: "New spell", tradition: "Arcane", restriction: "", when: "combat", description: "", cost: {}, profile: { kind: "text" }, review: "text" }),
     label: (x) => `${x.name}${x.when === "outOfCombat" ? " (action)" : ""}`,

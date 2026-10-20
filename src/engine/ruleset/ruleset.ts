@@ -376,8 +376,10 @@ export const Settings = z.object({
       retreatBelow: z.number().min(0).max(1).default(0.25),
       /** Fights simulated for "Show odds". */
       oddsRuns: z.number().int().min(10).max(2000).default(200),
+      /** Feet. Fights start as far apart as the longest normal range in them, but no further than this. */
+      maxStartFt: z.number().int().min(0).max(10000).default(300),
     })
-    .default({ maxRounds: 10, footprintFt: DEFAULT_FOOTPRINTS, usesReset: "round", retreatBelow: 0.25, oddsRuns: 200 }),
+    .default({ maxRounds: 10, footprintFt: DEFAULT_FOOTPRINTS, usesReset: "round", retreatBelow: 0.25, oddsRuns: 200, maxStartFt: 300 }),
   /** Recruit cost and upkeep by Challenge Rating; first matching row wins. */
   crCosts: z.array(CrCostRow).default([]),
   /** Demolish refund fraction. */

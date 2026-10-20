@@ -14,7 +14,7 @@ Built in `src/presets/utterdark.ts` from `reference/utterdark-rules.md`, the DM 
 
 Their abilities come from the DM sheet. Where the effects system can express an ability, the app automates it: for example Martial Advantage, Sneak Attack, Survivalist (no Food upkeep), Magic Resistance, Indomitable, Uncanny Dodge, Raise Dead, the Artificer's 4-item limit, and the spell lists. The rest are "text only" (see below).
 
-The **spell list** has all 29 spells from the sheet. Combat spells that can be automated have combat profiles: Blast, Greater Blast, Smite, Harm, Shatter, Ray of Sickness, Charm, Sleep, Faerie Fire, Ray of Enfeeblement, Bless, Haste, Heal, Greater Heal and Revivify. The combat simulation uses them; the ones marked "check" are worth a look in the ruleset editor. "Con/Dex save" means the target uses its better save. Spell DCs use the caster's Intelligence (Arcane) or Wisdom (Divine and Primal).
+The **spell list** has all 29 spells from the sheet. Combat spells that can be automated have combat profiles: Blast, Greater Blast, Smite, Harm, Shatter, Ray of Sickness, Charm, Sleep, Faerie Fire, Ray of Enfeeblement, Bless, Haste, Heal, Greater Heal and Revivify. The combat simulation uses them; the ones marked "check" are worth a look in the ruleset editor. "Con/Dex save" means the target uses its better save. The sheet gives no ranges, so spells aimed at enemies reach 60 ft (for the approach rounds before a fight, see COMBAT.md); bombs and flasks are thrown, 20/60 ft, and the Evil Eye Amulet reaches 60 ft. Spell DCs use the caster's Intelligence (Arcane) or Wisdom (Divine and Primal).
 
 ## From the DM sheet
 

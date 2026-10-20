@@ -19,6 +19,7 @@ import {
   type StatAction,
   type Uses,
 } from "../ruleset/statblock";
+import { rangeFromText } from "../ruleset/range";
 
 // Converts one monster from the 5e-bits "5e-database" SRD 5.2 (2024) JSON into
 // our stat block format. The structured fields are used where present; the
@@ -151,7 +152,7 @@ function toRolls(list: { dice: string; bonus: number; type: DamageType }[], firs
 }
 
 function parseArea(text: string): Area | undefined {
-  const m = /(\d+)-foot(?:-radius|-long)?(?:,? (\d+)-foot-wide)?(?:,? \d+-foot-(?:high|tall))? (Sphere|Cube|Cone|Line|Emanation|Cylinder)/i.exec(
+  const m = /(\d+)-foot(?:-radius|-long)?(?:,? (\d+)-foot-?wide)?(?:,? \d+-foot-(?:high|tall))? (Sphere|Cube|Cone|Line|Emanation|Cylinder)/i.exec(
     text,
   );
   if (!m) return undefined;
@@ -242,6 +243,8 @@ function convertAction(raw: Raw, ctx: Ctx, group: "trait" | "action" | "legendar
     const onHitCondition = parseCondition(hitText);
     const saveRider = /(\w+) Saving Throw: DC (\d+)/.exec(hitText);
     const profile: ActionProfile = { kind: "attack", attackType, toHit, damage };
+    const range = rangeFromText(text, profile);
+    if (range) profile.range = range;
     if (onHitCondition) profile.onHitCondition = onHitCondition;
     if (saveRider && ABILITY_BY_WORD[saveRider[1].toLowerCase()]) {
       profile.onHitSave = { save: ABILITY_BY_WORD[saveRider[1].toLowerCase()], ...inferDc(Number(saveRider[2]), ctx) };
@@ -271,6 +274,8 @@ function convertAction(raw: Raw, ctx: Ctx, group: "trait" | "action" | "legendar
     };
     if (condition) profile.condition = condition;
     if (area) profile.area = area;
+    const range = rangeFromText(text, profile);
+    if (range) profile.range = range;
     const clean = (damage.length || condition) && !/First Failure|Second Failure/i.test(text);
     return { ...base, profile, review: clean ? "auto" : "needsReview" };
   }

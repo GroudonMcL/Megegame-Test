@@ -4,7 +4,7 @@ import { milesPerRound } from "../orders/movement";
 import type { Change, World } from "../resolve/types";
 import type { ItemQty, WorldUnit } from "../world/types";
 import { simulateCombat } from "./simulate";
-import type { CombatResult, CombatSideInput, FightLoot, LootChoice } from "./types";
+import type { CombatResult, CombatSideInput, FightLoot, LootChoice, SurpriseStart } from "./types";
 
 // Sets up fights from the game state, and turns their results into changes,
 // outcome text for the attacking team, and reports for the other teams involved.
@@ -47,7 +47,14 @@ export function sideFor(world: World, teamId: string | null, units: WorldUnit[],
   return { id: teamId ?? WILD, teamId, name: sideName(world, teamId), units, ...extra };
 }
 
-export function runFight(r: Ruleset, world: World, regionId: string, sides: CombatSideInput[], seed: string, opts: FightOptions & { capture?: { sideId: string; targetId: string } } = {}): CombatResult {
+export function runFight(
+  r: Ruleset,
+  world: World,
+  regionId: string,
+  sides: CombatSideInput[],
+  seed: string,
+  opts: FightOptions & { capture?: { sideId: string; targetId: string }; start?: SurpriseStart; startNote?: string } = {},
+): CombatResult {
   return simulateCombat({
     ruleset: r,
     region: world.regions.find((x) => x.id === regionId) ?? null,
@@ -55,6 +62,8 @@ export function runFight(r: Ruleset, world: World, regionId: string, sides: Comb
     seed,
     priority: opts.priority,
     capture: opts.capture,
+    start: opts.start,
+    startNote: opts.startNote,
   });
 }
 
@@ -256,5 +265,7 @@ export function fightSummary(world: World, res: CombatResult, sideId: string, r?
   ].filter(Boolean);
   const side = res.sides.find((s) => s.id === sideId);
   const loot = r ? lootSentence(world, res.loot, side?.teamId ?? null, itemNamer(r)) : "";
-  return `${head}: ${verdict} after ${plural(res.rounds, "round")}. Your units: ${ownText}. Enemies: ${enemyBits.join(", ") || "none"}.${loot ? ` ${loot}` : ""}`;
+  const approach = res.approach?.rounds ?? 0;
+  const after = approach ? (res.rounds ? `${plural(res.rounds, "round")} (and ${plural(approach, "approach round")})` : plural(approach, "approach round")) : plural(res.rounds, "round");
+  return `${head}: ${verdict} after ${after}. Your units: ${ownText}. Enemies: ${enemyBits.join(", ") || "none"}.${loot ? ` ${loot}` : ""}`;
 }

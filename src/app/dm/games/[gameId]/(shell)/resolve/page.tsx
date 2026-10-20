@@ -58,6 +58,8 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                       winner: f.winner,
                       endReason: f.endReason,
                       rounds: f.rounds,
+                      approachRounds: f.approach?.rounds ?? 0,
+                      surpriseStart: f.surpriseStart ?? null,
                       units: f.units.map((u) => ({ unitId: u.unitId, sideId: u.sideId, label: u.label, startHp: u.startHp, hp: u.hp, maxHp: u.maxHp, outcome: u.outcome, raised: Boolean(u.raised) })),
                       warnings: f.warnings,
                       log: f.log,
@@ -80,6 +82,7 @@ export default async function ResolvePage({ params }: PageProps<"/dm/games/[game
                 shareLog: i.outcome.combat?.shareLog !== false,
                 overrides: i.outcome.combat?.overrides ?? {},
                 loot: i.outcome.combat?.loot ?? {},
+                start: i.outcome.combat?.start ?? {},
               },
               odds: i.outcome.odds ?? null,
             }

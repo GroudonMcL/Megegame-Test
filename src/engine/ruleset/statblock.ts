@@ -40,6 +40,13 @@ export const Area = z.object({
 });
 export type Area = z.infer<typeof Area>;
 
+/** Feet. Attacks beyond `normal` have disadvantage (saves: the target has advantage); beyond `long` (or `normal` if there's no long range) they can't be made. */
+export const Range = z.object({
+  normal: z.number().int().positive(),
+  long: z.number().int().positive().optional(),
+});
+export type Range = z.infer<typeof Range>;
+
 export const ConditionEffect = z.object({
   condition: Condition,
   /** In combat rounds; null = until removed. */
@@ -77,6 +84,8 @@ export const ActionProfile = z.discriminatedUnion("kind", [
     /** A rider on a hit, e.g. "the target has the Grappled condition". */
     onHitCondition: ConditionEffect.optional(),
     onHitSave: SaveDc.optional(),
+    /** Ranged and melee-or-ranged attacks; missing = it can only be used in melee. */
+    range: Range.optional(),
   }),
   z.object({
     kind: z.literal("save"),
@@ -87,6 +96,8 @@ export const ActionProfile = z.discriminatedUnion("kind", [
     area: Area.optional(),
     /** Number of separate targets for non-area effects. */
     targets: z.number().int().positive().default(1),
+    /** How far away it reaches its targets (a breath weapon: its cone or line); missing = only in melee. */
+    range: Range.optional(),
   }),
   z.object({
     kind: z.literal("multiattack"),
@@ -108,6 +119,8 @@ export const ActionProfile = z.discriminatedUnion("kind", [
     amount: z.number().int().default(0),
     save: SaveDc.optional(),
     durationRounds: z.number().int().positive().nullable(),
+    /** On an enemy: how far away it reaches (missing = only in melee). */
+    range: Range.optional(),
   }),
   z.object({
     kind: z.literal("spellcasting"),

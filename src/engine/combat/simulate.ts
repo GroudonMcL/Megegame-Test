@@ -43,6 +43,8 @@ interface Side {
   teamId: string | null;
   name: string;
   surprising: boolean;
+  /** Another side attacks it by surprise: it makes no attacks during the approach. */
+  surprised: boolean;
 }
 
 interface Buff {
@@ -57,6 +59,8 @@ interface SaveInfo {
   orSave?: Ability;
   dc: number;
   spell: boolean;
+  /** From beyond the effect's normal range: the target has advantage. */
+  far?: boolean;
 }
 
 interface Cond {
@@ -107,6 +111,8 @@ interface Fighter {
   conds: Cond[];
   disabled: Disabled | null;
   attacked: boolean;
+  /** Has had a turn on which it could act (for first-turn buffs). */
+  hasActed: boolean;
   turns: number;
   dealt: number;
   taken: number;
@@ -125,6 +131,10 @@ interface Fighter {
   retreatTo: string | null;
   forceMarching: boolean;
   raised?: { creatureId: string; teamId: string | null };
+  /** Feet per turn: its best speed, since everyone can close. */
+  speed: number;
+  /** Feet it has moved toward the enemy since the sides started apart. */
+  advance: number;
 }
 
 const COMBAT_TEXT = /damage|attack roll|attacks|saving throw|hit points|advantage/i;
@@ -148,6 +158,16 @@ function critDice(expr: string): string {
 function moreDice(expr: string, n: number): string {
   if (!n) return expr;
   return expr.replace(/^(\d*)d(\d+)/i, (_, c, s) => `${(Number(c) || 1) + n}d${s}`);
+}
+
+/** Approach rounds are logged as rounds above this until they're numbered (…, −1, 0). */
+const APPROACH_ROUND = -10000;
+/** In case nobody can ever close in (units with no speed on both sides). */
+const MAX_APPROACH_ROUNDS = 50;
+
+/** "Goblins win", "Blue Team wins". */
+function verbS(name: string) {
+  return name.endsWith("s") ? "" : "s";
 }
 
 function pct(n: number) {
@@ -187,7 +207,8 @@ export function simulateCombat(input: CombatInput): CombatResult {
 
   // ——— Setting up the fighters ———
 
-  const sides: Side[] = input.sides.map((s) => ({ id: s.id, teamId: s.teamId, name: s.name, surprising: Boolean(s.surprising) }));
+  const sides: Side[] = input.sides.map((s) => ({ id: s.id, teamId: s.teamId, name: s.name, surprising: Boolean(s.surprising), surprised: false }));
+  for (const s of sides) s.surprised = !s.surprising && sides.some((o) => o !== s && o.surprising);
   const fighters: Fighter[] = [];
   const region = input.region;
   const regionFortified = Boolean(region?.buildings.some((b) => buildingTier(r, b)?.tier.effects.some((e) => e.type === "modifier" && (e.target === "ac" || e.target === "toHit"))));
@@ -308,6 +329,11 @@ export function simulateCombat(input: CombatInput): CombatResult {
       if (t.profile.kind === "text" && COMBAT_TEXT.test(t.text)) warnings.add(`${name}: the trait “${t.name}” isn't automated.`);
     }
     for (const e of effects) if (e.type === "text" && COMBAT_TEXT.test(e.text)) warnings.add(`${name}: “${e.text.split(":")[0]}” isn't automated.`);
+    for (const o of [...options, ...bonusOptions, ...(legendary?.options ?? [])]) {
+      for (const a of o.routine ?? [{ name: o.name, profile: o.profile }]) {
+        if (a.profile.kind === "attack" && a.profile.attackType === "ranged" && !a.profile.range) warnings.add(`${name}: “${a.name}” has no range, so it's only used in melee (at disadvantage).`);
+      }
+    }
 
     const maxHp = stats.maxHp.total;
     return {
@@ -340,6 +366,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
       conds: [],
       disabled: null,
       attacked: false,
+      hasActed: false,
       turns: 0,
       dealt: 0,
       taken: 0,
@@ -349,6 +376,8 @@ export function simulateCombat(input: CombatInput): CombatResult {
       retreatTo: sideInput?.retreatTo?.[unit.id] ?? null,
       forceMarching: Boolean(sideInput?.forceMarching?.includes(unit.id)),
       raised,
+      speed: Math.max(sb.speed.walk, sb.speed.fly, sb.speed.swim, sb.speed.climb, sb.speed.burrow),
+      advance: 0,
     };
   }
 
@@ -379,6 +408,44 @@ export function simulateCombat(input: CombatInput): CombatResult {
   const allies = (f: Fighter) => fighters.filter((g) => g.side === f.side && active(g));
   const enemies = (f: Fighter) => fighters.filter((g) => g.side !== f.side && active(g));
   const activeSides = () => new Set(fighters.filter(active).map((f) => f.side.id));
+
+  // ——— Distance ———
+  // The sides start `startFt` apart, on a line. Each unit tracks how far it has
+  // moved toward the enemy, so two enemies are startFt minus both their
+  // advances apart. 0 = next to each other (in melee). Once the approach is
+  // over, everyone is in melee.
+
+  let startFt = 0;
+  let approaching = false;
+  const gap = (a: Fighter, b: Fighter) => (approaching ? Math.max(0, startFt - a.advance - b.advance) : 0);
+  const nearestGap = (f: Fighter) => Math.min(Infinity, ...enemies(f).map((t) => gap(f, t)));
+  const inMelee = (f: Fighter) => nearestGap(f) === 0;
+
+  /**
+   * Whether f can use profile p on t from where it stands: 0 = as normal, −1 = at
+   * a disadvantage (attacks: disadvantage; saves: the target has advantage),
+   * null = out of reach. Melee needs the target next to it; a ranged attack has
+   * disadvantage beyond normal range or with an enemy next to it.
+   */
+  function reach(f: Fighter, p: Profile, t: Fighter): 0 | -1 | null {
+    const d = gap(f, t);
+    if (p.kind === "attack") {
+      if (d === 0 && p.attackType !== "ranged") return 0;
+      if (p.attackType === "melee") return null;
+      const r = p.range;
+      if (!r) return d === 0 ? -1 : null;
+      if (d > (r.long ?? r.normal)) return null;
+      return d > r.normal || inMelee(f) ? -1 : 0;
+    }
+    if (p.kind === "save" || (p.kind === "buff" && p.target === "enemy")) {
+      if (d === 0) return 0;
+      const r = p.range;
+      if (!r || d > (r.long ?? r.normal)) return null;
+      return d > r.normal ? -1 : 0;
+    }
+    return 0;
+  }
+  const inReach = (f: Fighter, p: Profile) => enemies(f).filter((t) => reach(f, p, t) !== null);
 
   function holds(f: Fighter, when: EffectCondition[], ctx: { target?: Fighter; spell?: boolean } = {}): boolean {
     return when.every((w) => {
@@ -429,9 +496,10 @@ export function simulateCombat(input: CombatInput): CombatResult {
     return t.stats.ac.total + mod(t, "ac") + buffTotal(t, "acBonus");
   }
 
-  function attackAdvantage(f: Fighter, t: Fighter): number {
+  function attackAdvantage(f: Fighter, t: Fighter, p: AttackProfile): number {
     let adv = 0;
     let dis = 0;
+    if (reach(f, p, t) === -1) dis++;
     if (hasAdvantageEffect(f, ["attacks"], "advantage", { target: t }) || hasBuff(f, "advantageAttacks")) adv++;
     if (hasAdvantageEffect(f, ["attacks"], "disadvantage", { target: t }) || hasBuff(f, "disadvantageAttacks")) dis++;
     if (hasAdvantageEffect(t, ["attacksAgainst"], "advantage") || hasBuff(t, "attackedWithAdvantage") || hasCond(t, ATTACKED_WITH_ADVANTAGE)) adv++;
@@ -468,7 +536,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
   // ——— Expected values, for choosing actions and targets ———
 
   function expectedAttack(f: Fighter, p: AttackProfile, o: Option | null, t: Fighter): number {
-    const hit = chance(ac(t) - toHitOf(f, p, o, t), attackAdvantage(f, t));
+    const hit = chance(ac(t) - toHitOf(f, p, o, t), attackAdvantage(f, t, p));
     const parts = damageParts(f, p.damage, t, true);
     const avg = parts.reduce((s, x) => s + adjustFor(t, Math.max(0, avgDice(x.dice) + x.flat), x.type), 0);
     return hit * avg;
@@ -478,14 +546,14 @@ export function simulateCombat(input: CombatInput): CombatResult {
   }
   function failChance(t: Fighter, s: SaveInfo): number {
     const abilities = [s.save, ...(s.orSave ? [s.orSave] : [])];
-    return 1 - chance(s.dc - saveBonus(t, abilities, s.spell), saveAdvantage(t, abilities, s.spell));
+    return 1 - chance(s.dc - saveBonus(t, abilities, s.spell), saveAdvantage(t, abilities, s.spell, s.far));
   }
   function dcOf(f: Fighter, dc: SaveProfile["dc"], o: Option | null): number {
     if (o?.dcOverride !== undefined && dc.flat < 100) return o.dcOverride + mod(f, "saveDc");
     return saveDcValue(dc, f.stats) + mod(f, "saveDc");
   }
   function expectedSave(f: Fighter, p: SaveProfile, o: Option | null, t: Fighter, mult = 1): number {
-    const info: SaveInfo = { save: p.dc.save, orSave: p.dc.orSave, dc: dcOf(f, p.dc, o), spell: Boolean(o?.spell) };
+    const info: SaveInfo = { save: p.dc.save, orSave: p.dc.orSave, dc: dcOf(f, p.dc, o), spell: Boolean(o?.spell), far: reach(f, p, t) === -1 };
     const fail = failChance(t, info);
     const avg = p.damage.reduce((s, d) => s + adjustFor(t, Math.max(0, avgDice(d.dice) + (d.ability ? f.stats.mods[d.ability] : 0) + d.flat) * mult, d.type), 0);
     let value = avg * (fail + (p.onSuccess === "half" ? (1 - fail) / 2 : 0));
@@ -507,6 +575,17 @@ export function simulateCombat(input: CombatInput): CombatResult {
     }
     threatCache.set(f, best || 1);
     return best || 1;
+  }
+  /** The longest normal range of anything the unit can still use; 5 ft or less is melee. */
+  function longestRange(f: Fighter): number {
+    let best = 0;
+    for (const o of [...f.options, ...f.bonusOptions, ...(f.legendary?.options ?? [])]) {
+      if (!usable(f, o)) continue;
+      for (const p of o.routine?.map((a) => a.profile) ?? [o.profile]) {
+        if ((p.kind === "attack" || p.kind === "save" || p.kind === "buff") && p.range && p.range.normal > 5) best = Math.max(best, p.range.normal);
+      }
+    }
+    return best;
   }
   function avgOf(f: Fighter, dmg: AttackProfile["damage"]) {
     return dmg.reduce((s, d) => s + avgDice(d.dice) + (d.ability ? f.stats.mods[d.ability] : 0) + d.flat, 0);
@@ -540,9 +619,9 @@ export function simulateCombat(input: CombatInput): CombatResult {
 
   // ——— Saving throws and conditions ———
 
-  function saveAdvantage(t: Fighter, abilities: Ability[], spell: boolean): number {
+  function saveAdvantage(t: Fighter, abilities: Ability[], spell: boolean, far = false): number {
     const on = ["saves", ...abilities.map((a) => `save:${a}`)];
-    let adv = hasAdvantageEffect(t, on, "advantage", { spell }) || hasBuff(t, "advantageSaves") || (spell && t.traits.magicResistance) ? 1 : 0;
+    let adv = far || hasAdvantageEffect(t, on, "advantage", { spell }) || hasBuff(t, "advantageSaves") || (spell && t.traits.magicResistance) ? 1 : 0;
     let dis = hasAdvantageEffect(t, on, "disadvantage", { spell }) || hasBuff(t, "disadvantageSaves") || t.forceMarching ? 1 : 0;
     if (adv && dis) adv = dis = 0;
     return adv - dis;
@@ -551,7 +630,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
   function rollSave(t: Fighter, s: SaveInfo, important: boolean) {
     const abilities = [s.save, ...(s.orSave ? [s.orSave] : [])];
     const bonus = saveBonus(t, abilities, s.spell);
-    const die = d20(saveAdvantage(t, abilities, s.spell));
+    const die = d20(saveAdvantage(t, abilities, s.spell, s.far));
     const total = die.nat + bonus;
     let success = total >= s.dc;
     let note = "";
@@ -664,31 +743,31 @@ export function simulateCombat(input: CombatInput): CombatResult {
   function canHurt(f: Fighter, t: Fighter, dmg: { type: DamageType }[]) {
     return !dmg.length || dmg.some((d) => !t.sb.immunities.includes(d.type));
   }
-  /** Weapon attacks go for the weakest enemy they can hurt. */
-  function weakest(f: Fighter, dmg: { type: DamageType }[]): Fighter | null {
-    const p = priorityFor(f);
-    if (p && canHurt(f, p, dmg)) return p;
-    const list = enemies(f).filter((t) => canHurt(f, t, dmg));
-    return list.sort((a, b) => a.hp - b.hp || a.maxHp - b.maxHp)[0] ?? null;
+  /** Weapon attacks go for the weakest enemy in reach they can hurt, preferring those in normal range. */
+  function weakest(f: Fighter, p: AttackProfile): Fighter | null {
+    const list = inReach(f, p).filter((t) => canHurt(f, t, p.damage));
+    const pr = priorityFor(f);
+    if (pr && list.includes(pr)) return pr;
+    return list.sort((a, b) => (reach(f, p, b) ?? -1) - (reach(f, p, a) ?? -1) || a.hp - b.hp || a.maxHp - b.maxHp)[0] ?? null;
   }
-  /** Damage spells and area effects go for the toughest enemy. */
-  function toughest(f: Fighter, dmg: { type: DamageType }[], exclude: Fighter[] = []): Fighter[] {
-    const list = enemies(f)
-      .filter((t) => canHurt(f, t, dmg) && !exclude.includes(t))
+  /** Damage spells and area effects go for the toughest enemy in reach. */
+  function toughest(f: Fighter, p: SaveProfile): Fighter[] {
+    const list = inReach(f, p)
+      .filter((t) => canHurt(f, t, p.damage))
       .sort((a, b) => b.hp - a.hp || b.footprint - a.footprint);
-    const p = priorityFor(f);
-    if (p && list.includes(p)) return [p, ...list.filter((t) => t !== p)];
+    const pr = priorityFor(f);
+    if (pr && list.includes(pr)) return [pr, ...list.filter((t) => t !== pr)];
     return list;
   }
   function areaTargets(f: Fighter, p: SaveProfile): { t: Fighter; mult: number }[] {
-    const list = toughest(f, p.damage);
+    const list = toughest(f, p);
     if (!p.area) return list.slice(0, p.targets).map((t) => ({ t, mult: 1 }));
     const mults = areaMultipliers(p.area, list.map((t) => t.footprint));
     return mults.map((mult, i) => ({ t: list[i], mult }));
   }
   function controlTarget(f: Fighter, p: SaveProfile | BuffProfile): Fighter | null {
     const cond = p.kind === "save" ? p.condition?.condition : undefined;
-    const list = enemies(f)
+    const list = inReach(f, p)
       .filter((t) => (cond ? !t.sb.conditionImmunities.includes(cond) && !hasCond(t, [cond]) : p.kind === "buff" ? !hasBuff(t, p.effect) : true))
       .sort((a, b) => threat(b) * b.hp - threat(a) * a.hp);
     const pr = priorityFor(f);
@@ -710,10 +789,10 @@ export function simulateCombat(input: CombatInput): CombatResult {
       let total = 0;
       for (const a of routineOf(f, o)) {
         if (a.profile.kind === "attack") {
-          const t = weakest(f, a.profile.damage);
+          const t = weakest(f, a.profile);
           if (t) total += expectedAttack(f, a.profile, o.spell ? o : null, t);
         } else if (a.profile.kind === "save") {
-          const t = toughest(f, a.profile.damage)[0];
+          const t = toughest(f, a.profile)[0];
           if (t) total += expectedSave(f, a.profile, null, t);
         }
       }
@@ -729,14 +808,14 @@ export function simulateCombat(input: CombatInput): CombatResult {
     if (p.kind === "buff" && p.target === "enemy") {
       const t = controlTarget(f, p);
       if (!t) return 0;
-      const fail = p.save ? failChance(t, { save: p.save.save, orSave: p.save.orSave, dc: saveDcValue(p.save, f.stats) + mod(f, "saveDc"), spell: o.spell }) : 1;
+      const fail = p.save ? failChance(t, { save: p.save.save, orSave: p.save.orSave, dc: saveDcValue(p.save, f.stats) + mod(f, "saveDc"), spell: o.spell, far: reach(f, p, t) === -1 }) : 1;
       return fail * threat(t) * 0.5;
     }
     return 0;
   }
 
   function doAttack(f: Fighter, a: StatAction, p: AttackProfile, o: Option | null, t: Fighter) {
-    const adv = attackAdvantage(f, t);
+    const adv = attackAdvantage(f, t, p);
     const toHit = toHitOf(f, p, o, t);
     const die = d20(adv);
     const total = die.nat + toHit;
@@ -776,7 +855,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
     for (const { t, mult } of targets) {
       if (!active(t)) continue;
       const important = !rolled.length || sum * mult >= t.hp / 4 || Boolean(p.condition);
-      const res = rollSave(t, info, important);
+      const res = rollSave(t, { ...info, far: reach(f, p, t) === -1 }, important);
       let text = `  ${t.label}${mult !== 1 ? ` (×${mult})` : ""}: ${res.text}`;
       if (rolled.length) {
         const share = res.success ? (p.onSuccess === "half" ? 0.5 : 0) : 1;
@@ -813,7 +892,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
 
   function doBuff(f: Fighter, o: Option, p: BuffProfile, t: Fighter) {
     if (p.target === "enemy" && p.save) {
-      const info: SaveInfo = { save: p.save.save, orSave: p.save.orSave, dc: saveDcValue(p.save, f.stats) + mod(f, "saveDc"), spell: o.spell };
+      const info: SaveInfo = { save: p.save.save, orSave: p.save.orSave, dc: saveDcValue(p.save, f.stats) + mod(f, "saveDc"), spell: o.spell, far: reach(f, p, t) === -1 };
       const res = rollSave(t, info, true);
       say("buff", `${f.label} uses ${o.name} on ${t.label}: ${res.text}.`);
       if (res.success) return;
@@ -841,7 +920,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
         for (const a of routineOf(f, o)) {
           if (!active(f) || !enemies(f).length) break;
           if (a.profile.kind === "attack") {
-            const t = weakest(f, a.profile.damage);
+            const t = weakest(f, a.profile);
             if (!t) continue;
             doAttack(f, a, a.profile, o.spell ? o : null, t);
             any = true;
@@ -908,7 +987,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
     const cap = input.capture;
     if (!cap || cap.sideId !== f.side.id) return false;
     const t = fighters.find((g) => g.id === cap.targetId);
-    if (!t || !active(t) || t.hp >= t.maxHp / 4 || enemies(f).length !== 1) return false;
+    if (!t || !active(t) || t.hp >= t.maxHp / 4 || enemies(f).length !== 1 || gap(f, t) > 0) return false;
     const dc = 8 + f.stats.mods.str + f.stats.proficiency + mod(f, "check:capture");
     const helped = hasAdvantageEffect(f, ["check:capture"], "advantage");
     const info: SaveInfo = { save: t.stats.saves.str.total >= t.stats.saves.dex.total ? "str" : "dex", dc, spell: false };
@@ -978,6 +1057,8 @@ export function simulateCombat(input: CombatInput): CombatResult {
 
   // ——— The fight ———
 
+  let approachRounds = 0;
+  let rangeFt = 0;
   const result = (endReason: CombatResult["endReason"], winner: string | null): CombatResult => ({
     seed: input.seed,
     regionId: region?.id ?? null,
@@ -1003,6 +1084,7 @@ export function simulateCombat(input: CombatInput): CombatResult {
       }),
     ),
     warnings: [...warnings],
+    approach: { startFt, rangeFt, rounds: approachRounds },
   });
 
   if (activeSides().size < 2) return result("noFight", [...activeSides()][0] ?? null);
@@ -1018,11 +1100,30 @@ export function simulateCombat(input: CombatInput): CombatResult {
   say("initiative", `Initiative: ${order.map((f) => `${f.label} ${f.initiative}`).join(", ")}.`);
   for (const s of sides) if (s.surprising) say("info", `${s.name} attacks by surprise: advantage on initiative and on each unit's first attack.`);
 
+  // How far apart the sides start: the longest normal range in the fight, up to
+  // the setting. Surprise attackers may close in unseen and start in melee.
+  const longest = Math.max(0, ...fighters.map(longestRange));
+  rangeFt = Math.min(longest, settings.maxStartFt);
+  const surpriser = sides.find((s) => s.surprising);
+  startFt = surpriser && input.start === "melee" ? 0 : rangeFt;
+  const note = input.startNote ? ` (${input.startNote})` : "";
+  if (surpriser && rangeFt > 0) {
+    say(
+      "info",
+      startFt
+        ? `${surpriser.name} start${verbS(surpriser.name)} at range, ${startFt} ft away${note}. The surprised make no attacks until round 1.`
+        : `${surpriser.name} close${verbS(surpriser.name)} in unseen and start${verbS(surpriser.name)} in melee${note}.`,
+    );
+  } else if (startFt > 0) {
+    say("info", `The sides start ${startFt} ft apart: ${longest > startFt ? `the longest normal range in the fight is ${longest} ft, but fights start at most ${startFt} ft apart` : "the longest normal range in the fight"}.`);
+  }
+
   let raisedCount = 0;
   let captured = false;
   const over = () => captured || activeSides().size < 2;
-  for (round = 1; round <= settings.maxRounds && !over(); round++) {
-    say("round", `Round ${round}`);
+
+  /** The slain raised by an ally join at the start of a round, where the one who raised them stands. */
+  function joinRaised() {
     for (const p of pendingRaises.splice(0)) {
       raisedCount++;
       const unit: WorldUnit = {
@@ -1045,31 +1146,93 @@ export function simulateCombat(input: CombatInput): CombatResult {
       };
       const f = makeFighter(unit, p.side, null, { creatureId: p.creatureId, teamId: p.side.teamId });
       if (!f) continue;
+      f.advance = p.from.advance;
       fighters.push(f);
       order.push(f);
       relabel();
       say("info", `${p.from.label} raises the fallen as ${f.label}.`);
     }
-    for (const f of [...order]) {
-      if (!active(f) || over()) continue;
-      startTurn(f);
-      if (shouldRetreat(f)) {
-        f.out = "retreated";
-        say("retreat", `${f.label} retreats at ${f.hp}/${f.maxHp} HP.`);
-        continue;
-      }
-      if (f.disabled && f.disabled.penalty >= 1) say("condition", `${f.label} is ${f.disabled.condition} and loses its turn.`);
-      else if (tryCapture(f)) captured = fighters.some((g) => g.out === "captured");
-      else {
-        const acted = pickAndUse(f, f.options, f.turns === 0);
-        if (!acted && enemies(f).length) say("info", `${f.label} can't do anything useful.`);
-        if (active(f) && enemies(f).length && f.bonusOptions.length) pickAndUse(f, f.bonusOptions, false);
-      }
-      endTurn(f);
+  }
+
+  /** Attacks, casts or heals: the unit's action and bonus action. */
+  function fightTurn(f: Fighter) {
+    if (tryCapture(f)) {
+      captured = fighters.some((g) => g.out === "captured");
+      return;
     }
-    // Legendary actions at the end of the round.
+    const acted = pickAndUse(f, f.options, !f.hasActed);
+    f.hasActed = true;
+    if (!acted && enemies(f).length) say("info", `${f.label} can't do anything useful.`);
+    if (active(f) && enemies(f).length && f.bonusOptions.length) pickAndUse(f, f.bonusOptions, false);
+  }
+
+  /** Whether the unit has something worth doing from where it stands: an enemy in reach, or an ally to heal. */
+  function canAct(f: Fighter) {
+    const ready = [...f.options, ...f.bonusOptions].filter((o) => usable(f, o));
+    return ready.some((o) => (o.profile.kind === "heal" ? healNeed(f, o.profile).length > 0 : score(f, o) > 0));
+  }
+
+  /** Restrained or grappled units can't move. */
+  const speedOf = (f: Fighter) => (hasCond(f, ["restrained", "grappled"]) ? 0 : f.speed);
+
+  function move(f: Fighter, ft: number, dash: boolean) {
+    const step = Math.min(ft, nearestGap(f));
+    if (step <= 0) {
+      say("move", `${f.label} can't move.`);
+      return;
+    }
+    f.advance += step;
+    const met = enemies(f).find((t) => gap(f, t) === 0);
+    say("move", `${f.label} ${dash ? "dashes" : "moves"} ${step} ft ${met ? `and reaches ${met.label}` : `(${nearestGap(f)} ft from the enemy)`}.`);
+  }
+
+  /**
+   * A turn before the sides meet. Units with an enemy in reach (or an ally to
+   * heal) act and move at their normal speed: first the move if that brings an
+   * enemy into reach. The others dash at double speed. The surprised only
+   * close in: they make no attacks until round 1.
+   */
+  function approachTurn(f: Fighter) {
+    if (f.side.surprised) {
+      if (inMelee(f)) say("info", `${f.label} is caught by surprise and can't fight back yet.`);
+      else move(f, speedOf(f) * 2, true);
+      return;
+    }
+    if (inMelee(f)) return fightTurn(f);
+    if (canAct(f)) {
+      fightTurn(f);
+      if (active(f) && !over() && !inMelee(f)) move(f, speedOf(f), false);
+      return;
+    }
+    const step = Math.min(speedOf(f), nearestGap(f));
+    f.advance += step;
+    const closer = step > 0 && canAct(f);
+    f.advance -= step;
+    if (closer) {
+      move(f, speedOf(f), false);
+      return fightTurn(f);
+    }
+    move(f, speedOf(f) * 2, true);
+  }
+
+  function takeTurn(f: Fighter) {
+    startTurn(f);
+    if (shouldRetreat(f)) {
+      f.out = "retreated";
+      say("retreat", `${f.label} retreats at ${f.hp}/${f.maxHp} HP.`);
+      return;
+    }
+    if (f.disabled && f.disabled.penalty >= 1) say("condition", `${f.label} is ${f.disabled.condition} and loses its turn.`);
+    else if (approaching) approachTurn(f);
+    else fightTurn(f);
+    endTurn(f);
+  }
+
+  /** Legendary actions at the end of the round. */
+  function legendaryActions() {
     for (const f of order) {
       if (!f.legendary || !active(f) || over() || (f.disabled && f.disabled.penalty >= 1)) continue;
+      if (approaching && f.side.surprised) continue;
       let budget = f.legendary.perRound;
       for (let i = 0; i < 6 && budget > 0 && !over(); i++) {
         const choices = f.legendary.options.filter((o) => (o.cost ?? 1) <= budget && usable(f, o));
@@ -1081,12 +1244,55 @@ export function simulateCombat(input: CombatInput): CombatResult {
       }
     }
   }
-  round = Math.min(round, settings.maxRounds + 1) - 1;
+
+  /** "120" or "30–60": how far the units still closing in are from the enemy. */
+  function distanceText() {
+    const far = fighters.filter((f) => active(f) && !inMelee(f)).map(nearestGap);
+    const lo = Math.min(...far);
+    const hi = Math.max(...far);
+    return lo === hi ? `${lo}` : `${lo}–${hi}`;
+  }
+
+  // Approach rounds, until everyone is in melee (or nobody can get any closer).
+  // They're numbered once it's known how many there were: the last is round 0.
+  approaching = startFt > 0;
+  const firstApproachEntry = log.length;
+  const heads: { entry: LogEntry; dist: string }[] = [];
+  for (let k = 1; approaching && !over() && !fighters.filter(active).every(inMelee); k++) {
+    round = APPROACH_ROUND + k;
+    const entry: LogEntry = { round, kind: "round", text: "" };
+    log.push(entry);
+    heads.push({ entry, dist: distanceText() });
+    joinRaised();
+    const before = fighters.reduce((sum, f) => sum + f.advance, 0);
+    for (const f of [...order]) if (active(f) && !over()) takeTurn(f);
+    legendaryActions();
+    approachRounds = k;
+    if (fighters.reduce((sum, f) => sum + f.advance, 0) === before || k >= MAX_APPROACH_ROUNDS) break;
+  }
+  approaching = false;
+  if (approachRounds) {
+    const number = (k: number) => (k < 0 ? `−${-k}` : `${k}`);
+    log.forEach((e, i) => {
+      if (i < firstApproachEntry) e.round = 1 - approachRounds;
+      else if (e.round > APPROACH_ROUND) e.round -= APPROACH_ROUND + approachRounds;
+    });
+    heads.forEach((h, i) => (h.entry.text = `Round ${number(h.entry.round)} (${i === 0 ? "distance " : ""}${h.dist} ft)`));
+  }
+
+  for (round = 1; round <= settings.maxRounds && !over(); round++) {
+    say("round", `Round ${round}`);
+    joinRaised();
+    for (const f of [...order]) if (active(f) && !over()) takeTurn(f);
+    legendaryActions();
+  }
+  round = Math.max(0, Math.min(round, settings.maxRounds + 1) - 1);
   if (captured) return result("captured", input.capture!.sideId);
   const left = [...activeSides()];
   if (left.length < 2) {
     const winner = left[0] ?? null;
-    say("info", winner ? `${sides.find((s) => s.id === winner)?.name} win${sides.find((s) => s.id === winner)?.name.endsWith("s") ? "" : "s"} the fight.` : "Nobody is left standing.");
+    const name = sides.find((s) => s.id === winner)?.name ?? "";
+    say("info", winner ? `${name} win${verbS(name)} the fight.` : "Nobody is left standing.");
     return result("wipedOut", winner);
   }
   say("info", `After ${settings.maxRounds} rounds the fight is undecided.`);
